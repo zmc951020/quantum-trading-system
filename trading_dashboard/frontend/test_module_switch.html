@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模块切换测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f0f2f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #40a9ff;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #52c41a;
+        }
+        .error {
+            background: #fff1f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+        .info {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            color: #1890ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>模块切换功能测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 环境检查</h2>
+        <button onclick="checkEnvironment()">检查环境</button>
+        <div id="env-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 模块切换测试</h2>
+        <button onclick="testModuleSwitch('dashboard')">切换到仪表盘</button>
+        <button onclick="testModuleSwitch('market')">切换到市场监控</button>
+        <button onclick="testModuleSwitch('portfolio')">切换到投资组合</button>
+        <button onclick="testModuleSwitch('technical')">切换到技术分析</button>
+        <div id="switch-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 会话状态测试</h2>
+        <button onclick="testSession()">测试会话状态</button>
+        <div id="session-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. 系统模式切换测试</h2>
+        <button onclick="testSystemMode('ours')">切换到本系统</button>
+        <button onclick="testSystemMode('westkuanke')">切换到西部宽客</button>
+        <div id="system-result" class="result"></div>
+    </div>
+
+    <script>
+        function checkEnvironment() {
+            const result = document.getElementById('env-result');
+            let html = '';
+            
+            // 检查showTab函数是否存在
+            if (typeof showTab === 'function') {
+                html += '<div class="success"><strong>✓</strong> showTab 函数存在</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> showTab 函数不存在</div>';
+            }
+            
+            // 检查loadTabData函数是否存在
+            if (typeof loadTabData === 'function') {
+                html += '<div class="success"><strong>✓</strong> loadTabData 函数存在</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> loadTabData 函数不存在</div>';
+            }
+            
+            // 检查SessionManager是否存在
+            if (typeof SessionManager !== 'undefined') {
+                html += '<div class="success"><strong>✓</strong> SessionManager 存在</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> SessionManager 不存在</div>';
+            }
+            
+            // 检查currentSystemMode是否存在
+            if (typeof window.currentSystemMode !== 'undefined') {
+                html += '<div class="success"><strong>✓</strong> currentSystemMode 存在: ' + window.currentSystemMode + '</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> currentSystemMode 不存在</div>';
+            }
+            
+            result.innerHTML = html;
+        }
+        
+        function testModuleSwitch(tabId) {
+            const result = document.getElementById('switch-result');
+            
+            try {
+                // 调用showTab函数
+                showTab(tabId);
+                
+                // 检查标签页是否显示
+                const tab = document.getElementById(tabId + '-tab');
+                if (tab && tab.style.display === 'block') {
+                    result.innerHTML = '<div class="success"><strong>✓</strong> 成功切换到 ' + tabId + ' 模块</div>';
+                } else {
+                    result.innerHTML = '<div class="error"><strong>✗</strong> 切换到 ' + tabId + ' 模块失败</div>';
+                }
+                
+                // 检查导航项是否激活
+                const navItems = document.querySelectorAll('.nav-item');
+                let activeFound = false;
+                navItems.forEach(item => {
+                    if (item.classList.contains('active')) {
+                        activeFound = true;
+                    }
+                });
+                
+                if (activeFound) {
+                    result.innerHTML += '<div class="success"><strong>✓</strong> 导航项激活状态正确</div>';
+                } else {
+                    result.innerHTML += '<div class="error"><strong>✗</strong> 导航项激活状态错误</div>';
+                }
+                
+            } catch (e) {
+                result.innerHTML = '<div class="error"><strong>✗</strong> 切换模块时出错: ' + e.message + '</div>';
+            }
+        }
+        
+        function testSession() {
+            const result = document.getElementById('session-result');
+            
+            try {
+                // 测试会话保存
+                const testTab = 'market';
+                SessionManager.updateCurrentTab(testTab);
+                
+                // 测试会话加载
+                const session = SessionManager.getSession();
+                
+                if (session && session.currentTab === testTab) {
+                    result.innerHTML = '<div class="success"><strong>✓</strong> 会话状态保存成功</div>';
+                    result.innerHTML += '<div class="info">当前会话: ' + JSON.stringify(session, null, 2) + '</div>';
+                } else {
+                    result.innerHTML = '<div class="error"><strong>✗</strong> 会话状态保存失败</div>';
+                }
+                
+            } catch (e) {
+                result.innerHTML = '<div class="error"><strong>✗</strong> 测试会话时出错: ' + e.message + '</div>';
+            }
+        }
+        
+        function testSystemMode(mode) {
+            const result = document.getElementById('system-result');
+            
+            try {
+                // 模拟切换系统模式
+                window.currentSystemMode = mode;
+                
+                // 测试系统模式切换
+                const systemSelect = document.getElementById('system-select');
+                if (systemSelect) {
+                    systemSelect.value = mode;
+                }
+                
+                result.innerHTML = '<div class="success"><strong>✓</strong> 成功切换到 ' + (mode === 'ours' ? '本系统' : '西部宽客') + '</div>';
+                result.innerHTML += '<div class="info">当前系统模式: ' + window.currentSystemMode + '</div>';
+                
+            } catch (e) {
+                result.innerHTML = '<div class="error"><strong>✗</strong> 切换系统模式时出错: ' + e.message + '</div>';
+            }
+        }
+        
+        // 页面加载时初始化
+        window.onload = function() {
+            console.log('模块切换测试页面加载完成');
+            checkEnvironment();
+        };
+    </script>
+</body>
+</html>

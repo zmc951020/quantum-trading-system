@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>逐步测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <h1>逐步测试</h1>
+    <div id="test-chart" style="width: 600px; height: 400px;"></div>
+
+    <script>
+    console.log('Step 1: 开始');
+    
+    // 生成模拟数据的辅助函数
+    function generateChartData(baseValue, days, volatility, trendFactor) {
+        const dates = [];
+        const values = [];
+        const today = new Date();
+        
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            dates.push(date.toLocaleDateString('zh-CN'));
+            
+            const fluctuation = Math.random() * volatility * 2 - volatility;
+            const trend = i * trendFactor;
+            values.push(baseValue + trend + fluctuation);
+        }
+        
+        return { dates, values };
+    }
+    console.log('Step 2: generateChartData defined');
+    
+    // 实现网格数据精度动态适配的通用函数
+    function calculateChartRange(values) {
+        const maxValue = Math.max(...values);
+        const minValue = Math.min(...values);
+        
+        // 动态计算Y轴范围
+        let yAxisMin, yAxisMax, interval;
+        
+        // 检查是否在1000点附近
+        if (maxValue > 950 && minValue < 1050) {
+            // 聚焦1000点上下区间
+            yAxisMin = 950;
+            yAxisMax = 1050;
+            interval = 10; // 更精细的网格
+        }
+        // 检查是否在800点附近
+        else if (maxValue > 750 && minValue < 850) {
+            // 聚焦800点上下区间
+            yAxisMin = 750;
+            yAxisMax = 850;
+            interval = 10; // 更精细的网格
+        }
+        // 其他情况使用自适应范围
+        else {
+            const range = maxValue - minValue;
+            yAxisMin = minValue - range * 0.1;
+            yAxisMax = maxValue + range * 0.1;
+            interval = (yAxisMax - yAxisMin) / 10;
+        }
+        
+        return { yAxisMin, yAxisMax, interval };
+    }
+    console.log('Step 3: calculateChartRange defined');
+    
+    function loadDashboardData() {
+        const data = generateChartData(1000, 30, 20, 1);
+        const { yAxisMin, yAxisMax, interval } = calculateChartRange(data.values);
+        console.log('yAxisMin:', yAxisMin);
+        
+        const chart = echarts.init(document.getElementById('test-chart'));
+        const option = {
+            title: { text: '资金曲线' },
+            xAxis: { type: 'category', data: data.dates },
+            yAxis: { type: 'value', min: yAxisMin, max: yAxisMax, interval: interval },
+            series: [{ data: data.values, type: 'line' }]
+        };
+        chart.setOption(option);
+    }
+    console.log('Step 4: loadDashboardData defined');
+    
+    // 全局系统状态
+    var currentSystemMode = 'ours';
+    console.log('Step 5: currentSystemMode defined');
+    
+    // 会话管理
+    var SessionManager = {
+        updateCurrentTab: function(tabId) { console.log('更新当前标签页:', tabId); },
+        updateSystemMode: function(mode) { console.log('更新系统模式:', mode); }
+    };
+    console.log('Step 6: SessionManager defined');
+    
+    // 全局状态管理
+    var AppState = {
+        update: function(key, value) { console.log('更新状态:', key, value); }
+    };
+    console.log('Step 7: AppState defined');
+    
+    // 切换系统模式
+    function switchSystemMode() {
+        var systemMode = document.getElementById('system-select').value;
+        currentSystemMode = systemMode;
+        console.log('切换系统模式到:', systemMode);
+    }
+    console.log('Step 8: switchSystemMode defined');
+    
+    // 显示标签页
+    function showTab(tabId) {
+        console.log('切换到标签页:', tabId);
+        
+        // 隐藏所有标签页
+        var allTabs = document.querySelectorAll('.tab-content');
+        for (var i = 0; i < allTabs.length; i++) {
+            allTabs[i].style.display = 'none';
+            allTabs[i].classList.remove('active');
+        }
+        
+        // 显示选中的标签页
+        var selectedTab = document.getElementById(tabId + '-tab');
+        if (selectedTab) {
+            selectedTab.style.display = 'block';
+            selectedTab.classList.add('active');
+        }
+        
+        // 更新导航项激活状态
+        var navItems = document.querySelectorAll('.nav-item');
+        for (var j = 0; j < navItems.length; j++) {
+            navItems[j].classList.remove('active');
+        }
+        
+        // 找到对应的导航项并激活
+        var tabNames = {
+            'dashboard': '仪表盘',
+            'market': '市场监控',
+            'portfolio': '投资组合',
+            'technical': '技术分析'
+        };
+        
+        var targetName = tabNames[tabId];
+        for (var k = 0; k < navItems.length; k++) {
+            if (navItems[k].textContent === targetName) {
+                navItems[k].classList.add('active');
+                break;
+            }
+        }
+        
+        // 更新会话状态
+        if (SessionManager) { SessionManager.updateCurrentTab(tabId); }
+        if (AppState) { AppState.update('currentTab', tabId); }
+    }
+    console.log('Step 9: showTab defined');
+    
+    console.log('Script loaded successfully');
+    </script>
+</body>
+</html>

@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化交易仪表盘</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f0f2f5; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header h1 { font-size: 20px; color: #333; }
+        .header-right { display: flex; gap: 10px; align-items: center; }
+        .header-right select { padding: 6px 12px; border: 1px solid #d9d9d9; border-radius: 4px; background: white; cursor: pointer; }
+        .nav { display: flex; background: white; padding: 0 20px; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }
+        .nav-item { padding: 12px 16px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.3s; font-size: 14px; }
+        .nav-item:hover { color: #1890ff; }
+        .nav-item.active { color: #1890ff; border-bottom-color: #1890ff; }
+        .content { padding: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .card h2 { font-size: 16px; margin-bottom: 15px; color: #333; border-left: 3px solid #1890ff; padding-left: 10px; }
+        .card h3 { font-size: 14px; margin: 15px 0 10px 0; color: #666; }
+        .chart { width: 100%; height: 300px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        .stat-item { padding: 10px; background: #f8f9fa; border-radius: 4px; margin-bottom: 10px; }
+        .stat-item .label { font-size: 12px; color: #999; margin-bottom: 4px; }
+        .stat-item .value { font-size: 18px; color: #333; font-weight: bold; }
+        .stat-item .value.positive { color: #52c41a; }
+        .stat-item .value.negative { color: #ff4d4f; }
+        .westkuanke-badge { display: inline-block; padding: 2px 8px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 4px; font-size: 12px; margin-left: 10px; }
+        .info-text { padding: 10px; background: #e6f7ff; border-radius: 4px; margin: 10px 0; font-size: 13px; color: #1890ff; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 id="system-title">量化交易仪表盘</h1>
+        <div class="header-right">
+            <select id="system-select" onchange="switchSystemMode()">
+                <option value="ours">本系统</option>
+                <option value="westkuanke">西部宽客</option>
+            </select>
+            <select id="theme-select" onchange="switchTheme()">
+                <option value="default">默认模式</option>
+                <option value="eye-care">护眼模式</option>
+                <option value="dark">深色模式</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="nav">
+        <div class="nav-item active" onclick="showTab('dashboard')">仪表盘</div>
+        <div class="nav-item" onclick="showTab('accounts')">多账户管理</div>
+        <div class="nav-item" onclick="showTab('westkuanke')">西部宽客集成</div>
+        <div class="nav-item" onclick="showTab('market')">市场监控</div>
+        <div class="nav-item" onclick="showTab('portfolio')">投资组合</div>
+        <div class="nav-item" onclick="showTab('technical')">技术分析</div>
+        <div class="nav-item" onclick="showTab('strategy')">策略管理</div>
+        <div class="nav-item" onclick="showTab('ml')">机器学习</div>
+        <div class="nav-item" onclick="showTab('risk')">风控监控</div>
+        <div class="nav-item" onclick="showTab('health')">系统健康</div>
+        <div class="nav-item" onclick="showTab('security')">安全设置</div>
+    </div>
+    
+    <div class="content">
+        <!-- 仪表盘 -->
+        <div class="tab-content active" id="dashboard-tab">
+            <div class="grid-3">
+                <div class="card">
+                    <h2>总资产</h2>
+                    <div class="stat-item">
+                        <div class="label">账户总额</div>
+                        <div class="value">¥ 1,258,600.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">今日收益</div>
+                        <div class="value positive">+¥ 12,580.00 (+1.01%)</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>持仓统计</h2>
+                    <div class="stat-item">
+                        <div class="label">持仓数量</div>
+                        <div class="value">8 只</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">持仓市值</div>
+                        <div class="value">¥ 856,200.00</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>风险指标</h2>
+                    <div class="stat-item">
+                        <div class="label">VaR (95%)</div>
+                        <div class="value">2.35%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">夏普比率</div>
+                        <div class="value">1.86</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>资金曲线</h2>
+                <div class="chart" id="dashboard-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 多账户管理 -->
+        <div class="tab-content" id="accounts-tab">
+            <div class="card">
+                <h2>账户列表</h2>
+                <div class="grid-2">
+                    <div class="stat-item">
+                        <div class="label">账户 A (主账户)</div>
+                        <div class="value">¥ 500,000.00</div>
+                        <div class="value positive">+5.2%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">账户 B (量化账户)</div>
+                        <div class="value">¥ 358,600.00</div>
+                        <div class="value positive">+3.8%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">账户 C (备用账户)</div>
+                        <div class="value">¥ 200,000.00</div>
+                        <div class="value negative">-1.2%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">账户 D (测试账户)</div>
+                        <div class="value">¥ 100,000.00</div>
+                        <div class="value positive">+8.5%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 西部宽客集成 -->
+        <div class="tab-content" id="westkuanke-tab">
+            <div class="info-text">
+                <strong>西部宽客集成平台</strong> - 提供高级技术分析、模型策略和自动化交易系统
+            </div>
+            <div class="grid-3">
+                <div class="card">
+                    <h2>技术分析系统</h2>
+                    <div class="stat-item">
+                        <div class="label">实时行情</div>
+                        <div class="value">已连接</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">技术指标</div>
+                        <div class="value">12 种</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">图表模板</div>
+                        <div class="value">8 套</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>模型策略系统</h2>
+                    <div class="stat-item">
+                        <div class="label">AI模型</div>
+                        <div class="value">5 个</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">策略模板</div>
+                        <div class="value">15 套</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">回测引擎</div>
+                        <div class="value">运行中</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>交易执行系统</h2>
+                    <div class="stat-item">
+                        <div class="label">连接状态</div>
+                        <div class="value positive">已连接</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">今日订单</div>
+                        <div class="value">23 笔</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">执行延迟</div>
+                        <div class="value">12ms</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>西部宽客 技术分析</h2>
+                <div class="chart" id="westkuanke-technical-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 市场监控 -->
+        <div class="tab-content" id="market-tab">
+            <div class="grid-3">
+                <div class="card">
+                    <h2>大盘指数</h2>
+                    <div class="stat-item">
+                        <div class="label">上证指数</div>
+                        <div class="value">3,258.67</div>
+                        <div class="value positive">+1.23%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">深证成指</div>
+                        <div class="value">10,456.89</div>
+                        <div class="value positive">+0.89%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>沪深300</h2>
+                    <div class="stat-item">
+                        <div class="label">沪深300指数</div>
+                        <div class="value">3,856.45</div>
+                        <div class="value positive">+0.67%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>创业板</h2>
+                    <div class="stat-item">
+                        <div class="label">创业板指</div>
+                        <div class="value">2,156.78</div>
+                        <div class="value negative">-0.45%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>沪深300指数走势</h2>
+                <div class="chart" id="market-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 投资组合 -->
+        <div class="tab-content" id="portfolio-tab">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>组合概览</h2>
+                    <div class="stat-item">
+                        <div class="label">总市值</div>
+                        <div class="value">¥ 856,200.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">持仓数量</div>
+                        <div class="value">8 只</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">仓位占比</div>
+                        <div class="value">68.05%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>收益统计</h2>
+                    <div class="stat-item">
+                        <div class="label">今日收益</div>
+                        <div class="value positive">+¥ 8,562.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">本月收益</div>
+                        <div class="value positive">+¥ 25,686.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">年化收益</div>
+                        <div class="value positive">+18.56%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>组合价值曲线</h2>
+                <div class="chart" id="portfolio-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 技术分析 -->
+        <div class="tab-content" id="technical-tab">
+            <div class="info-text" id="technical-mode-text">
+                <strong>本系统技术分析</strong> - 多种技术指标综合分析
+            </div>
+            <div class="grid-2">
+                <div class="card">
+                    <h2>均线系统</h2>
+                    <div class="stat-item">
+                        <div class="label">MA5</div>
+                        <div class="value">3,256.78</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">MA10</div>
+                        <div class="value">3,245.32</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">MA20</div>
+                        <div class="value">3,228.56</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>MACD指标</h2>
+                    <div class="stat-item">
+                        <div class="label">DIF</div>
+                        <div class="value positive">+15.67</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">DEA</div>
+                        <div class="value">+12.34</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">MACD</div>
+                        <div class="value positive">+6.66</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>技术指标图表</h2>
+                <div class="chart" id="technical-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 策略管理 -->
+        <div class="tab-content" id="strategy-tab">
+            <div class="info-text" id="strategy-mode-text">
+                <strong>本系统策略管理</strong> - 量化策略配置与回测
+            </div>
+            <div class="grid-3">
+                <div class="card">
+                    <h2>趋势策略</h2>
+                    <div class="stat-item">
+                        <div class="label">状态</div>
+                        <div class="value positive">运行中</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">今日收益</div>
+                        <div class="value positive">+2.35%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>套利策略</h2>
+                    <div class="stat-item">
+                        <div class="label">状态</div>
+                        <div class="value">待机</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">今日收益</div>
+                        <div class="value">+0.12%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>做市策略</h2>
+                    <div class="stat-item">
+                        <div class="label">状态</div>
+                        <div class="value positive">运行中</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">今日收益</div>
+                        <div class="value positive">+0.85%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>策略收益曲线</h2>
+                <div class="chart" id="strategy-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 机器学习 -->
+        <div class="tab-content" id="ml-tab">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>AI模型状态</h2>
+                    <div class="stat-item">
+                        <div class="label">价格预测模型</div>
+                        <div class="value">训练完成</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">趋势判断模型</div>
+                        <div class="value">训练中 78%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>模型性能</h2>
+                    <div class="stat-item">
+                        <div class="label">准确率</div>
+                        <div class="value">87.5%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">夏普比率</div>
+                        <div class="value">2.15</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>预测结果</h2>
+                <div class="chart" id="ml-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 风控监控 -->
+        <div class="tab-content" id="risk-tab">
+            <div class="grid-3">
+                <div class="card">
+                    <h2>风险指标</h2>
+                    <div class="stat-item">
+                        <div class="label">VaR (95%)</div>
+                        <div class="value">2.35%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">CVaR (95%)</div>
+                        <div class="value">3.68%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>持仓风险</h2>
+                    <div class="stat-item">
+                        <div class="label">最大持仓集中度</div>
+                        <div class="value">23.5%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">行业集中度</div>
+                        <div class="value">35.2%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>预警状态</h2>
+                    <div class="stat-item">
+                        <div class="label">风险等级</div>
+                        <div class="value positive">正常</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>风险指标图表</h2>
+                <div class="chart" id="risk-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 系统健康 -->
+        <div class="tab-content" id="health-tab">
+            <div class="grid-3">
+                <div class="card">
+                    <h2>系统状态</h2>
+                    <div class="stat-item">
+                        <div class="label">运行状态</div>
+                        <div class="value positive">正常</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">运行时间</div>
+                        <div class="value">8760 小时</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>性能指标</h2>
+                    <div class="stat-item">
+                        <div class="label">CPU使用率</div>
+                        <div class="value">35%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">内存使用率</div>
+                        <div class="value">62%</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>API状态</h2>
+                    <div class="stat-item">
+                        <div class="label">响应时间</div>
+                        <div class="value">45ms</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">错误率</div>
+                        <div class="value">0.12%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>系统监控</h2>
+                <div class="chart" id="health-chart"></div>
+            </div>
+        </div>
+        
+        <!-- 安全设置 -->
+        <div class="tab-content" id="security-tab">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>账户安全</h2>
+                    <div class="stat-item">
+                        <div class="label">登录状态</div>
+                        <div class="value positive">已登录</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">最后登录</div>
+                        <div class="value">2026-04-22 10:30</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>API密钥</h2>
+                    <div class="stat-item">
+                        <div class="label">状态</div>
+                        <div class="value positive">有效</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">有效期</div>
+                        <div class="value">2026-12-31</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    var currentSystemMode = 'ours';
+    var currentTheme = 'default';
+    
+    var SessionManager = {
+        STORAGE_KEY: 'quant_trading_session',
+        init: function() {
+            var session = this.getSession();
+            if (!session) { this.createSession(); }
+            else {
+                currentSystemMode = session.currentSystemMode || 'ours';
+                currentTheme = session.theme || 'default';
+            }
+        },
+        createSession: function() {
+            var session = { currentTab: 'dashboard', currentSystemMode: 'ours', theme: 'default' };
+            this.saveSession(session);
+        },
+        saveSession: function(session) {
+            try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(session)); } catch (e) { console.error('Failed to save session:', e); }
+        },
+        getSession: function() {
+            try { var s = localStorage.getItem(this.STORAGE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+        },
+        updateSession: function(key, value) {
+            var session = this.getSession() || {};
+            session[key] = value;
+            session.lastActive = new Date().toISOString();
+            this.saveSession(session);
+        },
+        updateCurrentTab: function(tabId) { this.updateSession('currentTab', tabId); },
+        updateSystemMode: function(mode) { this.updateSession('currentSystemMode', mode); },
+        updateTheme: function(theme) { this.updateSession('theme', theme); }
+    };
+    
+    var AppState = {
+        currentTab: 'dashboard',
+        update: function(key, value) {
+            this[key] = value;
+            SessionManager.updateSession(key, value);
+        }
+    };
+    
+    function generateChartData(baseValue, days, volatility, trendFactor) {
+        var values = [];
+        var currentValue = baseValue;
+        for (var i = 0; i < days; i++) {
+            var change = (Math.random() - 0.5) * 2 * volatility + trendFactor;
+            currentValue += change;
+            values.push(currentValue);
+        }
+        return { values: values };
+    }
+    
+    function calculateChartRange(values) {
+        var maxValue = Math.max.apply(null, values);
+        var minValue = Math.min.apply(null, values);
+        var yAxisMin, yAxisMax, interval;
+        
+        if (maxValue > 950 && minValue < 1050) {
+            yAxisMin = 950; yAxisMax = 1050; interval = 10;
+        } else if (maxValue > 750 && minValue < 850) {
+            yAxisMin = 750; yAxisMax = 850; interval = 10;
+        } else {
+            var range = maxValue - minValue;
+            yAxisMin = minValue - range * 0.1;
+            yAxisMax = maxValue + range * 0.1;
+            interval = (yAxisMax - yAxisMin) / 10;
+        }
+        return { yAxisMin: yAxisMin, yAxisMax: yAxisMax, interval: interval };
+    }
+    
+    var chartInstances = {};
+    var initializedCharts = {};
+
+    function getChartOption(title, data, yAxisLabel) {
+        var range = calculateChartRange(data);
+        return {
+            title: { text: title, left: 'center', textStyle: { fontSize: 14 } },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: Array.from({ length: data.length }, function(_, i) { return 'Day ' + (i + 1); }), boundaryGap: false },
+            yAxis: { type: 'value', name: yAxisLabel, min: range.yAxisMin, max: range.yAxisMax, interval: range.interval },
+            series: [{ data: data, type: 'line', smooth: true, areaStyle: { opacity: 0.2 } }],
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }
+        };
+    }
+
+    function initChart(chartId, title, baseValue, days, volatility, trendFactor, yAxisLabel) {
+        var chartDom = document.getElementById(chartId);
+        if (!chartDom) return;
+        if (chartInstances[chartId]) { chartInstances[chartId].dispose(); }
+        var chart = echarts.init(chartDom);
+        chartInstances[chartId] = chart;
+        var data = generateChartData(baseValue, days, volatility, trendFactor).values;
+        chart.setOption(getChartOption(title, data, yAxisLabel));
+        initializedCharts[chartId] = true;
+    }
+
+    function loadDashboardData() {
+        initChart('dashboard-chart', '资金曲线', 1000, 30, 20, 1, '万元');
+    }
+    
+    function loadAccountsData() {
+        // 多账户管理数据已在前端静态展示
+    }
+    
+    function loadWestkuankeData() {
+        initChart('westkuanke-technical-chart', '西部宽客技术分析', 150, 30, 5, 0.5, '指标值');
+    }
+    
+    function loadMarketData() {
+        initChart('market-chart', '沪深300指数走势', 3856, 30, 50, 5, '指数');
+    }
+    
+    function loadPortfolioData() {
+        initChart('portfolio-chart', '投资组合价值', 500000, 30, 1000, 100, '元');
+    }
+    
+    function loadTechnicalData() {
+        initChart('technical-chart', '技术指标分析', 150, 30, 5, 0.5, '指标值');
+    }
+    
+    function loadStrategyData() {
+        initChart('strategy-chart', '策略收益曲线', 10000, 30, 100, 10, '收益');
+    }
+    
+    function loadMLData() {
+        initChart('ml-chart', 'AI预测结果', 100, 30, 3, 0.3, '预测值');
+    }
+    
+    function loadRiskData() {
+        initChart('risk-chart', '风险指标监控', 2, 30, 0.5, 0.05, '%');
+    }
+    
+    function loadHealthData() {
+        initChart('health-chart', '系统性能监控', 50, 30, 10, 1, '%');
+    }
+    
+    function switchSystemMode() {
+        var systemMode = document.getElementById('system-select').value;
+        currentSystemMode = systemMode;
+        SessionManager.updateSystemMode(systemMode);
+        
+        if (systemMode === 'westkuanke') {
+            document.getElementById('system-title').innerHTML = '西部宽客量化交易平台 <span class="westkuanke-badge">AI增强</span>';
+            document.getElementById('technical-mode-text').innerHTML = '<strong>西部宽客技术分析</strong> - AI驱动的技术分析系统，提供精准的买卖信号';
+            document.getElementById('strategy-mode-text').innerHTML = '<strong>西部宽客模型策略</strong> - 机器学习驱动的智能策略，自动优化参数';
+        } else {
+            document.getElementById('system-title').textContent = '量化交易仪表盘';
+            document.getElementById('technical-mode-text').innerHTML = '<strong>本系统技术分析</strong> - 多种技术指标综合分析';
+            document.getElementById('strategy-mode-text').innerHTML = '<strong>本系统策略管理</strong> - 量化策略配置与回测';
+        }
+        
+        var activeTab = AppState.currentTab || 'dashboard';
+        if (activeTab === 'technical') {
+            loadTechnicalData();
+        } else if (activeTab === 'strategy') {
+            loadStrategyData();
+        }
+    }
+    
+    function switchTheme() {
+        var theme = document.getElementById('theme-select').value;
+        currentTheme = theme;
+        SessionManager.updateTheme(theme);
+        
+        if (theme === 'dark') {
+            document.body.style.background = '#1a1a1a';
+            document.body.style.color = '#e8e8e8';
+            document.querySelectorAll('.card').forEach(function(card) {
+                card.style.background = '#2a2a2a';
+                card.style.color = '#e8e8e8';
+            });
+            document.querySelectorAll('.header').forEach(function(header) {
+                header.style.background = '#2a2a2a';
+                header.style.color = '#e8e8e8';
+            });
+            document.querySelectorAll('.nav').forEach(function(nav) {
+                nav.style.background = '#2a2a2a';
+            });
+        } else if (theme === 'eye-care') {
+            document.body.style.background = '#f0f2f5';
+            document.body.style.color = '#333';
+            document.querySelectorAll('.card').forEach(function(card) {
+                card.style.background = '#fffaf0';
+            });
+            document.querySelectorAll('.header').forEach(function(header) {
+                header.style.background = '#fffaf0';
+            });
+            document.querySelectorAll('.nav').forEach(function(nav) {
+                nav.style.background = '#fffaf0';
+            });
+        } else {
+            document.body.style.background = '#f0f2f5';
+            document.body.style.color = '#333';
+            document.querySelectorAll('.card').forEach(function(card) {
+                card.style.background = 'white';
+            });
+            document.querySelectorAll('.header').forEach(function(header) {
+                header.style.background = 'white';
+            });
+            document.querySelectorAll('.nav').forEach(function(nav) {
+                nav.style.background = 'white';
+            });
+        }
+        
+        Object.keys(chartInstances).forEach(function(chartId) {
+            if (chartInstances[chartId]) {
+                chartInstances[chartId].dispose();
+                chartInstances[chartId] = null;
+                initializedCharts[chartId] = false;
+            }
+        });
+        loadTabData(AppState.currentTab || 'dashboard');
+    }
+    
+    function showTab(tabId) {
+        var allTabs = document.querySelectorAll('.tab-content');
+        for (var i = 0; i < allTabs.length; i++) {
+            allTabs[i].style.display = 'none';
+            allTabs[i].classList.remove('active');
+        }
+        
+        var selectedTab = document.getElementById(tabId + '-tab');
+        if (selectedTab) {
+            selectedTab.style.display = 'block';
+            selectedTab.classList.add('active');
+        }
+        
+        var navItems = document.querySelectorAll('.nav-item');
+        for (var j = 0; j < navItems.length; j++) {
+            navItems[j].classList.remove('active');
+        }
+        
+        var tabNames = {
+            'dashboard': '仪表盘', 'accounts': '多账户管理', 'westkuanke': '西部宽客集成',
+            'market': '市场监控', 'portfolio': '投资组合', 'technical': '技术分析',
+            'strategy': '策略管理', 'ml': '机器学习', 'risk': '风控监控',
+            'health': '系统健康', 'security': '安全设置'
+        };
+        
+        var targetName = tabNames[tabId];
+        for (var k = 0; k < navItems.length; k++) {
+            if (navItems[k].textContent.trim() === targetName) {
+                navItems[k].classList.add('active');
+                break;
+            }
+        }
+        
+        AppState.update('currentTab', tabId);
+        
+        setTimeout(function() {
+            loadTabData(tabId);
+        }, 100);
+    }
+    
+    function loadTabData(tabId) {
+        switch (tabId) {
+            case 'dashboard': loadDashboardData(); break;
+            case 'accounts': loadAccountsData(); break;
+            case 'westkuanke': loadWestkuankeData(); break;
+            case 'market': loadMarketData(); break;
+            case 'portfolio': loadPortfolioData(); break;
+            case 'technical': loadTechnicalData(); break;
+            case 'strategy': loadStrategyData(); break;
+            case 'ml': loadMLData(); break;
+            case 'risk': loadRiskData(); break;
+            case 'health': loadHealthData(); break;
+            case 'security': break;
+        }
+    }
+    
+    SessionManager.init();
+    AppState.currentTab = SessionManager.getSession()?.currentTab || 'dashboard';
+    
+    document.getElementById('system-select').value = currentSystemMode;
+    document.getElementById('theme-select').value = currentTheme;
+    switchSystemMode();
+    switchTheme();
+    
+    showTab(AppState.currentTab);
+    </script>
+</body>
+</html>

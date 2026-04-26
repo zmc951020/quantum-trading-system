@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模块切换修复测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f0f2f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #40a9ff;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #52c41a;
+        }
+        .error {
+            background: #fff1f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+        .info {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            color: #1890ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>模块切换修复测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 直接测试showTab函数</h2>
+        <button onclick="testShowTab('market')">切换到市场监控</button>
+        <button onclick="testShowTab('portfolio')">切换到投资组合</button>
+        <button onclick="testShowTab('technical')">切换到技术分析</button>
+        <div id="test-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 检查函数存在性</h2>
+        <button onclick="checkFunctions()">检查函数</button>
+        <div id="function-result" class="result"></div>
+    </div>
+
+    <script>
+        function testShowTab(tabId) {
+            const result = document.getElementById('test-result');
+            
+            try {
+                // 直接调用showTab函数
+                if (typeof showTab === 'function') {
+                    showTab(tabId);
+                    result.innerHTML = '<div class="success"><strong>✓</strong> 成功调用showTab函数切换到 ' + tabId + ' 模块</div>';
+                } else {
+                    result.innerHTML = '<div class="error"><strong>✗</strong> showTab函数不存在</div>';
+                }
+            } catch (e) {
+                result.innerHTML = '<div class="error"><strong>✗</strong> 调用showTab函数时出错: ' + e.message + '</div>';
+            }
+        }
+        
+        function checkFunctions() {
+            const result = document.getElementById('function-result');
+            let html = '';
+            
+            // 检查showTab函数
+            if (typeof showTab === 'function') {
+                html += '<div class="success"><strong>✓</strong> showTab 函数存在</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> showTab 函数不存在</div>';
+            }
+            
+            // 检查loadTabData函数
+            if (typeof loadTabData === 'function') {
+                html += '<div class="success"><strong>✓</strong> loadTabData 函数存在</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> loadTabData 函数不存在</div>';
+            }
+            
+            // 检查SessionManager
+            if (typeof SessionManager !== 'undefined') {
+                html += '<div class="success"><strong>✓</strong> SessionManager 存在</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> SessionManager 不存在</div>';
+            }
+            
+            // 检查currentSystemMode
+            if (typeof window.currentSystemMode !== 'undefined') {
+                html += '<div class="success"><strong>✓</strong> currentSystemMode 存在: ' + window.currentSystemMode + '</div>';
+            } else {
+                html += '<div class="error"><strong>✗</strong> currentSystemMode 不存在</div>';
+            }
+            
+            result.innerHTML = html;
+        }
+        
+        // 页面加载时检查
+        window.onload = function() {
+            checkFunctions();
+        };
+    </script>
+</body>
+</html>

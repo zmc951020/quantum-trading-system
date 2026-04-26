@@ -1,0 +1,24 @@
+# 前端Dockerfile
+FROM node:16-alpine
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装依赖
+COPY package.json package-lock.json ./
+RUN npm install
+
+# 复制代码
+COPY . .
+
+# 构建应用
+RUN npm run build
+
+# 安装serve
+RUN npm install -g serve
+
+# 暴露端口
+EXPOSE 3000
+
+# 运行应用
+CMD ["serve", "-s", "build"]

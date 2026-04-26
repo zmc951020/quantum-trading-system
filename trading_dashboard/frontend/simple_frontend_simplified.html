@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化交易仪表盘</title>
+    <!-- Ant Design CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5.12.8/dist/reset.css">
+    <!-- Ant Design -->
+    <script src="https://cdn.jsdelivr.net/npm/antd@5.12.8/dist/antd.min.js"></script>
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+        }
+        .app {
+            min-height: 100vh;
+        }
+        .header {
+            background: white;
+            padding: 0 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            line-height: 64px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .content {
+            margin: 24px;
+            padding: 24px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+        }
+        .card {
+            margin-bottom: 24px;
+        }
+        .statistic {
+            margin-bottom: 16px;
+        }
+        .chart {
+            width: 100%;
+            height: 400px;
+            margin-top: 24px;
+        }
+        .nav {
+            display: flex;
+            margin-bottom: 24px;
+        }
+        .nav-item {
+            padding: 8px 16px;
+            margin-right: 8px;
+            background: #f0f2f5;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .nav-item.active {
+            background: #1890ff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            量化交易仪表盘
+        </div>
+        
+        <div class="content">
+            <!-- 导航 -->
+            <div class="nav">
+                <div class="nav-item active" onclick="showTab('dashboard')">仪表盘</div>
+                <div class="nav-item" onclick="showTab('risk')">风控监控</div>
+                <div class="nav-item" onclick="showTab('performance')">绩效归因</div>
+                <div class="nav-item" onclick="showTab('portfolio')">投资组合</div>
+                <div class="nav-item" onclick="showTab('health')">系统健康</div>
+            </div>
+            
+            <!-- 内容区域 -->
+            <div id="content-area">
+                <!-- 仪表盘 -->
+                <div id="dashboard-tab">
+                    <h1 style="margin-bottom: 24px;">系统概览</h1>
+                    
+                    <!-- 系统状态 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>系统状态</h3>
+                        <div id="health-status"></div>
+                    </div>
+                    
+                    <!-- 投资组合概览 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>投资组合概览</h3>
+                        <div id="portfolio-overview"></div>
+                    </div>
+                    
+                    <!-- 资金曲线 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>资金曲线</h3>
+                        <div id="portfolio-chart" class="chart"></div>
+                    </div>
+                </div>
+                
+                <!-- 风控监控 -->
+                <div id="risk-tab" style="display: none;">
+                    <h1 style="margin-bottom: 24px;">风控监控</h1>
+                    
+                    <!-- VaR/CVaR -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>风险价值 (VaR/CVaR)</h3>
+                        <div id="var-results"></div>
+                    </div>
+                    
+                    <!-- 压力测试 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>压力测试</h3>
+                        <div id="stress-test-results"></div>
+                    </div>
+                </div>
+                
+                <!-- 绩效归因 -->
+                <div id="performance-tab" style="display: none;">
+                    <h1 style="margin-bottom: 24px;">绩效归因</h1>
+                    
+                    <!-- 收益分析 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>收益分析</h3>
+                        <div id="performance-attribution"></div>
+                    </div>
+                    
+                    <!-- 性能指标 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>性能指标</h3>
+                        <div id="performance-metrics"></div>
+                    </div>
+                </div>
+                
+                <!-- 投资组合 -->
+                <div id="portfolio-tab" style="display: none;">
+                    <h1 style="margin-bottom: 24px;">投资组合</h1>
+                    
+                    <!-- 持仓信息 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>持仓信息</h3>
+                        <div id="portfolio-positions"></div>
+                    </div>
+                </div>
+                
+                <!-- 系统健康 -->
+                <div id="health-tab" style="display: none;">
+                    <h1 style="margin-bottom: 24px;">系统健康</h1>
+                    
+                    <!-- 系统状态 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>系统状态</h3>
+                        <div id="system-health-status"></div>
+                    </div>
+                    
+                    <!-- 健康指标 -->
+                    <div style="margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h3>健康指标</h3>
+                        <div id="health-metrics"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // API服务
+        const api = axios.create({
+            baseURL: 'http://localhost:8000/api',
+            timeout: 10000
+        });
+        
+        // 显示指定标签页
+        function showTab(tabId) {
+            // 隐藏所有标签页
+            document.querySelectorAll('[id$="-tab"]').forEach(tab => {
+                tab.style.display = 'none';
+            });
+            
+            // 显示选中的标签页
+            document.getElementById(tabId + '-tab').style.display = 'block';
+            
+            // 更新导航状态
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // 加载对应数据
+            if (tabId === 'dashboard') {
+                loadDashboardData();
+            } else if (tabId === 'risk') {
+                loadRiskData();
+            } else if (tabId === 'performance') {
+                loadPerformanceData();
+            } else if (tabId === 'portfolio') {
+                loadPortfolioData();
+            } else if (tabId === 'health') {
+                loadHealthData();
+            }
+        }
+        
+        // 加载仪表盘数据
+        function loadDashboardData() {
+            // 加载健康状态
+            api.get('/health/status')
+                .then(response => {
+                    const health = response.data;
+                    document.getElementById('health-status').innerHTML = `
+                        <p>状态: ${health.status === 'healthy' ? '<span style="color: green;">正常</span>' : '<span style="color: red;">异常</span>'}</p>
+                        <p>运行时间: ${Math.round(health.uptime / 3600)} 小时</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('health-status').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+            
+            // 加载投资组合概览
+            api.post('/portfolio/overview', { portfolio_id: 'portfolio1' })
+                .then(response => {
+                    const portfolio = response.data;
+                    document.getElementById('portfolio-overview').innerHTML = `
+                        <p>总价值: ${portfolio.total_value.toFixed(2)} 元</p>
+                        <p>总盈亏: ${portfolio.total_pnl.toFixed(2)} 元 (${(portfolio.total_pnl_pct * 100).toFixed(2)}%)</p>
+                        <p>夏普比率: ${portfolio.sharpe_ratio.toFixed(2)}</p>
+                        <p>最大回撤: ${(portfolio.max_drawdown * 100).toFixed(2)}%</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('portfolio-overview').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+            
+            // 加载资金曲线
+            api.get('/portfolio/history')
+                .then(response => {
+                    const data = response.data;
+                    const chart = echarts.init(document.getElementById('portfolio-chart'));
+                    const option = {
+                        title: {
+                            text: '资金曲线'
+                        },
+                        tooltip: {
+                            trigger: 'axis'
+                        },
+                        xAxis: {
+                            type: 'category',
+                            data: data.dates
+                        },
+                        yAxis: {
+                            type: 'value'
+                        },
+                        series: [{
+                            data: data.values,
+                            type: 'line',
+                            smooth: true
+                        }]
+                    };
+                    chart.setOption(option);
+                })
+                .catch(error => {
+                    console.error('加载资金曲线失败:', error);
+                });
+        }
+        
+        // 加载风控数据
+        function loadRiskData() {
+            // 加载VaR/CVaR
+            api.post('/risk/var', { confidence_level: 0.95 })
+                .then(response => {
+                    const risk = response.data;
+                    document.getElementById('var-results').innerHTML = `
+                        <p>VaR (95%): ${(risk.var * 100).toFixed(2)}%</p>
+                        <p>CVaR (95%): ${(risk.cvar * 100).toFixed(2)}%</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('var-results').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+            
+            // 加载压力测试
+            api.post('/risk/stress-test', { scenario: '2008_financial_crisis' })
+                .then(response => {
+                    const stress = response.data;
+                    document.getElementById('stress-test-results').innerHTML = `
+                        <p>情景: ${stress.scenario}</p>
+                        <p>估计损失: ${stress.estimated_loss.toFixed(2)} 元 (${(stress.estimated_loss_pct * 100).toFixed(2)}%)</p>
+                        <p>压力VaR: ${(stress.stressed_var * 100).toFixed(2)}%</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('stress-test-results').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+        }
+        
+        // 加载绩效数据
+        function loadPerformanceData() {
+            // 加载绩效归因
+            api.post('/performance/attribution', { portfolio_id: 'portfolio1' })
+                .then(response => {
+                    const perf = response.data;
+                    document.getElementById('performance-attribution').innerHTML = `
+                        <p>总收益: ${(perf.total_return * 100).toFixed(2)}%</p>
+                        <p>基准收益: ${(perf.benchmark_return * 100).toFixed(2)}%</p>
+                        <p>Alpha: ${(perf.alpha * 100).toFixed(2)}%</p>
+                        <p>信息比率: ${perf.information_ratio.toFixed(2)}</p>
+                        <p>选股收益: ${(perf.selection_return * 100).toFixed(2)}%</p>
+                        <p>配置收益: ${(perf.allocation_return * 100).toFixed(2)}%</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('performance-attribution').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+            
+            // 加载性能指标
+            api.get('/performance/metrics')
+                .then(response => {
+                    const metrics = response.data;
+                    document.getElementById('performance-metrics').innerHTML = `
+                        <p>夏普比率: ${metrics.sharpe_ratio.toFixed(2)}</p>
+                        <p>索提诺比率: ${metrics.sortino_ratio.toFixed(2)}</p>
+                        <p>卡玛比率: ${metrics.calmar_ratio.toFixed(2)}</p>
+                        <p>最大回撤: ${(metrics.max_drawdown * 100).toFixed(2)}%</p>
+                        <p>胜率: ${(metrics.win_rate * 100).toFixed(2)}%</p>
+                        <p>利润因子: ${metrics.profit_factor.toFixed(2)}</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('performance-metrics').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+        }
+        
+        // 加载投资组合数据
+        function loadPortfolioData() {
+            // 加载持仓信息
+            api.post('/portfolio/positions', { portfolio_id: 'portfolio1' })
+                .then(response => {
+                    const positions = response.data;
+                    let html = '<table border="1" style="width: 100%; border-collapse: collapse;">';
+                    html += '<tr><th>代码</th><th>数量</th><th>价格</th><th>权重</th><th>盈亏</th></tr>';
+                    positions.positions.forEach(pos => {
+                        html += `<tr>
+                            <td>${pos.symbol}</td>
+                            <td>${pos.quantity}</td>
+                            <td>${pos.price.toFixed(2)}</td>
+                            <td>${(pos.weight * 100).toFixed(2)}%</td>
+                            <td>${pos.pnl.toFixed(2)}</td>
+                        </tr>`;
+                    });
+                    html += '</table>';
+                    html += `<p>现金: ${positions.cash.toFixed(2)} 元</p>`;
+                    document.getElementById('portfolio-positions').innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('portfolio-positions').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+        }
+        
+        // 加载健康数据
+        function loadHealthData() {
+            // 加载系统状态
+            api.get('/health/status')
+                .then(response => {
+                    const health = response.data;
+                    let html = `<p>状态: ${health.status === 'healthy' ? '<span style="color: green;">正常</span>' : '<span style="color: red;">异常</span>'}</p>`;
+                    html += `<p>运行时间: ${Math.round(health.uptime / 3600)} 小时</p>`;
+                    html += '<h4>服务状态:</h4>';
+                    html += '<ul>';
+                    for (const [service, status] of Object.entries(health.services)) {
+                        html += `<li>${service}: ${status === 'healthy' ? '<span style="color: green;">正常</span>' : '<span style="color: red;">异常</span>'}</li>`;
+                    }
+                    html += '</ul>';
+                    document.getElementById('system-health-status').innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('system-health-status').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+            
+            // 加载健康指标
+            api.get('/health/metrics')
+                .then(response => {
+                    const metrics = response.data;
+                    document.getElementById('health-metrics').innerHTML = `
+                        <p>CPU使用率: ${(metrics.cpu_usage * 100).toFixed(2)}%</p>
+                        <p>内存使用率: ${(metrics.memory_usage * 100).toFixed(2)}%</p>
+                        <p>磁盘使用率: ${(metrics.disk_usage * 100).toFixed(2)}%</p>
+                        <p>API响应时间: ${(metrics.api_response_time * 1000).toFixed(2)} ms</p>
+                        <p>错误率: ${(metrics.error_rate * 100).toFixed(2)}%</p>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('health-metrics').innerHTML = '<p style="color: red;">加载失败</p>';
+                });
+        }
+        
+        // 初始加载仪表盘数据
+        loadDashboardData();
+    </script>
+</body>
+</html>

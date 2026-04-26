@@ -1,0 +1,90 @@
+version: '3.8'
+
+networks:
+  memx_internal:
+    driver: bridge
+    internal: true
+  memx_public:
+    driver: bridge
+
+services:
+  ollama:
+    image: ollama/ollama:0.1.38
+    container_name: memx-ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama:rw
+    restart: unless-stopped
+    networks:
+      - memx_internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=2
+
+  redis-master:
+    image: redis:7.2.4-alpine
+    container_name: memx-redis-master
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./redis_data/master:/data:rw
+    restart: unless-stopped
+    networks:
+      - memx_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-memx2024}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: redis-server --requirepass ${REDIS_PASSWORD:-memx2024} --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  memx-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: memx-api
+    ports:
+      - "0.0.0.0:8000:8000"
+    volumes:
+      - ./:/app:rw
+    restart: unless-stopped
+    networks:
+      - memx_internal
+      - memx_public
+    depends_on:
+      ollama:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    environment:
+      - TZ=Asia/Shanghai
+      - LOG_LEVEL=WARNING
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --timeout-graceful-shutdown 30

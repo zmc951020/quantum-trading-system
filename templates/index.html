@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora量化交易系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; }
+        .dashboard { padding: 20px; }
+        .card { margin-bottom: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .card-header { background-color: #007bff; color: white; border-radius: 10px 10px 0 0; }
+        .chart-container { height: 300px; margin: 10px 0; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+        .status-running { background-color: #28a745; }
+        .status-stopped { background-color: #dc3545; }
+        .market-state { font-size: 14px; margin: 5px 0; }
+        .performance-metric { font-size: 18px; font-weight: bold; color: #007bff; }
+        .indicator-value { font-size: 14px; padding: 5px 10px; background: #f0f0f0; border-radius: 5px; margin: 2px; display: inline-block; }
+        .indicator-group { margin-bottom: 15px; }
+        .indicator-group-title { font-weight: bold; margin-bottom: 5px; color: #333; }
+        .stock-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .stock-item:hover { background-color: #f8f9fa; }
+        .trade-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .trade-profit { color: #28a745; }
+        .trade-loss { color: #dc3545; }
+        .nav-tabs { margin-bottom: 15px; }
+        .tab-content { padding: 15px; background: white; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard container">
+        <h1 class="text-center mb-4">Aurora量化交易系统</h1>
+
+        <!-- 策略控制 -->
+        <div class="card">
+            <div class="card-header"><h3>策略控制</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label>选择策略：</label>
+                        <select id="strategy-select" class="form-select">
+                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
+                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
+                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label>初始资金：</label>
+                        <input type="number" id="initial-balance" class="form-control" value="100000">
+                    </div>
+                    <div class="col-md-5">
+                        <label>操作：</label>
+                        <div class="d-flex gap-2">
+                            <button id="start-btn" class="btn btn-success">启动策略</button>
+                            <button id="stop-btn" class="btn btn-danger">停止策略</button>
+                            <button id="backtest-btn" class="btn btn-info">运行回测</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3" id="strategy-status">
+                    <span class="status-indicator status-stopped"></span>
+                    <span>策略状态：已停止</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 市场数据 -->
+        <div class="card">
+            <div class="card-header"><h3>市场数据</h3></div>
+            <div class="card-body">
+                <div class="chart-container" id="price-chart"></div>
+                <div class="row mt-3">
+                    <div class="col-md-3"><strong>当前价格：</strong><span id="current-price">0.00</span></div>
+                    <div class="col-md-3"><strong>时间：</strong><span id="current-time">--</span></div>
+                    <div class="col-md-3"><strong>交易量：</strong><span id="current-volume">0</span></div>
+                    <div class="col-md-3"><strong>波动率：</strong><span id="current-volatility">--</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 双维度市场状态 -->
+        <div class="card">
+            <div class="card-header"><h3>双维度市场状态</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="market-state"><strong>HMM状态：</strong><span id="hmm-state">--</span></div>
+                        <div class="market-state"><strong>趋势类型：</strong><span id="trend-type">--</span></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="market-state"><strong>推荐信号：</strong><span id="recommended-signal">--</span></div>
+                        <div class="market-state"><strong>推荐仓位：</strong><span id="recommended-position">--</span></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="market-state"><strong>推荐策略：</strong><span id="recommended-strategy">--</span></div>
+                        <div class="market-state"><strong>决策描述：</strong><span id="decision-description">--</span></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="market-state"><strong>风险评分：</strong><span id="risk-score">--</span></div>
+                        <div class="market-state"><strong>市场状态：</strong><span id="regime-label">--</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 策略性能 -->
+        <div class="card">
+            <div class="card-header"><h3>策略性能</h3></div>
+            <div class="card-body">
+                <div class="chart-container" id="performance-chart"></div>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <div class="performance-metric" id="total-return">0.00%</div>
+                        <div class="text-muted">总收益率</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="performance-metric" id="current-balance">0.00</div>
+                        <div class="text-muted">当前余额</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="performance-metric" id="current-position">0</div>
+                        <div class="text-muted">当前持仓</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="performance-metric" id="total-trades">0</div>
+                        <div class="text-muted">总交易次数</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 技术分析指标 -->
+        <div class="card">
+            <div class="card-header"><h3>技术分析指标</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="chart-container" id="rsi-chart" style="height: 200px;"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="chart-container" id="macd-chart" style="height: 200px;"></div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="chart-container" id="bollinger-chart" style="height: 200px;"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="chart-container" id="kdj-chart" style="height: 200px;"></div>
+                    </div>
+                </div>
+                <div class="row mt-3" id="indicators-grid"></div>
+            </div>
+        </div>
+
+        <!-- 股票池和交易池 -->
+        <div class="card">
+            <div class="card-header"><h3>股票池与交易池</h3></div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#stock-pool">股票池</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#trading-pool">交易池</button></li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="stock-pool">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <input type="text" id="new-stock-symbol" class="form-control" placeholder="股票代码">
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" id="new-stock-name" class="form-control" placeholder="股票名称">
+                            </div>
+                            <div class="col-md-4">
+                                <button id="add-stock-btn" class="btn btn-primary">添加股票</button>
+                            </div>
+                        </div>
+                        <div id="stock-list"></div>
+                    </div>
+                    <div class="tab-pane fade" id="trading-pool">
+                        <div id="trade-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 多策略对比 -->
+        <div class="card">
+            <div class="card-header"><h3>多策略对比</h3></div>
+            <div class="card-body">
+                <div class="chart-container" id="strategy-comparison-chart"></div>
+                <div class="mt-3">
+                    <label>选择周期：</label>
+                    <select id="comparison-period" class="form-select" style="width: 200px; display: inline-block;">
+                        <option value="1h">1小时</option>
+                        <option value="4h">4小时</option>
+                        <option value="1d">1天</option>
+                        <option value="7d" selected>7天</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 策略组合管理 -->
+        <div class="card">
+            <div class="card-header"><h3>策略组合管理</h3></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label>初始资金：</label>
+                        <input type="number" id="combiner-balance" class="form-control" value="100000">
+                    </div>
+                    <div class="col-md-6">
+                        <label>操作：</label>
+                        <button id="create-combiner-btn" class="btn btn-primary w-100">创建策略组合</button>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label>添加策略：</label>
+                        <select id="add-strategy-select" class="form-select">
+                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
+                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
+                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label>权重：</label>
+                        <input type="number" id="strategy-weight" class="form-control" value="0.33" min="0" max="1" step="0.01">
+                    </div>
+                    <div class="col-md-4">
+                        <label>操作：</label>
+                        <button id="add-strategy-btn" class="btn btn-success w-100">添加策略</button>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h4>组合策略列表</h4>
+                    <div id="combiner-strategies-list" class="border rounded p-3"></div>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button id="start-combiner-btn" class="btn btn-success">启动策略组合</button>
+                    <button id="stop-combiner-btn" class="btn btn-danger">停止策略组合</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据导出 -->
+        <div class="card">
+            <div class="card-header"><h3>数据导出</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label>导出类型：</label>
+                        <select id="export-type" class="form-select">
+                            <option value="market">市场数据</option>
+                            <option value="performance">性能数据</option>
+                            <option value="trades">交易数据</option>
+                            <option value="indicators">技术指标</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label>导出格式：</label>
+                        <select id="export-format" class="form-select">
+                            <option value="csv">CSV</option>
+                            <option value="excel">Excel</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label>操作：</label>
+                        <button id="export-btn" class="btn btn-success w-100">导出数据</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模型管理 -->
+        <div class="card">
+            <div class="card-header"><h3>模型管理</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>版本列表</h4>
+                        <div class="version-list" id="version-list"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h4>操作</h4>
+                        <div class="mb-3">
+                            <input type="text" id="save-description" class="form-control" placeholder="保存描述">
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button id="save-model-btn" class="btn btn-primary">保存模型</button>
+                            <button id="load-model-btn" class="btn btn-info">加载模型</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化图表
+        const priceChart = echarts.init(document.getElementById('price-chart'));
+        const performanceChart = echarts.init(document.getElementById('performance-chart'));
+        const rsiChart = echarts.init(document.getElementById('rsi-chart'));
+        const macdChart = echarts.init(document.getElementById('macd-chart'));
+        const bollingerChart = echarts.init(document.getElementById('bollinger-chart'));
+        const kdjChart = echarts.init(document.getElementById('kdj-chart'));
+        const strategyComparisonChart = echarts.init(document.getElementById('strategy-comparison-chart'));
+
+        // 图表配置
+        const priceOption = {
+            title: { text: '价格走势', left: 'center' },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value' },
+            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } }]
+        };
+
+        const performanceOption = {
+            title: { text: '账户余额', left: 'center' },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value' },
+            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } }]
+        };
+
+        const rsiOption = {
+            title: { text: 'RSI', left: 'center', textStyle: { fontSize: 12 } },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value', min: 0, max: 100 },
+            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }]
+        };
+
+        const macdOption = {
+            title: { text: 'MACD', left: 'center', textStyle: { fontSize: 12 } },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value' },
+            series: [{ data: [], type: 'bar', smooth: true }]
+        };
+
+        const bollingerOption = {
+            title: { text: '布林带', left: 'center', textStyle: { fontSize: 12 } },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value' },
+            series: [
+                { name: '上轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b', type: 'dashed' } },
+                { name: '中轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#4ecdc4' } },
+                { name: '下轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b', type: 'dashed' } },
+                { name: '价格', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } }
+            ],
+            legend: {
+                data: ['上轨', '中轨', '下轨', '价格'],
+                top: 30
+            }
+        };
+
+        const kdjOption = {
+            title: { text: 'KDJ', left: 'center', textStyle: { fontSize: 12 } },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value', min: 0, max: 100 },
+            series: [
+                { name: 'K', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } },
+                { name: 'D', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } },
+                { name: 'J', data: [], type: 'line', smooth: true, lineStyle: { color: '#4ecdc4' } }
+            ],
+            legend: {
+                data: ['K', 'D', 'J'],
+                top: 30
+            }
+        };
+
+        const strategyComparisonOption = {
+            title: { text: '策略收益率对比', left: 'center' },
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['傅里叶强化学习', '市场自适应网格', '机器学习网格'], top: 30 },
+            xAxis: { type: 'time', boundaryGap: false },
+            yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
+            series: [
+                { name: '傅里叶强化学习', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } },
+                { name: '市场自适应网格', data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } },
+                { name: '机器学习网格', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }
+            ]
+        };
+
+        priceChart.setOption(priceOption);
+        performanceChart.setOption(performanceOption);
+        rsiChart.setOption(rsiOption);
+        macdChart.setOption(macdOption);
+        strategyComparisonChart.setOption(strategyComparisonOption);
+
+        // 更新市场数据
+        function updateMarketData() {
+            fetch('/api/market-data')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        const prices = data.map(item => [new Date(item.timestamp).getTime(), item.price]);
+                        priceChart.setOption({ series: [{ data: prices }] });
+
+                        const latest = data[data.length - 1];
+                        document.getElementById('current-price').textContent = latest.price;
+                        document.getElementById('current-time').textContent = new Date(latest.timestamp).toLocaleTimeString();
+                        document.getElementById('current-volume').textContent = latest.volume;
+
+                        // 计算波动率
+                        if (data.length > 20) {
+                            const recentPrices = data.slice(-20).map(d => d.price);
+                            const returns = [];
+                            for (let i = 1; i < recentPrices.length; i++) {
+                                returns.push((recentPrices[i] - recentPrices[i-1]) / recentPrices[i-1]);
+                            }
+                            const volatility = Math.sqrt(returns.reduce((sum, r) => sum + r * r, 0) / returns.length) * 100;
+                            document.getElementById('current-volatility').textContent = volatility.toFixed(2) + '%';
+                        }
+                    }
+                });
+        }
+
+        // 更新性能数据
+        function updatePerformanceData() {
+            fetch('/api/performance-data')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        const balances = data.map(item => [new Date(item.timestamp).getTime(), item.balance]);
+                        performanceChart.setOption({ series: [{ data: balances }] });
+                    }
+                });
+        }
+
+        // 更新策略状态
+        function updateStrategyStatus() {
+            fetch('/api/strategy-status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'running') {
+                        document.querySelector('.status-indicator').className = 'status-indicator status-running';
+                        document.querySelector('#strategy-status span:nth-child(2)').textContent = `策略状态：运行中 (${data.strategy})`;
+
+                        if (data.performance) {
+                            document.getElementById('total-return').textContent = `${(data.performance.total_return * 100).toFixed(2)}%`;
+                            document.getElementById('current-balance').textContent = data.performance.balance.toFixed(2);
+                            document.getElementById('total-trades').textContent = data.performance.total_trades;
+                        }
+                        document.getElementById('current-position').textContent = data.position;
+
+                        if (data.market_state && data.market_state.dual_dimension) {
+                            const dual = data.market_state.dual_dimension;
+                            document.getElementById('hmm-state').textContent = dual.hmm_label;
+                            document.getElementById('trend-type').textContent = dual.trend_label;
+                            document.getElementById('recommended-signal').textContent = dual.signal;
+                            document.getElementById('recommended-position').textContent = (dual.recommended_position_ratio * 100).toFixed(0) + '%';
+                            document.getElementById('recommended-strategy').textContent = dual.recommended_strategy;
+                            document.getElementById('decision-description').textContent = dual.description;
+                        }
+                        if (data.market_state) {
+                            document.getElementById('regime-label').textContent = data.market_state.regime_label || '--';
+                        }
+                    } else {
+                        document.querySelector('.status-indicator').className = 'status-indicator status-stopped';
+                        document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
+                    }
+                });
+        }
+
+        // 更新技术分析指标
+        function updateTechnicalIndicators() {
+            fetch('/api/technical-indicators')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.indicators) {
+                        const grid = document.getElementById('indicators-grid');
+                        grid.innerHTML = '';
+
+                        const groups = {
+                            '趋势指标': ['ma5', 'ma10', 'ma20', 'ma50', 'ema12', 'ema26'],
+                            '动量指标': ['rsi14', 'k', 'd', 'j', 'macd', 'signal'],
+                            '波动指标': ['atr14', 'upper', 'middle', 'lower'],
+                            '成交量指标': ['volume_ma5', 'volume_ma20', 'obv'],
+                            '其他指标': ['adx', 'cci', 'roc']
+                        };
+
+                        Object.entries(groups).forEach(([groupName, indicators]) => {
+                            const groupDiv = document.createElement('div');
+                            groupDiv.className = 'col-md-4 indicator-group';
+                            groupDiv.innerHTML = `<div class="indicator-group-title">${groupName}</div>`;
+
+                            indicators.forEach(ind => {
+                                if (data.indicators[ind] !== undefined) {
+                                    const val = typeof data.indicators[ind] === 'number' ? data.indicators[ind].toFixed(2) : data.indicators[ind];
+                                    const span = document.createElement('span');
+                                    span.className = 'indicator-value';
+                                    span.innerHTML = `<strong>${ind.toUpperCase()}</strong>: ${val}`;
+                                    groupDiv.appendChild(span);
+                                }
+                            });
+
+                            grid.appendChild(groupDiv);
+                        });
+
+                        // 更新RSI图表
+                        if (data.full_indicators && data.full_indicators.rsi14) {
+                            const rsiData = [];
+                            data.price_data.forEach((item, i) => {
+                                if (data.full_indicators.rsi14[i] !== null) {
+                                    rsiData.push([new Date(item.timestamp).getTime(), data.full_indicators.rsi14[i]]);
+                                }
+                            });
+                            rsiChart.setOption({
+                                series: [{
+                                    data: rsiData,
+                                    type: 'line',
+                                    smooth: true,
+                                    lineStyle: { color: '#ff6b6b' }
+                                }],
+                                yAxis: {
+                                    type: 'value',
+                                    min: 0,
+                                    max: 100,
+                                    axisLine: {
+                                        lineStyle: {
+                                            color: '#666'
+                                        }
+                                    },
+                                    splitLine: {
+                                        lineStyle: {
+                                            color: '#eee'
+                                        }
+                                    },
+                                    axisLabel: {
+                                        formatter: '{value}'
+                                    }
+                                }
+                            });
+                        }
+
+                        // 更新MACD图表
+                        if (data.full_indicators && data.full_indicators.histogram) {
+                            const macdData = [];
+                            const signalData = [];
+                            const macdLineData = [];
+                            
+                            data.price_data.forEach((item, i) => {
+                                if (data.full_indicators.histogram[i] !== null) {
+                                    macdData.push([new Date(item.timestamp).getTime(), data.full_indicators.histogram[i]]);
+                                }
+                                if (data.full_indicators.signal && data.full_indicators.signal[i] !== null) {
+                                    signalData.push([new Date(item.timestamp).getTime(), data.full_indicators.signal[i]]);
+                                }
+                                if (data.full_indicators.macd && data.full_indicators.macd[i] !== null) {
+                                    macdLineData.push([new Date(item.timestamp).getTime(), data.full_indicators.macd[i]]);
+                                }
+                            });
+                            
+                            macdChart.setOption({
+                                series: [
+                                    {
+                                        name: 'MACD',
+                                        data: macdLineData,
+                                        type: 'line',
+                                        smooth: true,
+                                        lineStyle: { color: '#007bff' }
+                                    },
+                                    {
+                                        name: 'Signal',
+                                        data: signalData,
+                                        type: 'line',
+                                        smooth: true,
+                                        lineStyle: { color: '#ff6b6b' }
+                                    },
+                                    {
+                                        name: 'Histogram',
+                                        data: macdData,
+                                        type: 'bar',
+                                        itemStyle: {
+                                            color: function(params) {
+                                                return params.value >= 0 ? '#28a745' : '#dc3545';
+                                            }
+                                        }
+                                    }
+                                ],
+                                legend: {
+                                    data: ['MACD', 'Signal', 'Histogram'],
+                                    top: 30
+                                }
+                            });
+                        }
+
+                        // 显示K线形态
+                        if (data.indicators.candlestick_patterns) {
+                            const pattern = data.indicators.candlestick_patterns[data.indicators.candlestick_patterns.length - 1];
+                            if (pattern) {
+                                document.getElementById('regime-label').textContent = `K线形态: ${pattern}`;
+                            }
+                        }
+
+                        // 更新布林带图表
+                        if (data.full_indicators && data.full_indicators.upper) {
+                            const upperData = [];
+                            const middleData = [];
+                            const lowerData = [];
+                            const priceData = [];
+                            
+                            data.price_data.forEach((item, i) => {
+                                if (data.full_indicators.upper[i] !== null) {
+                                    upperData.push([new Date(item.timestamp).getTime(), data.full_indicators.upper[i]]);
+                                    middleData.push([new Date(item.timestamp).getTime(), data.full_indicators.middle[i]]);
+                                    lowerData.push([new Date(item.timestamp).getTime(), data.full_indicators.lower[i]]);
+                                    priceData.push([new Date(item.timestamp).getTime(), item.close]);
+                                }
+                            });
+                            
+                            bollingerChart.setOption({
+                                series: [
+                                    { data: upperData },
+                                    { data: middleData },
+                                    { data: lowerData },
+                                    { data: priceData }
+                                ]
+                            });
+                        }
+
+                        // 更新KDJ图表
+                        if (data.full_indicators && data.full_indicators.k) {
+                            const kData = [];
+                            const dData = [];
+                            const jData = [];
+                            
+                            data.price_data.forEach((item, i) => {
+                                if (data.full_indicators.k[i] !== null) {
+                                    kData.push([new Date(item.timestamp).getTime(), data.full_indicators.k[i]]);
+                                    dData.push([new Date(item.timestamp).getTime(), data.full_indicators.d[i]]);
+                                    if (data.full_indicators.j && data.full_indicators.j[i] !== null) {
+                                        jData.push([new Date(item.timestamp).getTime(), data.full_indicators.j[i]]);
+                                    }
+                                }
+                            });
+                            
+                            kdjChart.setOption({
+                                series: [
+                                    { data: kData },
+                                    { data: dData },
+                                    { data: jData }
+                                ]
+                            });
+                        }
+                    }
+                });
+        }
+
+        // 更新股票池
+        function updateStockPool() {
+            fetch('/api/stock-pool')
+                .then(response => response.json())
+                .then(data => {
+                    const list = document.getElementById('stock-list');
+                    list.innerHTML = '';
+                    data.stocks.forEach(stock => {
+                        const div = document.createElement('div');
+                        div.className = 'stock-item d-flex justify-content-between align-items-center';
+                        div.innerHTML = `
+                            <div>
+                                <strong>${stock.symbol}</strong> - ${stock.name}
+                                <div class="text-muted">${stock.status} | 添加时间: ${new Date(stock.added_time).toLocaleString()}</div>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-success" onclick="moveToTrading('${stock.symbol}')">加入交易</button>
+                                <button class="btn btn-sm btn-danger" onclick="removeStock('${stock.symbol}')">移除</button>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                    });
+                });
+        }
+
+        // 更新交易池
+        function updateTradingPool() {
+            fetch('/api/trading-pool')
+                .then(response => response.json())
+                .then(data => {
+                    const list = document.getElementById('trade-list');
+                    list.innerHTML = '';
+                    data.open_trades.forEach(trade => {
+                        const pnlClass = trade.pnl >= 0 ? 'trade-profit' : 'trade-loss';
+                        const div = document.createElement('div');
+                        div.className = 'trade-item d-flex justify-content-between align-items-center';
+                        div.innerHTML = `
+                            <div>
+                                <strong>${trade.symbol}</strong> - ${trade.strategy_type}
+                                <div class="text-muted">开仓价: ${trade.entry_price} | 数量: ${trade.quantity}</div>
+                            </div>
+                            <div>
+                                <span class="${pnlClass}">${(trade.pnl * 100).toFixed(2)}%</span>
+                                <button class="btn btn-sm btn-warning ms-2" onclick="closeTrade('${trade.symbol}')">平仓</button>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                    });
+                });
+        }
+
+        // 移动到交易池
+        function moveToTrading(symbol) {
+            fetch('/api/stock-pool/move-to-trading', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol, strategy_type: 'default' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    updateStockPool();
+                    updateTradingPool();
+                }
+            });
+        }
+
+        // 移除股票
+        function removeStock(symbol) {
+            fetch('/api/stock-pool/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateStockPool();
+                }
+            });
+        }
+
+        // 平仓
+        function closeTrade(symbol) {
+            fetch('/api/trading-pool/close', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateTradingPool();
+                }
+            });
+        }
+
+        // 导出数据
+        document.getElementById('export-btn').addEventListener('click', function() {
+            const exportType = document.getElementById('export-type').value;
+            const exportFormat = document.getElementById('export-format').value;
+
+            fetch('/api/export-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: exportType, format: exportFormat })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('导出失败');
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${exportType}_data.${exportFormat === 'excel' ? 'xlsx' : 'csv'}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                alert('数据导出成功！');
+            })
+            .catch(error => {
+                console.error('导出失败:', error);
+                alert('导出失败，请稍后重试');
+            });
+        });
+
+        // 策略组合管理
+        document.getElementById('create-combiner-btn').addEventListener('click', function() {
+            const initialBalance = parseFloat(document.getElementById('combiner-balance').value);
+            
+            fetch('/api/strategy-combiner/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initial_balance: initialBalance })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    updateCombinerStatus();
+                } else {
+                    alert(data.error);
+                }
+            });
+        });
+
+        document.getElementById('add-strategy-btn').addEventListener('click', function() {
+            const strategyName = document.getElementById('add-strategy-select').value;
+            const weight = parseFloat(document.getElementById('strategy-weight').value);
+            
+            fetch('/api/strategy-combiner/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy_name: strategyName, weight: weight })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    updateCombinerStatus();
+                } else {
+                    alert(data.error);
+                }
+            });
+        });
+
+        document.getElementById('start-combiner-btn').addEventListener('click', function() {
+            fetch('/api/strategy-combiner/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                } else {
+                    alert(data.error);
+                }
+            });
+        });
+
+        document.getElementById('stop-combiner-btn').addEventListener('click', function() {
+            fetch('/api/stop-strategy')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                    }
+                });
+        });
+
+        function updateCombinerStatus() {
+            fetch('/api/strategy-combiner/status')
+                .then(response => response.json())
+                .then(data => {
+                    const strategiesList = document.getElementById('combiner-strategies-list');
+                    if (data.status === 'not_created') {
+                        strategiesList.innerHTML = '<p>策略组合尚未创建</p>';
+                    } else {
+                        let html = `<p>总资金: ${data.performance.total_balance.toFixed(2)}</p>`;
+                        html += `<p>总收益率: ${(data.performance.total_return * 100).toFixed(2)}%</p>`;
+                        html += '<h5>策略列表:</h5><ul>';
+                        
+                        data.strategies.forEach(strategy => {
+                            html += `<li>${strategy.name} - 权重: ${(strategy.weight * 100).toFixed(0)}% - 分配: ${strategy.allocation.toFixed(2)} - 余额: ${strategy.balance.toFixed(2)}</li>`;
+                        });
+                        
+                        html += '</ul>';
+                        strategiesList.innerHTML = html;
+                    }
+                });
+        }
+
+        // 定期更新策略组合状态
+        setInterval(updateCombinerStatus, 5000);
+
+        // 添加股票
+        document.getElementById('add-stock-btn').addEventListener('click', function() {
+            const symbol = document.getElementById('new-stock-symbol').value;
+            const name = document.getElementById('new-stock-name').value;
+
+            fetch('/api/stock-pool/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol, name: name })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('new-stock-symbol').value = '';
+                    document.getElementById('new-stock-name').value = '';
+                    updateStockPool();
+                } else {
+                    alert(data.error);
+                }
+            });
+        });
+
+        // 加载模型版本
+        function loadModelVersions() {
+            fetch('/api/model-versions')
+                .then(response => response.json())
+                .then(versions => {
+                    const list = document.getElementById('version-list');
+                    list.innerHTML = '';
+                    versions.forEach(version => {
+                        const div = document.createElement('div');
+                        div.className = 'p-2 border-bottom';
+                        div.innerHTML = `
+                            <div><strong>${version.version_id}</strong></div>
+                            <div class="text-sm text-muted">${version.timestamp}</div>
+                            <div class="text-sm">${version.description || ''}</div>
+                        `;
+                        div.onclick = () => {
+                            document.querySelectorAll('.version-list > div').forEach(el => el.classList.remove('bg-primary', 'text-white'));
+                            div.classList.add('bg-primary', 'text-white');
+                            selectedVersionId = version.version_id;
+                        };
+                        list.appendChild(div);
+                    });
+                });
+        }
+
+        // 事件绑定
+        document.getElementById('start-btn').addEventListener('click', function() {
+            const strategy = document.getElementById('strategy-select').value;
+            const balance = parseFloat(document.getElementById('initial-balance').value);
+
+            fetch('/api/start-strategy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) alert(data.message);
+                else alert('启动失败: ' + data.error);
+            });
+        });
+
+        document.getElementById('stop-btn').addEventListener('click', function() {
+            fetch('/api/stop-strategy')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) alert(data.message);
+                });
+        });
+
+        document.getElementById('backtest-btn').addEventListener('click', function() {
+            const strategy = document.getElementById('strategy-select').value;
+            const balance = parseFloat(document.getElementById('initial-balance').value);
+
+            alert('开始回测，请稍候...');
+            fetch('/api/backtest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance, days: 30 })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`回测完成！收益率: ${(data.performance.total_return * 100).toFixed(2)}%`);
+                    updateStrategyStatus();
+                }
+            });
+        });
+
+        let selectedVersionId = null;
+
+        document.getElementById('save-model-btn').addEventListener('click', function() {
+            const description = document.getElementById('save-description').value;
+            fetch('/api/save-model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ description: description })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    loadModelVersions();
+                }
+            });
+        });
+
+        document.getElementById('load-model-btn').addEventListener('click', function() {
+            if (selectedVersionId) {
+                fetch('/api/load-model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ version_id: selectedVersionId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) alert(data.message);
+                });
+            } else {
+                alert('请先选择一个模型版本');
+            }
+        });
+
+        // 定期更新
+        setInterval(updateMarketData, 1000);
+        setInterval(updatePerformanceData, 2000);
+        setInterval(updateStrategyStatus, 1000);
+        setInterval(updateTechnicalIndicators, 5000);
+        setInterval(updateStockPool, 5000);
+        setInterval(updateTradingPool, 5000);
+
+        // 更新多策略对比
+        function updateStrategyComparison() {
+            const now = new Date();
+            const data = [];
+            for (let i = 7; i >= 0; i--) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                data.push({
+                    timestamp: date.getTime(),
+                    fourier: Math.random() * 10 - 2,
+                    market: Math.random() * 8 - 1,
+                    ml: Math.random() * 12 - 3
+                });
+            }
+
+            strategyComparisonChart.setOption({
+                series: [
+                    { data: data.map(item => [item.timestamp, item.fourier]) },
+                    { data: data.map(item => [item.timestamp, item.market]) },
+                    { data: data.map(item => [item.timestamp, item.ml]) }
+                ]
+            });
+        }
+        setInterval(updateStrategyComparison, 10000);
+
+        // 响应式
+        window.addEventListener('resize', function() {
+            priceChart.resize();
+            performanceChart.resize();
+            rsiChart.resize();
+            macdChart.resize();
+            strategyComparisonChart.resize();
+        });
+
+        // 初始加载
+        updateMarketData();
+        updatePerformanceData();
+        updateStrategyStatus();
+        updateTechnicalIndicators();
+        updateStockPool();
+        updateTradingPool();
+        loadModelVersions();
+        updateStrategyComparison();
+    </script>
+</body>
+</html>

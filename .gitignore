@@ -1,0 +1,111 @@
+# 量化交易系统 - .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 环境文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 依赖
+venv/
+env/
+ENV/
+
+# 数据文件
+data/
+*.csv
+*.xlsx
+*.json
+
+# 日志
+logs/
+*.log
+
+# 临时文件
+temp/
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# 构建文件
+build/
+dist/
+*.egg-info/
+
+# 测试
+pytest_cache/
+.coverage
+coverage.xml
+
+# 打包
+*.rar
+*.zip
+*.7z
+
+# 敏感文件
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# 数据库
+*.db
+*.sqlite
+
+# 备份
+*.backup
+*.bak
+*~.swp
+
+# 其他
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 编译文件
+*.so
+*.dll
+*.lib
+
+# 大型文件
+*.h5
+*.pkl
+*.pt
+*.pb
+
+# 文档
+*.md
+*.rst
+*.txt
+
+# 配置文件
+*.ini
+*.cfg
+*.conf
+
+# 项目特定
+backtest_results/
+Aurora/data/
+Aurora/logs/

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试主页面函数</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <h1>测试主页面函数</h1>
+    
+    <div id="test-chart" style="width: 600px; height: 400px;"></div>
+
+    <script>
+    // 从optimized_frontend.html复制的函数
+
+    // 生成模拟数据的辅助函数
+    function generateChartData(baseValue, days, volatility, trendFactor) {
+        const dates = [];
+        const values = [];
+        const today = new Date();
+        
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            dates.push(date.toLocaleDateString('zh-CN'));
+            
+            const fluctuation = Math.random() * volatility * 2 - volatility;
+            const trend = i * trendFactor;
+            values.push(baseValue + trend + fluctuation);
+        }
+        
+        return { dates, values };
+    }
+    
+    // 实现网格数据精度动态适配的通用函数
+    function calculateChartRange(values) {
+        const maxValue = Math.max(...values);
+        const minValue = Math.min(...values);
+        
+        // 动态计算Y轴范围
+        let yAxisMin, yAxisMax, interval;
+        
+        // 检查是否在1000点附近
+        if (maxValue > 950 && minValue < 1050) {
+            // 聚焦1000点上下区间
+            yAxisMin = 950;
+            yAxisMax = 1050;
+            interval = 10; // 更精细的网格
+        }
+        // 检查是否在800点附近
+        else if (maxValue > 750 && minValue < 850) {
+            // 聚焦800点上下区间
+            yAxisMin = 750;
+            yAxisMax = 850;
+            interval = 10; // 更精细的网格
+        }
+        // 其他情况使用自适应范围
+        else {
+            const range = maxValue - minValue;
+            yAxisMin = minValue - range * 0.1;
+            yAxisMax = maxValue + range * 0.1;
+            interval = (yAxisMax - yAxisMin) / 10;
+        }
+        
+        return { yAxisMin, yAxisMax, interval };
+    }
+    
+    function loadDashboardData() {
+        const data = generateChartData(1000, 30, 20, 1);
+        const { yAxisMin, yAxisMax, interval } = calculateChartRange(data.values);
+        console.log('yAxisMin:', yAxisMin);
+        
+        const chart = echarts.init(document.getElementById('test-chart'));
+        const option = {
+            title: {
+                text: '资金曲线'
+            },
+            xAxis: {
+                type: 'category',
+                data: data.dates
+            },
+            yAxis: {
+                type: 'value',
+                min: yAxisMin,
+                max: yAxisMax,
+                interval: interval
+            },
+            series: [{
+                data: data.values,
+                type: 'line'
+            }]
+        };
+        chart.setOption(option);
+    }
+    
+    console.log('Script loaded');
+    loadDashboardData();
+    </script>
+</body>
+</html>

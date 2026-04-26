@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简化版量化交易仪表盘</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f2f5; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .nav { display: flex; margin-bottom: 20px; border-bottom: 1px solid #e8e8e8; }
+        .nav-item { padding: 10px 20px; cursor: pointer; border: 1px solid #e8e8e8; border-bottom: none; border-radius: 4px 4px 0 0; margin-right: 5px; }
+        .nav-item.active { background: #1890ff; color: white; }
+        .content { background: white; padding: 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .test-section { margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>量化交易仪表盘</h1>
+        <div>
+            <select id="system-select" onchange="switchSystemMode()">
+                <option value="ours">本系统</option>
+                <option value="westkuanke">西部宽客</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h3>模块切换测试</h3>
+        <button onclick="showTab('dashboard')">切换到仪表盘</button>
+        <button onclick="showTab('market')">切换到市场监控</button>
+        <button onclick="showTab('portfolio')">切换到投资组合</button>
+    </div>
+    
+    <div class="nav">
+        <div class="nav-item active" onclick="showTab('dashboard')">仪表盘</div>
+        <div class="nav-item" onclick="showTab('market')">市场监控</div>
+        <div class="nav-item" onclick="showTab('portfolio')">投资组合</div>
+        <div class="nav-item" onclick="showTab('technical')">技术分析</div>
+    </div>
+    
+    <div class="content">
+        <div class="tab-content active" id="dashboard-tab">
+            <h2>仪表盘</h2>
+            <p>仪表盘内容</p>
+        </div>
+        
+        <div class="tab-content" id="market-tab">
+            <h2>市场监控</h2>
+            <p>市场监控内容</p>
+        </div>
+        
+        <div class="tab-content" id="portfolio-tab">
+            <h2>投资组合</h2>
+            <p>投资组合内容</p>
+        </div>
+        
+        <div class="tab-content" id="technical-tab">
+            <h2>技术分析</h2>
+            <p>技术分析内容</p>
+        </div>
+    </div>
+
+    <script>
+    // 全局系统状态
+    var currentSystemMode = 'ours';
+    
+    // 会话管理
+    var SessionManager = {
+        updateCurrentTab: function(tabId) {
+            console.log('更新当前标签页:', tabId);
+        },
+        updateSystemMode: function(mode) {
+            console.log('更新系统模式:', mode);
+        }
+    };
+    
+    // 全局状态管理
+    var AppState = {
+        update: function(key, value) {
+            console.log('更新状态:', key, value);
+        }
+    };
+    
+    // 切换系统模式
+    function switchSystemMode() {
+        var systemMode = document.getElementById('system-select').value;
+        currentSystemMode = systemMode;
+        console.log('切换系统模式到:', systemMode);
+    }
+    
+    // 显示标签页
+    function showTab(tabId) {
+        console.log('切换到标签页:', tabId);
+        
+        // 隐藏所有标签页
+        var allTabs = document.querySelectorAll('.tab-content');
+        for (var i = 0; i < allTabs.length; i++) {
+            allTabs[i].style.display = 'none';
+            allTabs[i].classList.remove('active');
+        }
+        
+        // 显示选中的标签页
+        var selectedTab = document.getElementById(tabId + '-tab');
+        if (selectedTab) {
+            selectedTab.style.display = 'block';
+            selectedTab.classList.add('active');
+        }
+        
+        // 更新导航项激活状态
+        var navItems = document.querySelectorAll('.nav-item');
+        for (var j = 0; j < navItems.length; j++) {
+            navItems[j].classList.remove('active');
+        }
+        
+        // 找到对应的导航项并激活
+        var tabNames = {
+            'dashboard': '仪表盘',
+            'market': '市场监控',
+            'portfolio': '投资组合',
+            'technical': '技术分析'
+        };
+        
+        var targetName = tabNames[tabId];
+        for (var k = 0; k < navItems.length; k++) {
+            if (navItems[k].textContent === targetName) {
+                navItems[k].classList.add('active');
+                break;
+            }
+        }
+        
+        // 更新会话状态
+        if (SessionManager) {
+            SessionManager.updateCurrentTab(tabId);
+        }
+        if (AppState) {
+            AppState.update('currentTab', tabId);
+        }
+    }
+    
+    console.log('页面加载完成');
+    </script>
+</body>
+</html>
