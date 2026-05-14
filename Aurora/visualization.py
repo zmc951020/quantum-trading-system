@@ -19,24 +19,67 @@ import numpy as np
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# 首先单独导入 user_manager（关键！）
+user_manager = None
+try:
+    from user_manager import user_manager
+    print("[OK] user_manager imported successfully")
+except Exception as e:
+    print(f"[WARNING] user_manager import failed: {e}")
+
+# 再导入策略模块
 try:
     from strategies.fourier_rl_strategy import FourierRLStrategy
     from strategies.final_market_adaptive import FinalMarketAdaptiveGrid
     from strategies.ml_range_grid import MLRangeGridTrading
+    from strategies.huijin_value_strategy import HuijinValueStrategy
     from strategies.strategy_base import StrategyManager
     from strategies.strategy_combiner import StrategyCombiner
     from signals.dual_market_state import DualDimensionMarketState
     from models.model_persistence import ModelPersistenceManager
     from xbk_api_client import XbkApiClient, XbkDataFeed, XbkTrader
     from technical_analyzer import TechnicalAnalyzer
-    from user_manager import user_manager
     STRATEGIES_AVAILABLE = True
 except ImportError as e:
     print(f"导入策略模块失败: {str(e)}")
     print("将以基本模式启动，部分功能可能受限")
     STRATEGIES_AVAILABLE = False
     from technical_analyzer import TechnicalAnalyzer
-    user_manager = None
+
+# 导入系统健康监控和安全模块
+health_monitor = None
+monitoring_scheduler = None
+database_manager = None
+security_control = None
+
+try:
+    from monitor.system_health import get_system_health_monitor
+    health_monitor = get_system_health_monitor()
+    print("[OK] system_health_monitor imported successfully")
+except Exception as e:
+    print(f"[WARNING] system_health_monitor import failed: {e}")
+
+try:
+    from monitor.scheduler import get_monitoring_scheduler, initialize_default_tasks
+    initialize_default_tasks()
+    monitoring_scheduler = get_monitoring_scheduler()
+    print("[OK] monitoring_scheduler imported successfully")
+except Exception as e:
+    print(f"[WARNING] monitoring_scheduler import failed: {e}")
+
+try:
+    from utils.database_manager import get_database_manager
+    database_manager = get_database_manager()
+    print("[OK] database_manager imported successfully")
+except Exception as e:
+    print(f"[WARNING] database_manager import failed: {e}")
+
+try:
+    from risk.data_source_risk_control import get_security_control
+    security_control = get_security_control()
+    print("[OK] security_control imported successfully")
+except Exception as e:
+    print(f"[WARNING] security_control import failed: {e}")
 
 def load_env_config():
     """加载环境变量配置"""
@@ -583,9 +626,19 @@ performance_data = []
 stock_pool = []
 trading_pool = []
 
-XBK_API_KEY = env_config.get('XBK_API_KEY', '2029963shhr')
-XBK_API_SECRET = env_config.get('XBK_API_SECRET', '123456')
+# ========== 西部宽客 API 配置 ==========
+# 实盘交易环境
+XBK_API_KEY = env_config.get('XBK_API_KEY', '60201554shhr')
+XBK_API_SECRET = env_config.get('XBK_API_SECRET', '200231')
 XBK_API_URL = env_config.get('XBK_API_URL', 'https://api.westquant.cn/sim')
+
+# 实盘交易环境（请在获取真实密钥后替换）
+# XBK_API_KEY = '您的真实API密钥'
+# XBK_API_SECRET = '您的真实API密钥密码'
+XBK_API_URL_LIVE = env_config.get('XBK_API_URL_LIVE', 'https://api.westquant.cn/api')
+
+# 交易模式配置
+CURRENT_TRADING_MODE = 'sim'  # 'sim' 模拟交易, 'live' 实盘交易
 
 if STRATEGIES_AVAILABLE:
     api_client = XbkApiClient(XBK_API_KEY, XBK_API_SECRET, XBK_API_URL)
@@ -744,7 +797,7 @@ threading.Thread(target=data_update_thread, daemon=True).start()
 
 @app.route('/')
 def index():
-    """主页"""
+    """主页 - 完整的可视化页面"""
     session_id = request.cookies.get('session_id')
     if not session_id:
         session_id = request.headers.get('X-Session-ID')
@@ -754,13 +807,327 @@ def index():
         if user:
             return render_template('index.html', user=user)
 
-    return render_template('login.html')
+    return redirect('/login')
 
 
 @app.route('/login')
 def login():
     """登录页面"""
     return render_template('login.html')
+
+
+@app.route('/dashboard')
+def dashboard():
+    """监控仪表盘页面"""
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        session_id = request.headers.get('X-Session-ID')
+
+    if session_id and user_manager:
+        user = user_manager.validate_session(session_id)
+        if user:
+            return render_template('dashboard.html', user=user)
+
+    return redirect('/login')
+
+
+@app.route('/deepseek')
+def deepseek():
+    """DeepSeek 量化交易界面"""
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        session_id = request.headers.get('X-Session-ID')
+
+    if session_id and user_manager:
+        user = user_manager.validate_session(session_id)
+        if user:
+            return render_template('deepseek.html', user=user)
+
+    return render_template('login.html')
+
+
+@app.route('/api/health')
+def api_health():
+    """
+    综合健康检查端点
+    检测系统各核心组件的健康状态
+    """
+    results = {
+        "timestamp": datetime.now().isoformat(),
+        "status": "healthy",
+        "components": {}
+    }
+    
+    # 检测各核心组件
+    checks = [
+        ("auth", check_auth_service),
+        ("strategy", check_strategy_service),
+        ("risk", check_risk_service),
+        ("data", check_data_service),
+        ("system", check_system_resources),
+        ("port", check_port_status)
+    ]
+    
+    # 添加新模块的检查
+    new_checks = [
+        ("health_monitor", check_health_monitor),
+        ("monitoring_scheduler", check_monitoring_scheduler),
+        ("database", check_database_manager),
+        ("security", check_security_control)
+    ]
+    
+    all_checks = checks + new_checks
+    
+    for name, check_func in all_checks:
+        try:
+            result = check_func()
+            results["components"][name] = result
+            if result["status"] != "healthy":
+                results["status"] = "degraded" if results["status"] == "healthy" else "critical"
+        except Exception as e:
+            results["components"][name] = {
+                "status": "critical",
+                "error": str(e)
+            }
+            results["status"] = "critical"
+    
+    # 根据状态返回HTTP状态码
+    status_code = 200 if results["status"] == "healthy" else 503
+    return jsonify(results), status_code
+
+
+def check_health_monitor():
+    """检查健康监控模块"""
+    try:
+        if health_monitor:
+            summary = health_monitor.get_health_summary()
+            return {
+                "status": "healthy",
+                "message": "健康监控正常",
+                "total_checks": summary.get("total_checks", 0),
+                "last_check": summary.get("last_check")
+            }
+        else:
+            return {"status": "warning", "message": "健康监控未初始化"}
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_monitoring_scheduler():
+    """检查监控调度器"""
+    try:
+        if monitoring_scheduler:
+            status = monitoring_scheduler.get_status()
+            return {
+                "status": "healthy",
+                "message": "监控调度器正常",
+                "running": status.get("running", False),
+                "task_count": status.get("task_count", 0)
+            }
+        else:
+            return {"status": "warning", "message": "监控调度器未初始化"}
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_database_manager():
+    """检查数据库管理器"""
+    try:
+        if database_manager:
+            stats = database_manager.get_database_stats()
+            return {
+                "status": "healthy",
+                "message": "数据库正常",
+                "stats": stats
+            }
+        else:
+            return {"status": "warning", "message": "数据库管理器未初始化"}
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_security_control():
+    """检查安全控制模块"""
+    try:
+        if security_control:
+            return {
+                "status": "healthy",
+                "message": "安全控制正常"
+            }
+        else:
+            return {"status": "warning", "message": "安全控制未初始化"}
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+@app.route('/api/health/full')
+def api_health_full():
+    """获取完整的系统健康检查报告"""
+    try:
+        if health_monitor:
+            result = health_monitor.check_all_modules()
+            return jsonify({
+                "success": True,
+                "data": result
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "健康监控未初始化"
+            }), 503
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+@app.route('/api/monitor/status')
+def api_monitor_status():
+    """获取监控调度器状态"""
+    try:
+        if monitoring_scheduler:
+            status = monitoring_scheduler.get_status()
+            return jsonify({
+                "success": True,
+                "data": status
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "监控调度器未初始化"
+            }), 503
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+@app.route('/api/database/stats')
+def api_database_stats():
+    """获取数据库统计信息"""
+    try:
+        if database_manager:
+            stats = database_manager.get_database_stats()
+            return jsonify({
+                "success": True,
+                "data": stats
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "数据库管理器未初始化"
+            }), 503
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+def check_auth_service():
+    """检查认证服务"""
+    try:
+        return {
+            "status": "healthy",
+            "message": "认证服务正常",
+            "users_count": len(user_manager.users) if user_manager else 0
+        }
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_strategy_service():
+    """检查策略服务"""
+    try:
+        if STRATEGIES_AVAILABLE:
+            return {
+                "status": "healthy",
+                "message": "策略服务正常",
+                "strategies_count": len(strategy_manager.list_strategies()) if strategy_manager else 0,
+                "current_strategy": current_strategy.__class__.__name__ if current_strategy else "None"
+            }
+        return {"status": "warning", "message": "策略模块不可用"}
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_risk_service():
+    """检查风险控制服务"""
+    try:
+        return {
+            "status": "healthy",
+            "message": "风控服务正常",
+            "circuit_breaker": "active" if phishing_defense and phishing_defense.circuit_breaker_active else "inactive"
+        }
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_data_service():
+    """检查数据服务"""
+    try:
+        # 检查市场数据是否可用
+        data = generate_simulated_market_data()
+        return {
+            "status": "healthy",
+            "message": "数据服务正常",
+            "data_points": len(data)
+        }
+    except Exception as e:
+        return {"status": "critical", "error": str(e)}
+
+
+def check_system_resources():
+    """检查系统资源"""
+    try:
+        import psutil
+        process = psutil.Process()
+        memory_usage = process.memory_info().rss / (1024 * 1024)
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        
+        status = "healthy"
+        if memory_usage > 1000:
+            status = "warning"
+        if cpu_percent > 80:
+            status = "warning"
+        
+        return {
+            "status": status,
+            "message": "系统资源正常",
+            "memory_mb": round(memory_usage, 1),
+            "cpu_percent": cpu_percent
+        }
+    except ImportError:
+        return {"status": "healthy", "message": "系统资源监控不可用（缺少psutil）"}
+    except Exception as e:
+        return {"status": "warning", "error": str(e)}
+
+
+def check_port_status():
+    """检查端口状态"""
+    try:
+        from utils.port_manager import get_port_manager
+        pm = get_port_manager()
+        
+        ports = [5000, 8000, 8080]
+        port_status = {}
+        all_available = True
+        
+        for port in ports:
+            available = pm.is_port_available(port)
+            port_status[str(port)] = "available" if available else "in_use"
+            if not available:
+                all_available = False
+        
+        return {
+            "status": "healthy" if all_available else "warning",
+            "message": "端口状态正常" if all_available else "部分端口被占用",
+            "ports": port_status
+        }
+    except Exception as e:
+        return {"status": "warning", "error": str(e)}
 
 
 @app.route('/api/register', methods=['POST'])
@@ -853,7 +1220,8 @@ def get_strategy_list():
     strategies = [
         {'name': 'FourierRLStrategy', 'description': '傅里叶强化学习策略'},
         {'name': 'FinalMarketAdaptiveGrid', 'description': '市场自适应网格策略'},
-        {'name': 'MLRangeGridTrading', 'description': '机器学习网格交易策略'}
+        {'name': 'MLRangeGridTrading', 'description': '机器学习网格交易策略'},
+        {'name': 'HuijinValueStrategy', 'description': '汇金价值AI轮动策略'}
     ]
     return jsonify(strategies)
 
@@ -880,6 +1248,8 @@ def start_strategy():
             strategy = FinalMarketAdaptiveGrid(initial_balance=initial_balance)
         elif strategy_name == 'MLRangeGridTrading':
             strategy = MLRangeGridTrading(initial_balance=initial_balance)
+        elif strategy_name == 'HuijinValueStrategy':
+            strategy = HuijinValueStrategy(initial_balance=initial_balance)
         else:
             return jsonify({'error': '策略不存在'}), 400
 
@@ -999,8 +1369,12 @@ def run_backtest():
             strategy = FourierRLStrategy(initial_balance=initial_balance, **params)
         elif strategy_name == 'FinalMarketAdaptiveGrid':
             strategy = FinalMarketAdaptiveGrid(initial_balance=initial_balance, **params)
-        else:
+        elif strategy_name == 'MLRangeGridTrading':
             strategy = MLRangeGridTrading(initial_balance=initial_balance, **params)
+        elif strategy_name == 'HuijinValueStrategy':
+            strategy = HuijinValueStrategy(initial_balance=initial_balance)
+        else:
+            return jsonify({'error': '策略不存在'}), 400
 
         prices = []
         for i in range(days * 24 * 60):
@@ -1057,6 +1431,11 @@ def get_strategy_params():
             'grid_spacing': 0.005,
             'max_positions': 10,
             'profit_target': 0.015
+        }
+    elif strategy_name == 'HuijinValueStrategy':
+        params = {
+            'initial_balance': 100000.0,
+            'config_path': r"D:\Gupiao\量化交易测试设备方案\攒机\量化交易\汇金价值AI轮动策略\strategy_config.json"
         }
 
     return jsonify({

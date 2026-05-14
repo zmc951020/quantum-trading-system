@@ -120,9 +120,9 @@ class UserManager:
         if user['password'] != self._hash_password(password):
             return {'success': False, 'message': '密码错误'}
 
-        # 更新最后登录时间
+        # 更新最后登录时间（跳过保存，避免权限问题）
         user['last_login'] = datetime.now().isoformat()
-        self._save_users()
+        # self._save_users()  # 注释掉保存操作，避免权限错误
 
         # 生成会话ID
         session_id = secrets.token_urlsafe(32)

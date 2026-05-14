@@ -76,10 +76,12 @@ def start_server():
     print("启动Web服务器...")
     print("=" * 50)
 
-    # 直接运行app.py
+    # 在当前目录运行app.py
     try:
         import subprocess
-        result = subprocess.run([sys.executable, 'app.py'], capture_output=True, text=True)
+        # 确保在web目录下运行
+        web_dir = os.path.dirname(os.path.abspath(__file__))
+        result = subprocess.run([sys.executable, 'app.py'], cwd=web_dir, capture_output=True, text=True)
         print(result.stdout)
         if result.stderr:
             print("错误输出:")

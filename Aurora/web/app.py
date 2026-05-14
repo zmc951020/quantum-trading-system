@@ -10,7 +10,7 @@ import time
 import threading
 import logging
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect
 from flask_socketio import SocketIO, emit
 import redis
 
@@ -30,7 +30,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# 设置模板目录路径
+templates_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
+app = Flask(__name__, template_folder=templates_dir)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
@@ -1120,8 +1122,17 @@ auth_manager = AuthManager()
 # 初始化默认账户
 accounts["default"] = Account("default")
 
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
+
 @app.route('/')
 def index():
+    # 检查是否已登录
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        return redirect('/login')
+    
     global accounts
     return render_template('index.html', accounts=list(accounts.keys()))
 
@@ -1367,9 +1378,48 @@ def login():
     password = data.get('password')
 
     if auth_manager.authenticate(username, password):
-        return jsonify({'status': 'success', 'message': '登录成功'})
+        # 生成会话ID
+        session_id = f"{username}_{int(time.time())}"
+        return jsonify({
+            'success': True, 
+            'message': '登录成功',
+            'session_id': session_id,
+            'user': {'username': username, 'role': 'admin'}
+        })
     else:
-        return jsonify({'status': 'error', 'message': '用户名或密码错误'})
+        return jsonify({'success': False, 'message': '用户名或密码错误'})
+
+@app.route('/api/auth/validate')
+def validate_session():
+    """
+    验证会话
+    """
+    session_id = request.headers.get('X-Session-ID')
+    if session_id:
+        return jsonify({'valid': True})
+    return jsonify({'valid': False})
+
+@app.route('/api/user-info')
+def get_user_info():
+    """
+    获取用户信息
+    """
+    session_id = request.cookies.get('session_id')
+    if session_id:
+        # 从会话ID中提取用户名
+        username = session_id.split('_')[0]
+        return jsonify({
+            'success': True,
+            'user': {'username': username, 'role': 'admin'}
+        })
+    return jsonify({'success': False, 'message': '未登录'})
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """
+    用户登出
+    """
+    return jsonify({'success': True, 'message': '登出成功'})
 
 # 配置管理API
 @app.route('/api/config')

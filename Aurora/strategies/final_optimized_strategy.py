@@ -1,952 +1,485 @@
-#!/usr/bin/env python3
-"""
-最终优化策略
-综合之前的优化成果，重点解决下跌市场的问题
-"""
-
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
+import talib
+from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
 
-class FinalOptimizedStrategy:
-    """
-    最终优化策略
-    综合之前的优化成果，重点解决下跌市场的问题
-    """
+class MarketClassifier:
+    """市场类型分类器"""
     
-    def __init__(self, base_price: float, initial_balance: float = 100000):
-        """
-        初始化最终优化策略
-        
-        Args:
-            base_price: 基准价格
-            initial_balance: 初始资金
-        """
-        self.base_price = base_price
-        self.initial_balance = initial_balance
-        self.current_balance = initial_balance
-        self.position = 0
-        self.price_history = []
-        self.is_active = True
-        self.last_price = base_price  # 上次价格
-        self.entry_price = 0  # 入场价格
-        
-        # 交易统计
-        self.total_trades = 0
-        self.winning_trades = 0
-        self.losing_trades = 0
-        
-        # 市场类型
-        self.market_type = 'range_bound'
-        self.last_market_type = 'range_bound'
-        self.market_types = ['range_bound', 'trending_up', 'trending_down', 'volatile']
-        
-        # 技术指标参数
-        self.rsi_period = 14  # RSI周期
-        self.macd_fast = 12  # MACD快速周期
-        self.macd_slow = 26  # MACD慢速周期
-        self.macd_signal = 9  # MACD信号周期
-        self.bollinger_period = 20  # 布林带周期
-        self.bollinger_std = 2  # 布林带标准差
-        
-        # 机器学习模型
-        self.market_classifier = RandomForestClassifier(n_estimators=200, random_state=42)
-        self.reversal_classifier = RandomForestClassifier(n_estimators=200, random_state=42)
+    def __init__(self):
+        self.model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            random_state=42
+        )
         self.scaler = StandardScaler()
-        self.model_trained = False
+        self.is_trained = False
         
-        # 训练数据
-        self.market_data = []
-        self.market_labels = []
-        self.reversal_data = []
-        self.reversal_labels = []
-        self.model_training_count = 0
+    def extract_features(self, df):
+        """提取市场特征"""
+        features = pd.DataFrame(index=df.index)
         
-        # 性能跟踪
-        self.trade_history = []
-        self.profit_history = []
-        self.market_switch_count = 0
+        # 价格特征 - 转换为float64以兼容talib
+        close = df['close'].values.astype(np.float64)
+        high = df['high'].values.astype(np.float64)
+        low = df['low'].values.astype(np.float64)
+        volume = df['volume'].values.astype(np.float64)
         
-        # 资金管理参数
-        self.max_position_percentage = 0.85  # 最大持仓比例
-        self.reserve_balance_percentage = 0.15  # 保留资金比例
-        self.min_trade_amount = 800  # 最小交易金额
-        self.max_trade_amount = 12000  # 最大交易金额
-        self.position_size = 0.12  # 单次交易仓位比例
+        # 波动率特征
+        features['volatility'] = df['close'].pct_change().rolling(20).std()
+        features['volatility_5'] = df['close'].pct_change().rolling(5).std()
         
-        # 交易参数
-        self.take_profit_threshold = 0.015  # 止盈阈值
-        self.stop_loss_threshold = 0.01  # 止损阈值
-        self.min_profit_threshold = 0.003  # 最小盈利阈值
+        # 趋势强度
+        features['trend_strength'] = abs(df['close'] - df['close'].rolling(20).mean()) / df['close'].rolling(20).std()
         
-        # 网格参数
-        self.grid_levels = 40  # 网格层数
-        self.grid_spacing = 0.006  # 网格间距
-        self.grids = self._create_grids()
-        self.last_grid_index = self.grid_levels  # 初始在中间网格
+        # RSI
+        features['rsi'] = talib.RSI(close, timeperiod=14)
         
-        # 下跌市场特定参数
-        self.downward_trend_count = 0  # 下跌趋势计数
-        self.max_downward_trend_count = 3  # 最大下跌趋势计数
-        self.downward_buy_levels = []  # 下跌买入点位
-        self.downward_buy_amounts = []  # 对应买入金额
-        self.downward_buy_executed = []  # 已执行的买入点位
+        # MACD
+        macd, signal, hist = talib.MACD(close)
+        features['macd'] = macd
+        features['macd_signal'] = signal
+        features['macd_hist'] = hist
         
-        # 反转策略参数
-        self.reversal_threshold = 0.008  # 反转阈值
-        self.buy_count = 0  # 买入次数
-        self.max_buy_count = 2  # 最大买入次数
+        # 布林带
+        upper, middle, lower = talib.BBANDS(close)
+        features['bb_position'] = (close - lower) / (upper - lower)
         
-        # 初始化下跌买入点位
-        self._init_downward_buy_levels()
+        # 成交量特征
+        features['volume_ratio'] = volume / np.mean(volume[-20:])
+        features['volume_trend'] = talib.SMA(volume, timeperiod=5) / talib.SMA(volume, timeperiod=20)
+        
+        # 动量特征
+        features['momentum'] = talib.MOM(close, timeperiod=10)
+        features['rate_of_change'] = talib.ROC(close, timeperiod=10)
+        
+        # 价格位置
+        features['price_position'] = (close - np.min(close[-20:])) / (np.max(close[-20:]) - np.min(close[-20:]) + 1e-10)
+        
+        # 移动平均线关系
+        features['ma_5_20'] = talib.SMA(close, timeperiod=5) / talib.SMA(close, timeperiod=20) - 1
+        features['ma_20_60'] = talib.SMA(close, timeperiod=20) / talib.SMA(close, timeperiod=60) - 1
+        
+        return features.dropna()
     
-    def _create_grids(self) -> List[float]:
-        """
-        创建网格价格水平
+    def label_market_type(self, df, lookback=20):
+        """标记市场类型"""
+        labels = []
         
-        Returns:
-            网格价格列表
-        """
+        for i in range(lookback, len(df)):
+            window = df.iloc[i-lookback:i]
+            
+            # 计算市场特征
+            returns = window['close'].pct_change().dropna()
+            volatility = returns.std()
+            trend = (window['close'].iloc[-1] / window['close'].iloc[0] - 1)
+            
+            # 分类逻辑
+            if trend > 0.05 and volatility < 0.02:
+                labels.append(0)  # 上涨市场
+            elif abs(trend) < 0.02 and volatility < 0.015:
+                labels.append(1)  # 横盘市场
+            elif trend < -0.05:
+                labels.append(2)  # 下跌市场
+            else:
+                labels.append(3)  # 波动市场
+        
+        return labels
+    
+    def train(self, df):
+        """训练模型"""
+        features = self.extract_features(df)
+        labels = self.label_market_type(df)
+        
+        # 对齐数据
+        min_len = min(len(features), len(labels))
+        features = features.iloc[-min_len:]
+        labels = labels[-min_len:]
+        
+        # 标准化
+        features_scaled = self.scaler.fit_transform(features)
+        
+        # 训练模型
+        self.model.fit(features_scaled, labels)
+        self.is_trained = True
+        
+        return self
+    
+    def predict(self, df):
+        """预测市场类型"""
+        if not self.is_trained:
+            return 3  # 默认波动市场
+        
+        features = self.extract_features(df)
+        if len(features) == 0:
+            return 3
+        
+        features_scaled = self.scaler.transform(features.iloc[-1:])
+        prediction = self.model.predict(features_scaled)[0]
+        
+        return prediction
+
+class DynamicGridStrategy:
+    """动态网格交易策略"""
+    
+    def __init__(self, initial_capital=100000):
+        self.initial_capital = initial_capital
+        self.capital = initial_capital
+        self.position = 0
+        self.trades = []
+        self.grid_levels = []
+        self.stop_loss = None
+        
+    def calculate_grid_params(self, market_type, current_price, volatility):
+        """根据市场类型计算网格参数"""
+        if market_type == 0:  # 上涨市场
+            grid_spacing = max(0.005, volatility * 2)  # 0.5%-2%
+            num_grids = 5
+            position_ratio = 0.8
+            stop_loss_pct = 0.05
+            
+        elif market_type == 1:  # 横盘市场
+            grid_spacing = max(0.001, volatility * 0.5)  # 0.1%-0.3%
+            num_grids = 10
+            position_ratio = 0.7
+            stop_loss_pct = 0.03
+            
+        elif market_type == 2:  # 下跌市场
+            grid_spacing = max(0.01, volatility * 1.5)  # 1%-3%
+            num_grids = 8
+            position_ratio = 0.5
+            stop_loss_pct = 0.05
+            
+        else:  # 波动市场
+            grid_spacing = max(0.003, volatility)  # 0.3%-1%
+            num_grids = 6
+            position_ratio = 0.6
+            stop_loss_pct = 0.04
+            
+        return grid_spacing, num_grids, position_ratio, stop_loss_pct
+    
+    def setup_grids(self, current_price, grid_spacing, num_grids):
+        """设置网格层级"""
         grids = []
-        for i in range(-self.grid_levels, self.grid_levels + 1):
-            price = self.base_price * (1 + self.grid_spacing) ** i
-            grids.append(price)
-        return sorted(grids)
+        for i in range(-num_grids // 2, num_grids // 2 + 1):
+            price = current_price * (1 + i * grid_spacing)
+            grids.append({
+                'price': price,
+                'type': 'buy' if i <= 0 else 'sell',
+                'filled': False
+            })
+        return grids
     
-    def _init_downward_buy_levels(self):
-        """
-        初始化下跌买入点位
-        """
-        # 定义下跌买入点位（相对于基准价格的百分比）
-        levels = [0.98, 0.95, 0.92, 0.89, 0.86, 0.83, 0.80, 0.77, 0.74, 0.71]
-        for level in levels:
-            price = self.base_price * level
-            self.downward_buy_levels.append(price)
-            # 价格越低，买入金额越大
-            amount_ratio = (1 - level) * 18  # 价格越低，买入比例越高
-            max_amount = self.initial_balance * 0.18  # 单次最大买入金额
-            amount = min(max_amount, self.initial_balance * 0.05 * amount_ratio)
-            self.downward_buy_amounts.append(amount)
-            self.downward_buy_executed.append(False)
+    def calculate_position_size(self, market_type, current_price, volatility):
+        """计算仓位大小"""
+        grid_spacing, num_grids, position_ratio, _ = self.calculate_grid_params(
+            market_type, current_price, volatility
+        )
         
-        # 按价格从高到低排序
-        sorted_pairs = sorted(zip(self.downward_buy_levels, self.downward_buy_amounts, self.downward_buy_executed), reverse=True)
-        self.downward_buy_levels, self.downward_buy_amounts, self.downward_buy_executed = zip(*sorted_pairs)
-        self.downward_buy_levels = list(self.downward_buy_levels)
-        self.downward_buy_amounts = list(self.downward_buy_amounts)
-        self.downward_buy_executed = list(self.downward_buy_executed)
+        # 每个网格的仓位
+        capital_per_grid = self.capital * position_ratio / num_grids
+        position_size = capital_per_grid / current_price
+        
+        return position_size
     
-    def _calculate_rsi(self, data: pd.Series) -> float:
-        """
-        计算RSI指标
+    def execute_trade(self, price, volume, trade_type, timestamp):
+        """执行交易"""
+        cost = price * volume
         
-        Args:
-            data: 价格数据
+        if trade_type == 'buy':
+            if cost <= self.capital:
+                self.capital -= cost
+                self.position += volume
+                self.trades.append({
+                    'timestamp': timestamp,
+                    'type': 'buy',
+                    'price': price,
+                    'volume': volume,
+                    'cost': cost
+                })
+                return True
+        else:  # sell
+            if volume <= self.position:
+                self.capital += cost
+                self.position -= volume
+                self.trades.append({
+                    'timestamp': timestamp,
+                    'type': 'sell',
+                    'price': price,
+                    'volume': volume,
+                    'revenue': cost
+                })
+                return True
+        
+        return False
+    
+    def check_stop_loss(self, current_price, stop_loss_pct, entry_price):
+        """检查止损"""
+        if entry_price > 0:
+            loss_pct = (current_price - entry_price) / entry_price
+            if loss_pct <= -stop_loss_pct:
+                return True
+        return False
+
+class KeyLevelAnalyzer:
+    """关键点位分析器"""
+    
+    def __init__(self):
+        self.support_levels = []
+        self.resistance_levels = []
+        
+    def find_support_resistance(self, df, lookback=50):
+        """寻找支撑位和压力位"""
+        close = df['close'].values
+        high = df['high'].values
+        low = df['low'].values
+        
+        # 使用局部极值点
+        from scipy.signal import argrelextrema
+        
+        # 寻找局部最小值（支撑位）
+        local_min = argrelextrema(low, np.less, order=5)[0]
+        self.support_levels = low[local_min][-5:] if len(local_min) > 0 else [np.min(low[-20:])]
+        
+        # 寻找局部最大值（压力位）
+        local_max = argrelextrema(high, np.greater, order=5)[0]
+        self.resistance_levels = high[local_max][-5:] if len(local_max) > 0 else [np.max(high[-20:])]
+        
+        return self.support_levels, self.resistance_levels
+    
+    def fibonacci_levels(self, high, low):
+        """计算斐波那契回撤位"""
+        diff = high - low
+        levels = {
+            '0.236': high - diff * 0.236,
+            '0.382': high - diff * 0.382,
+            '0.5': high - diff * 0.5,
+            '0.618': high - diff * 0.618,
+            '0.786': high - diff * 0.786
+        }
+        return levels
+    
+    def vwap(self, df):
+        """计算成交量加权平均价"""
+        vwap = (df['close'] * df['volume']).sum() / df['volume'].sum()
+        return vwap
+
+class AdaptiveTradingSystem:
+    """自适应交易系统"""
+    
+    def __init__(self, initial_capital=100000):
+        self.classifier = MarketClassifier()
+        self.strategy = DynamicGridStrategy(initial_capital)
+        self.analyzer = KeyLevelAnalyzer()
+        self.initial_capital = initial_capital
+        self.capital = initial_capital
+        self.reserve_capital = initial_capital * 0.2  # 风险储备金
+        self.available_capital = initial_capital * 0.8
+        self.entry_price = 0
+        self.current_market_type = 3
+        
+    def update_market_type(self, df):
+        """更新市场类型"""
+        if len(df) > 60:
+            self.classifier.train(df)
+            self.current_market_type = self.classifier.predict(df)
+        return self.current_market_type
+    
+    def calculate_dynamic_position(self, market_type, current_price, volatility):
+        """计算动态仓位"""
+        # 基础仓位
+        base_position = self.strategy.calculate_position_size(
+            market_type, current_price, volatility
+        )
+        
+        # 根据市场类型调整
+        if market_type == 0:  # 上涨市场 - 激进
+            multiplier = 1.2
+        elif market_type == 1:  # 横盘市场 - 中等
+            multiplier = 1.0
+        elif market_type == 2:  # 下跌市场 - 保守
+            multiplier = 0.6
+        else:  # 波动市场 - 适中
+            multiplier = 0.8
             
-        Returns:
-            RSI值
-        """
-        if len(data) < self.rsi_period + 1:
-            return 50  # 默认值
-        
-        delta = data.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=self.rsi_period).mean().iloc[-1]
-        loss = (-delta.where(delta < 0, 0)).rolling(window=self.rsi_period).mean().iloc[-1]
-        
-        if loss == 0:
-            return 100
-        
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
+        return base_position * multiplier
     
-    def _calculate_macd(self, data: pd.Series) -> Tuple[float, float, float]:
-        """
-        计算MACD指标
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            MACD, 信号, 柱状图
-        """
-        if len(data) < self.macd_slow + self.macd_signal:
-            return 0, 0, 0  # 默认值
-        
-        ema12 = data.ewm(span=self.macd_fast, adjust=False).mean()
-        ema26 = data.ewm(span=self.macd_slow, adjust=False).mean()
-        macd = ema12 - ema26
-        signal = macd.ewm(span=self.macd_signal, adjust=False).mean()
-        histogram = macd - signal
-        
-        return macd.iloc[-1], signal.iloc[-1], histogram.iloc[-1]
-    
-    def _calculate_bollinger_bands(self, data: pd.Series) -> Tuple[float, float, float]:
-        """
-        计算布林带
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            上轨, 中轨, 下轨
-        """
-        if len(data) < self.bollinger_period:
-            return data.iloc[-1] * 1.05, data.iloc[-1], data.iloc[-1] * 0.95  # 默认值
-        
-        ma = data.rolling(window=self.bollinger_period).mean().iloc[-1]
-        std = data.rolling(window=self.bollinger_period).std().iloc[-1]
-        if std == 0:
-            std = 0.01  # 避免除零错误
-        upper = ma + (std * self.bollinger_std)
-        lower = ma - (std * self.bollinger_std)
-        
-        return upper, ma, lower
-    
-    def _extract_features(self, data: pd.Series) -> List[float]:
-        """
-        提取特征用于机器学习
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            特征列表
-        """
-        if len(data) < 20:
-            return [0] * 25  # 返回默认特征
-        
-        # 计算RSI
-        rsi = self._calculate_rsi(data)
-        
-        # 计算MACD
-        macd, signal, histogram = self._calculate_macd(data)
-        
-        # 计算布林带
-        upper_band, middle_band, lower_band = self._calculate_bollinger_bands(data)
-        
-        # 计算价格变化率
-        price_change_1d = (data.iloc[-1] - data.iloc[-2]) / data.iloc[-2] if len(data) > 1 else 0
-        price_change_5d = (data.iloc[-1] - data.iloc[-6]) / data.iloc[-6] if len(data) > 5 else 0
-        price_change_10d = (data.iloc[-1] - data.iloc[-11]) / data.iloc[-11] if len(data) > 10 else 0
-        price_change_20d = (data.iloc[-1] - data.iloc[-21]) / data.iloc[-21] if len(data) > 20 else 0
+    def execute_strategy(self, df, current_price, timestamp):
+        """执行策略"""
+        # 更新市场类型
+        market_type = self.update_market_type(df)
         
         # 计算波动率
-        volatility = data.iloc[-20:].pct_change().std()
+        volatility = df['close'].pct_change().rolling(20).std().iloc[-1]
         
-        # 计算价格范围
-        price_range = (data.iloc[-20:].max() - data.iloc[-20:].min()) / data.iloc[-20:].mean()
+        # 获取关键点位
+        supports, resistances = self.analyzer.find_support_resistance(df)
+        fib_levels = self.analyzer.fibonacci_levels(
+            df['high'].max(), df['low'].min()
+        )
         
-        # 计算移动平均线
-        ema10 = data.ewm(span=10).mean().iloc[-1]
-        ema30 = data.ewm(span=30).mean().iloc[-1]
-        ema60 = data.ewm(span=60).mean().iloc[-1]
+        # 计算网格参数
+        grid_spacing, num_grids, position_ratio, stop_loss_pct = \
+            self.strategy.calculate_grid_params(market_type, current_price, volatility)
         
-        # 计算趋势强度
-        short_term_trend = (ema10 - ema30) / ema30
-        medium_term_trend = (ema30 - ema60) / ema60
+        # 设置网格
+        grids = self.strategy.setup_grids(current_price, grid_spacing, num_grids)
         
-        # 计算价格动量
-        momentum = data.iloc[-1] / data.iloc[-10] if len(data) > 9 else 1
+        # 计算仓位
+        position_size = self.calculate_dynamic_position(
+            market_type, current_price, volatility
+        )
         
-        # 计算布林带宽度
-        bollinger_width = (upper_band - lower_band) / middle_band
+        # 执行交易逻辑
+        trades_executed = []
         
-        # 计算价格在布林带中的位置
-        bollinger_position = (data.iloc[-1] - lower_band) / (upper_band - lower_band) if upper_band > lower_band else 0.5
+        for grid in grids:
+            if not grid['filled']:
+                # 检查价格是否触及网格
+                if grid['type'] == 'buy' and current_price <= grid['price']:
+                    if self.strategy.execute_trade(
+                        current_price, position_size, 'buy', timestamp
+                    ):
+                        grid['filled'] = True
+                        trades_executed.append({
+                            'type': 'buy',
+                            'price': current_price,
+                            'volume': position_size
+                        })
+                        self.entry_price = current_price if self.entry_price == 0 else \
+                            (self.entry_price + current_price) / 2
+                        
+                elif grid['type'] == 'sell' and current_price >= grid['price']:
+                    if self.strategy.execute_trade(
+                        current_price, position_size, 'sell', timestamp
+                    ):
+                        grid['filled'] = True
+                        trades_executed.append({
+                            'type': 'sell',
+                            'price': current_price,
+                            'volume': position_size
+                        })
         
-        # 计算支撑位和阻力位
-        recent_low = data.iloc[-20:].min()
-        recent_high = data.iloc[-20:].max()
-        support_level = recent_low / data.iloc[-1]
-        resistance_level = recent_high / data.iloc[-1]
-        
-        return [
-            rsi,
-            macd / data.iloc[-1],
-            signal / data.iloc[-1],
-            histogram / data.iloc[-1],
-            price_change_1d,
-            price_change_5d,
-            price_change_10d,
-            price_change_20d,
-            volatility,
-            price_range,
-            short_term_trend,
-            medium_term_trend,
-            momentum,
-            bollinger_width,
-            bollinger_position,
-            support_level,
-            resistance_level,
-            ema10 / ema30,
-            ema30 / ema60,
-            data.iloc[-1] / data.iloc[-20],
-            data.iloc[-10] / data.iloc[-20],
-            len(data) / 100,  # 数据长度归一化
-            volatility * 100,  # 波动率放大
-            price_range * 100,  # 价格范围放大
-            rsi / 50  # RSI归一化
-        ]
-    
-    def _label_market_type(self, data: pd.Series) -> str:
-        """
-        标记市场类型
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            市场类型
-        """
-        if len(data) < 20:
-            return 'range_bound'
-        
-        # 计算趋势强度
-        ema10 = data.ewm(span=10).mean().iloc[-1]
-        ema30 = data.ewm(span=30).mean().iloc[-1]
-        ema60 = data.ewm(span=60).mean().iloc[-1]
-        trend_strength = (ema10 - ema60) / ema60
-        
-        # 计算价格范围
-        recent_data = data.iloc[-20:]
-        price_range = (recent_data.max() - recent_data.min()) / recent_data.mean()
-        
-        # 计算波动率
-        volatility = data.iloc[-20:].pct_change().std()
-        
-        # 确定市场类型
-        if volatility > 0.025:
-            return 'volatile'
-        elif trend_strength < -0.012:
-            return 'trending_down'
-        elif trend_strength > 0.012:
-            return 'trending_up'
-        elif price_range < 0.035:
-            return 'range_bound'
-        elif price_range > 0.07:
-            if trend_strength > 0:
-                return 'trending_up'
-            else:
-                return 'trending_down'
-        else:
-            if abs(trend_strength) > 0.006:
-                if trend_strength > 0:
-                    return 'trending_up'
-                else:
-                    return 'trending_down'
-            else:
-                return 'range_bound'
-    
-    def _label_reversal(self, data: pd.Series) -> bool:
-        """
-        标记反转信号
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            是否为反转信号
-        """
-        if len(data) < 30:
-            return False
-        
-        # 计算RSI
-        rsi = self._calculate_rsi(data)
-        
-        # 计算MACD
-        macd, signal, histogram = self._calculate_macd(data)
-        
-        # 计算布林带
-        upper_band, middle_band, lower_band = self._calculate_bollinger_bands(data)
-        
-        # 计算价格变化
-        price_change = (data.iloc[-1] - data.iloc[-2]) / data.iloc[-2] if len(data) > 1 else 0
-        
-        # 检测反转信号
-        # 1. RSI低于38（超卖）
-        # 2. MACD柱状图由负转正或 histogram > 0
-        # 3. 价格触及布林带下轨或在支撑位附近
-        # 4. 价格出现上涨趋势
-        
-        reversal = False
-        
-        # 超卖条件
-        if rsi < 38:
-            # MACD金叉或柱状图为正
-            if (histogram > 0 and macd > signal) or histogram > 0:
-                # 价格触及布林带下轨
-                if data.iloc[-1] < lower_band * 1.01:
-                    # 价格出现上涨趋势
-                    if price_change > 0:
-                        reversal = True
-        
-        return reversal
-    
-    def _train_models(self):
-        """
-        训练机器学习模型
-        """
-        # 训练市场类型分类模型
-        if len(self.market_data) >= 100:
-            # 准备训练数据
-            X = np.array(self.market_data)
-            y = np.array([self.market_types.index(label) for label in self.market_labels])
-            
-            # 标准化特征
-            X_scaled = self.scaler.fit_transform(X)
-            
-            # 训练模型
-            self.market_classifier.fit(X_scaled, y)
-        
-        # 训练反转信号检测模型
-        if len(self.reversal_data) >= 100:
-            # 准备训练数据
-            X = np.array(self.reversal_data)
-            y = np.array(self.reversal_labels)
-            
-            # 标准化特征
-            X_scaled = self.scaler.fit_transform(X)
-            
-            # 训练模型
-            self.reversal_classifier.fit(X_scaled, y)
-        
-        if len(self.market_data) >= 100 or len(self.reversal_data) >= 100:
-            self.model_trained = True
-            self.model_training_count += 1
-    
-    def detect_market_type(self, data: pd.Series) -> str:
-        """
-        检测市场类型（使用机器学习）
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            市场类型: 'range_bound', 'trending_up', 'trending_down', 'volatile'
-        """
-        if len(data) < 20:
-            return 'range_bound'
-        
-        # 提取特征
-        features = self._extract_features(data)
-        
-        # 标记市场类型（用于训练）
-        true_label = self._label_market_type(data)
-        
-        # 收集训练数据
-        self.market_data.append(features)
-        self.market_labels.append(true_label)
-        
-        # 定期训练模型
-        if len(self.market_data) % 30 == 0:
-            self._train_models()
-        
-        # 使用模型预测市场类型
-        if self.model_trained:
-            try:
-                features_scaled = self.scaler.transform([features])
-                prediction = self.market_classifier.predict(features_scaled)[0]
-                predicted_type = self.market_types[prediction]
-                return predicted_type
-            except Exception:
-                return true_label
-        else:
-            return true_label
-    
-    def _detect_reversal(self, data: pd.Series) -> bool:
-        """
-        检测反转信号（使用机器学习）
-        
-        Args:
-            data: 价格数据
-            
-        Returns:
-            是否检测到反转信号
-        """
-        if len(data) < 30:
-            return False
-        
-        # 提取特征
-        features = self._extract_features(data)
-        
-        # 标记反转信号（用于训练）
-        true_label = self._label_reversal(data)
-        
-        # 收集训练数据
-        self.reversal_data.append(features)
-        self.reversal_labels.append(true_label)
-        
-        # 定期训练模型
-        if len(self.reversal_data) % 30 == 0:
-            self._train_models()
-        
-        # 使用模型预测反转信号
-        try:
-            if self.model_trained:
-                features_scaled = self.scaler.transform([features])
-                prediction = self.reversal_classifier.predict(features_scaled)[0]
-                return prediction
-            else:
-                return true_label
-        except Exception:
-            # 如果模型未训练或出现其他错误，返回真实标签
-            return true_label
-    
-    def set_active(self, active: bool):
-        """
-        设置策略是否激活
-        
-        Args:
-            active: 是否激活
-        """
-        self.is_active = active
-    
-    def _calculate_position_size(self, current_price: float, amount: float = None) -> float:
-        """
-        计算仓位大小
-        
-        Args:
-            current_price: 当前价格
-            amount: 交易金额
-            
-        Returns:
-            仓位大小
-        """
-        # 根据市场类型调整仓位大小
-        position_size_factor = 1.0
-        if self.market_type == 'trending_up':
-            position_size_factor = 1.3  # 上涨市场增加仓位
-        elif self.market_type == 'trending_down':
-            position_size_factor = 0.5  # 下跌市场进一步减少仓位
-        elif self.market_type == 'range_bound':
-            position_size_factor = 1.0  # 横盘市场保持正常仓位
-        elif self.market_type == 'volatile':
-            position_size_factor = 0.8  # 波动市场适当减少仓位
-        
-        # 计算可用资金
-        available_balance = self.current_balance * (1 - self.reserve_balance_percentage)
-        
-        # 计算最大持仓限制
-        max_position = (self.initial_balance * self.max_position_percentage) / current_price
-        
-        # 计算本次交易的仓位大小
-        if amount:
-            position_size = amount / current_price
-        else:
-            position_size = min(
-                available_balance * self.position_size * position_size_factor / current_price,
-                max_position - abs(self.position)
-            )
-        
-        # 确保最小仓位和最大仓位
-        min_position = 0.01
-        max_position_per_trade = (self.initial_balance * 0.2) / current_price  # 单次最大持仓不超过初始资金的20%
-        
-        return max(min(position_size, max_position_per_trade), min_position)
-    
-    def update_price(self, current_price: float, data: pd.Series = None) -> Dict[str, any]:
-        """
-        更新价格并执行交易
-        
-        Args:
-            current_price: 当前价格
-            data: 价格数据（用于市场类型检测和机器学习）
-            
-        Returns:
-            交易结果
-        """
-        # 记录价格历史
-        self.price_history.append(current_price)
-        
-        # 检测市场类型
-        if data is not None:
-            self.last_market_type = self.market_type
-            self.market_type = self.detect_market_type(data)
-            
-            # 记录市场切换
-            if self.last_market_type != self.market_type:
-                self.market_switch_count += 1
-        
-        # 止损检查
-        if self.position > 0 and self.entry_price > 0:
-            loss_ratio = (current_price - self.entry_price) / self.entry_price
-            if loss_ratio < -self.stop_loss_threshold:
-                # 止损卖出
-                revenue = self.position * current_price
-                self.current_balance += revenue
-                quantity = self.position
-                self.position = 0
+        # 检查止损
+        if self.strategy.check_stop_loss(current_price, stop_loss_pct, self.entry_price):
+            # 平仓止损
+            if self.strategy.position > 0:
+                self.strategy.execute_trade(
+                    current_price, self.strategy.position, 'sell', timestamp
+                )
+                trades_executed.append({
+                    'type': 'stop_loss',
+                    'price': current_price,
+                    'volume': self.strategy.position
+                })
                 self.entry_price = 0
-                self.last_price = current_price
-                self.total_trades += 1
-                self.losing_trades += 1
-                self.buy_count = 0  # 重置买入次数
-                return {
-                    "action": "sell",
-                    "quantity": quantity,
-                    "price": current_price,
-                    "balance": self.current_balance,
-                    "position": self.position,
-                    "reason": "stop_loss"
-                }
         
-        # 止盈检查
-        if self.position > 0 and self.entry_price > 0:
-            profit_ratio = (current_price - self.entry_price) / self.entry_price
-            if profit_ratio > self.take_profit_threshold:
-                # 止盈卖出
-                revenue = self.position * current_price
-                self.current_balance += revenue
-                quantity = self.position
-                self.position = 0
-                self.entry_price = 0
-                self.last_price = current_price
-                self.total_trades += 1
-                self.winning_trades += 1
-                self.buy_count = 0  # 重置买入次数
-                return {
-                    "action": "sell",
-                    "quantity": quantity,
-                    "price": current_price,
-                    "balance": self.current_balance,
-                    "position": self.position,
-                    "reason": "take_profit"
-                }
-        
-        # 最小盈利卖出
-        if self.position > 0 and self.entry_price > 0:
-            profit_ratio = (current_price - self.entry_price) / self.entry_price
-            if profit_ratio > self.min_profit_threshold:
-                # 最小盈利卖出
-                revenue = self.position * current_price
-                self.current_balance += revenue
-                quantity = self.position
-                self.position = 0
-                self.entry_price = 0
-                self.last_price = current_price
-                self.total_trades += 1
-                self.winning_trades += 1
-                self.buy_count = 0  # 重置买入次数
-                return {
-                    "action": "sell",
-                    "quantity": quantity,
-                    "price": current_price,
-                    "balance": self.current_balance,
-                    "position": self.position,
-                    "reason": "min_profit"
-                }
-        
-        # 找到当前价格所在的网格区间
-        current_grid_index = None
-        for i in range(len(self.grids) - 1):
-            if self.grids[i] <= current_price < self.grids[i + 1]:
-                current_grid_index = i
-                break
-        
-        if current_grid_index is None:
-            # 价格超出网格范围，重新计算网格
-            self.base_price = current_price
-            self.grids = self._create_grids()
-            for i in range(len(self.grids) - 1):
-                if self.grids[i] <= current_price < self.grids[i + 1]:
-                    current_grid_index = i
-                    break
-            if current_grid_index is None:
-                return {"action": "hold", "balance": self.current_balance, "position": self.position}
-        
-        # 网格交易核心逻辑
-        grid_change = current_grid_index - self.last_grid_index
-        
-        # 根据市场类型执行不同的交易策略
-        if self.market_type == 'trending_down':
-            # 下跌市场：使用反转策略，减少交易频率
-            if data is not None and len(data) > 30 and self.position == 0 and self.buy_count < self.max_buy_count:
-                # 只有当多个指标同时显示反转信号时才买入
-                rsi = self._calculate_rsi(data)
-                macd, signal, histogram = self._calculate_macd(data)
-                upper_band, middle_band, lower_band = self._calculate_bollinger_bands(data)
-                
-                # 综合反转信号：RSI超卖 + MACD金叉 + 价格触及布林带下轨
-                if (rsi < 25 and histogram > 0 and macd > signal and current_price < lower_band * 0.99):
-                    # 检测到强烈反转信号，买入
-                    position_size = self._calculate_position_size(current_price)
-                    if position_size > 0.01:
-                        buy_amount = position_size * current_price
-                        if buy_amount >= self.min_trade_amount:
-                            self.position = position_size
-                            self.current_balance -= buy_amount
-                            self.entry_price = current_price
-                            self.last_price = current_price
-                            self.buy_count += 1
-                            self.total_trades += 1
-                            return {
-                                "action": "buy",
-                                "quantity": position_size,
-                                "price": current_price,
-                                "balance": self.current_balance,
-                                "position": self.position,
-                                "reason": "strong_reversal_buy"
-                            }
-            
-            # 价格反弹卖出
-            if self.position > 0:
-                # 价格反弹0.5%以上或达到最小盈利，卖出
-                if current_price > self.entry_price * 1.005 or current_price > self.entry_price * (1 + self.min_profit_threshold):
-                    revenue = self.position * current_price
-                    self.current_balance += revenue
-                    quantity = self.position
-                    self.position = 0
-                    self.entry_price = 0
-                    self.last_price = current_price
-                    self.total_trades += 1
-                    if current_price > self.entry_price:
-                        self.winning_trades += 1
-                    else:
-                        self.losing_trades += 1
-                    self.buy_count = 0  # 重置买入次数
-                    return {
-                        "action": "sell",
-                        "quantity": quantity,
-                        "price": current_price,
-                        "balance": self.current_balance,
-                        "position": self.position,
-                        "reason": "bounce_sell"
-                    }
-            
-            # 止损卖出
-            if self.position > 0:
-                loss_ratio = (current_price - self.entry_price) / self.entry_price
-                if loss_ratio < -0.02:
-                    # 止损卖出
-                    revenue = self.position * current_price
-                    self.current_balance += revenue
-                    quantity = self.position
-                    self.position = 0
-                    self.entry_price = 0
-                    self.last_price = current_price
-                    self.total_trades += 1
-                    self.losing_trades += 1
-                    self.buy_count = 0  # 重置买入次数
-                    return {
-                        "action": "sell",
-                        "quantity": quantity,
-                        "price": current_price,
-                        "balance": self.current_balance,
-                        "position": self.position,
-                        "reason": "stop_loss"
-                    }
-        else:
-            # 非下跌市场：使用正常网格交易
-            if self.market_type == 'range_bound':
-                # 横盘市场：更严格的买入条件和更灵活的卖出条件
-                if grid_change < 0 and self.position == 0:
-                    # 价格下跌到更低网格 -> 买入（低买）
-                    # 只有当价格跌破布林带下轨且RSI超卖时才买入
-                    if data is not None and len(data) > 20:
-                        rsi = self._calculate_rsi(data)
-                        upper_band, middle_band, lower_band = self._calculate_bollinger_bands(data)
-                        if current_price < lower_band * 0.995 and rsi < 45:
-                            position_size = self._calculate_position_size(current_price)
-                            if position_size > 0.01:
-                                buy_amount = position_size * current_price
-                                if buy_amount >= self.min_trade_amount:
-                                    self.position = position_size
-                                    self.current_balance -= buy_amount
-                                    self.entry_price = current_price
-                                    self.last_grid_index = current_grid_index
-                                    self.last_price = current_price
-                                    self.total_trades += 1
-                                    return {
-                                        "action": "buy",
-                                        "quantity": position_size,
-                                        "price": current_price,
-                                        "balance": self.current_balance,
-                                        "position": self.position,
-                                        "reason": "range_bollinger_rsi_buy"
-                                    }
-                elif grid_change > 0 and self.position > 0:
-                    # 价格上涨到更高网格 -> 卖出（高卖）
-                    revenue = self.position * current_price
-                    self.current_balance += revenue
-                    quantity = self.position
-                    self.position = 0
-                    self.entry_price = 0
-                    self.last_grid_index = current_grid_index
-                    self.last_price = current_price
-                    self.total_trades += 1
-                    if current_price > self.entry_price:
-                        self.winning_trades += 1
-                    else:
-                        self.losing_trades += 1
-                    return {
-                        "action": "sell",
-                        "quantity": quantity,
-                        "price": current_price,
-                        "balance": self.current_balance,
-                        "position": self.position,
-                        "reason": "range_grid_sell"
-                    }
-                # 额外的卖出条件：价格上涨超过0.3%或触及阻力位
-                elif self.position > 0:
-                    if (current_price > self.entry_price * 1.003):
-                        revenue = self.position * current_price
-                        self.current_balance += revenue
-                        quantity = self.position
-                        self.position = 0
-                        self.entry_price = 0
-                        self.last_grid_index = current_grid_index
-                        self.last_price = current_price
-                        self.total_trades += 1
-                        if current_price > self.entry_price:
-                            self.winning_trades += 1
-                        else:
-                            self.losing_trades += 1
-                        return {
-                            "action": "sell",
-                            "quantity": quantity,
-                            "price": current_price,
-                            "balance": self.current_balance,
-                            "position": self.position,
-                            "reason": "range_profit_sell"
-                        }
-            elif self.market_type == 'trending_up':
-                # 上涨市场：趋势跟随交易
-                if grid_change < 0 and self.position == 0:
-                    # 价格回调到更低网格 -> 买入（低买）
-                    position_size = self._calculate_position_size(current_price)
-                    if position_size > 0.01:
-                        buy_amount = position_size * current_price
-                        if buy_amount >= self.min_trade_amount:
-                            self.position = position_size
-                            self.current_balance -= buy_amount
-                            self.entry_price = current_price
-                            self.last_grid_index = current_grid_index
-                            self.last_price = current_price
-                            self.total_trades += 1
-                            return {
-                                "action": "buy",
-                                "quantity": position_size,
-                                "price": current_price,
-                                "balance": self.current_balance,
-                                "position": self.position,
-                                "reason": "up_trend_buy"
-                            }
-                elif (grid_change > 1 and self.position > 0) or (current_price > self.entry_price * 1.008 and self.position > 0):
-                    # 价格上涨到更高网格或上涨超过0.8% -> 卖出（高卖）
-                    revenue = self.position * current_price
-                    self.current_balance += revenue
-                    quantity = self.position
-                    self.position = 0
-                    self.entry_price = 0
-                    self.last_grid_index = current_grid_index
-                    self.last_price = current_price
-                    self.total_trades += 1
-                    if current_price > self.entry_price:
-                        self.winning_trades += 1
-                    else:
-                        self.losing_trades += 1
-                    return {
-                        "action": "sell",
-                        "quantity": quantity,
-                        "price": current_price,
-                        "balance": self.current_balance,
-                        "position": self.position,
-                        "reason": "up_trend_sell"
-                    }
-            elif self.market_type == 'volatile':
-                # 波动市场：宽幅网格交易
-                if grid_change < 1 and self.position == 0:
-                    # 价格下跌到更低网格 -> 买入（低买）
-                    position_size = self._calculate_position_size(current_price)
-                    if position_size > 0.01:
-                        buy_amount = position_size * current_price
-                        if buy_amount >= self.min_trade_amount:
-                            self.position = position_size
-                            self.current_balance -= buy_amount
-                            self.entry_price = current_price
-                            self.last_grid_index = current_grid_index
-                            self.last_price = current_price
-                            self.total_trades += 1
-                            return {
-                                "action": "buy",
-                                "quantity": position_size,
-                                "price": current_price,
-                                "balance": self.current_balance,
-                                "position": self.position,
-                                "reason": "volatile_grid_buy"
-                            }
-                elif (grid_change > 1 and self.position > 0) or (current_price > self.entry_price * 1.006 and self.position > 0):
-                    # 价格上涨到更高网格或上涨超过0.6% -> 卖出（高卖）
-                    revenue = self.position * current_price
-                    self.current_balance += revenue
-                    quantity = self.position
-                    self.position = 0
-                    self.entry_price = 0
-                    self.last_grid_index = current_grid_index
-                    self.last_price = current_price
-                    self.total_trades += 1
-                    if current_price > self.entry_price:
-                        self.winning_trades += 1
-                    else:
-                        self.losing_trades += 1
-                    return {
-                        "action": "sell",
-                        "quantity": quantity,
-                        "price": current_price,
-                        "balance": self.current_balance,
-                        "position": self.position,
-                        "reason": "volatile_grid_sell"
-                    }
-        
-        # 下跌买入点位检查
-        for i, (buy_level, buy_amount, executed) in enumerate(zip(self.downward_buy_levels, self.downward_buy_amounts, self.downward_buy_executed)):
-            if not executed and current_price <= buy_level:
-                # 达到买入点位，执行买入
-                position_size = self._calculate_position_size(current_price, buy_amount)
-                if position_size > 0.01:
-                    self.position = position_size
-                    self.current_balance -= buy_amount
-                    self.entry_price = current_price
-                    self.last_price = current_price
-                    self.downward_buy_executed[i] = True
-                    self.total_trades += 1
-                    return {
-                        "action": "buy",
-                        "quantity": position_size,
-                        "price": current_price,
-                        "balance": self.current_balance,
-                        "position": self.position,
-                        "reason": "downward_buy"
-                    }
-        
-        # 更新但不交易
-        self.last_grid_index = current_grid_index
-        self.last_price = current_price
-        return {"action": "hold", "balance": self.current_balance, "position": self.position}
+        return trades_executed
     
-    def get_performance(self) -> Dict[str, float]:
-        """
-        获取策略性能
+    def get_performance_metrics(self):
+        """获取性能指标"""
+        total_trades = len(self.strategy.trades)
+        if total_trades == 0:
+            return {
+                'total_return': 0,
+                'sharpe_ratio': 0,
+                'win_rate': 0,
+                'max_drawdown': 0,
+                'total_trades': 0
+            }
         
-        Returns:
-            性能指标
-        """
-        win_rate = self.winning_trades / self.total_trades if self.total_trades > 0 else 0
+        # 计算收益率
+        total_return = (self.capital - self.initial_capital) / self.initial_capital
+        
+        # 计算胜率
+        winning_trades = [t for t in self.strategy.trades if t['type'] == 'sell']
+        win_rate = len(winning_trades) / total_trades if total_trades > 0 else 0
+        
+        # 计算最大回撤
+        capital_history = [self.initial_capital]
+        for trade in self.strategy.trades:
+            if trade['type'] == 'buy':
+                capital_history.append(capital_history[-1] - trade['cost'])
+            else:
+                capital_history.append(capital_history[-1] + trade['revenue'])
+        
+        max_drawdown = 0
+        peak = capital_history[0]
+        for value in capital_history:
+            if value > peak:
+                peak = value
+            drawdown = (peak - value) / peak
+            max_drawdown = max(max_drawdown, drawdown)
         
         return {
-            "initial_balance": self.initial_balance,
-            "current_balance": self.current_balance,
-            "return": (self.current_balance - self.initial_balance) / self.initial_balance * 100,
-            "total_trades": self.total_trades,
-            "winning_trades": self.winning_trades,
-            "losing_trades": self.losing_trades,
-            "win_rate": win_rate,
-            "market_switch_count": self.market_switch_count,
-            "final_position": self.position,
-            "model_training_count": self.model_training_count,
-            "model_trained": self.model_trained,
-            "current_market_type": self.market_type
+            'total_return': total_return,
+            'win_rate': win_rate,
+            'max_drawdown': max_drawdown,
+            'total_trades': total_trades,
+            'current_position': self.strategy.position,
+            'available_capital': self.capital
         }
+
+def backtest_strategy(data, initial_capital=100000):
+    """回测策略"""
+    system = AdaptiveTradingSystem(initial_capital)
+    results = []
+    
+    for i in range(60, len(data)):  # 需要至少60个数据点训练
+        df_window = data.iloc[:i+1]
+        current_price = data['close'].iloc[i]
+        timestamp = data.index[i]
+        
+        # 执行策略
+        trades = system.execute_strategy(df_window, current_price, timestamp)
+        
+        # 记录结果
+        if len(trades) > 0:
+            for trade in trades:
+                results.append({
+                    'timestamp': timestamp,
+                    'price': current_price,
+                    'trade_type': trade['type'],
+                    'volume': trade['volume'],
+                    'capital': system.capital,
+                    'position': system.strategy.position
+                })
+    
+    # 计算最终性能
+    performance = system.get_performance_metrics()
+    
+    return results, performance
+
+# 示例使用
+if __name__ == "__main__":
+    # 生成示例数据
+    np.random.seed(42)
+    dates = pd.date_range('2023-01-01', periods=500, freq='H')
+    
+    # 创建不同市场类型的数据
+    trend = np.linspace(0, 0.3, 500)  # 上涨趋势
+    noise = np.random.randn(500) * 0.02
+    price = 100 * (1 + trend + noise)
+    
+    data = pd.DataFrame({
+        'open': price * (1 + np.random.randn(500) * 0.005),
+        'high': price * (1 + abs(np.random.randn(500)) * 0.01),
+        'low': price * (1 - abs(np.random.randn(500)) * 0.01),
+        'close': price,
+        'volume': np.random.randint(1000, 10000, 500)
+    }, index=dates)
+    
+    # 运行回测
+    results, performance = backtest_strategy(data)
+    
+    print("=== 策略回测结果 ===")
+    print(f"总收益率: {performance['total_return']*100:.2f}%")
+    print(f"胜率: {performance['win_rate']*100:.2f}%")
+    print(f"最大回撤: {performance['max_drawdown']*100:.2f}%")
+    print(f"总交易次数: {performance['total_trades']}")
+    print(f"当前仓位: {performance['current_position']:.2f}")
+    print(f"可用资金: {performance['available_capital']:.2f}")

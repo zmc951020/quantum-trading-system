@@ -1,0 +1,257 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:0.1.38
+    container_name: memx-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2.00"
+          memory: 8G
+        reservations:
+          cpus: "1.00"
+          memory: 4G
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=2
+
+  redis-master:
+    image: redis:7-alpine
+    container_name: memx-redis-master
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --lazyfree-lazy-eviction no
+      --lazyfree-lazy-expire no
+    volumes:
+      - redis-master-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    labels:
+      - "redis.role=master"
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: memx-redis-replica
+    restart: unless-stopped
+    command: >
+      redis-server
+      --replicaof redis-master 6379
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-replica-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    labels:
+      - "redis.role=replica"
+
+  redis-sentinel:
+    image: redis:7-alpine
+    container_name: memx-redis-sentinel
+    restart: unless-stopped
+    command: >
+      redis-sentinel
+      --sentinel announce-ip memx-redis-sentinel
+      --sentinel announce-port 26379
+      --sentinel monitor mymaster redis-master 6379 2
+      --sentinel down-after-milliseconds mymaster 5000
+      --sentinel failover-timeout mymaster 10000
+      --sentinel auth-pass mymaster ${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:26379:26379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    labels:
+      - "redis.role=sentinel"
+
+  memx-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: memx-api
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis-master:6379/0
+      REDIS_SENTINEL_URL: redis://:${REDIS_PASSWORD}@memx-redis-sentinel:26379/0
+      OLLAMA_BASE_URL: http://ollama:11434
+      TZ: Asia/Shanghai
+      LOG_LEVEL: WARNING
+    volumes:
+      - ./:/app:rw
+    depends_on:
+      ollama:
+        condition: service_healthy
+      redis-sentinel:
+        condition: service_started
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 2G
+        reservations:
+          cpus: "0.50"
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --timeout-graceful-shutdown 30
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: memx-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 1G
+    labels:
+      - "monitoring=prometheus"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: memx-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - memx-net
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    labels:
+      - "monitoring=grafana"
+
+  backup-scheduler:
+    image: alpine:latest
+    container_name: memx-backup
+    restart: unless-stopped
+    command: >
+      sh -c "
+        apk add --no-cache docker-cli tar gzip curl &&
+        while true; do
+          echo \"Backup started at $$(date)\" &&
+          tar -czf /backups/redis-backup-$$(date +%Y%m%d_%H%M%S).tar.gz /data &&
+          find /backups -name '*.tar.gz' -mtime +7 -delete &&
+          echo \"Backup completed at $$(date)\" &&
+          sleep 86400;
+        done
+      "
+    volumes:
+      - ./backups:/backups
+      - redis-master-data:/data:ro
+    networks:
+      - memx-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+volumes:
+  ollama-data:
+    name: memx_ollama_data
+  redis-master-data:
+    name: memx_redis_master_data
+  redis-replica-data:
+    name: memx_redis_replica_data
+  prometheus-data:
+    name: memx_prometheus_data
+  grafana-data:
+    name: memx_grafana_data
+
+networks:
+  memx-net:
+    driver: bridge
+    name: memx_network

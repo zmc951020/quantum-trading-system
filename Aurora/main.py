@@ -215,11 +215,126 @@ class AuroraSystem:
         """
         logger.info("启动 Aurora 量化交易系统")
         
+        # 运行启动前健康检测
+        if not self._run_pre_flight_check():
+            logger.error("启动前检测失败，系统退出")
+            return
+        
         # 这里将实现实盘交易逻辑
         # 目前使用测试数据进行模拟
         self.run_backtest()
         
         logger.info("Aurora 量化交易系统启动完成")
+    
+    def _run_pre_flight_check(self) -> bool:
+        """
+        启动前预检 - 检查系统各模块状态
+        
+        Returns:
+            True if all checks pass, False otherwise
+        """
+        logger.info("🛫 运行启动前健康检测...")
+        
+        checks = [
+            ("模块完整性", self._check_module_dependencies),
+            ("配置完整性", self._check_configuration),
+            ("数据连接", self._check_data_sources),
+            ("风险控制", self._check_risk_control),
+            ("端口可用性", self._check_port_availability)
+        ]
+        
+        all_passed = True
+        
+        for check_name, check_func in checks:
+            logger.info(f"  检查 {check_name}...")
+            try:
+                passed, message = check_func()
+                if passed:
+                    logger.info(f"    ✅ {message}")
+                else:
+                    logger.warning(f"    ⚠️ {message}")
+                    all_passed = False
+            except Exception as e:
+                logger.error(f"    ❌ {check_name}检查异常: {str(e)}")
+                all_passed = False
+        
+        if all_passed:
+            logger.info("✅ 所有启动前检测通过")
+        else:
+            logger.warning("⚠️ 部分检测未通过，请检查日志")
+        
+        return all_passed
+    
+    def _check_module_dependencies(self) -> tuple:
+        """检查模块依赖"""
+        required_modules = [
+            'strategies', 'ml', 'risk', 'data'
+        ]
+        
+        for module in required_modules:
+            try:
+                __import__(module)
+            except ImportError:
+                return False, f"缺少模块: {module}"
+        
+        return True, "所有模块依赖正常"
+    
+    def _check_configuration(self) -> tuple:
+        """检查配置完整性"""
+        required_env_vars = [
+            'INITIAL_BALANCE', 'TRADE_INTERVAL', 'DATA_SOURCE'
+        ]
+        
+        missing_vars = []
+        for var in required_env_vars:
+            if not os.getenv(var):
+                missing_vars.append(var)
+        
+        if missing_vars:
+            return False, f"缺少环境变量: {', '.join(missing_vars)}"
+        
+        return True, "配置完整性检查通过"
+    
+    def _check_data_sources(self) -> tuple:
+        """检查数据连接"""
+        try:
+            from data import get_multi_data_source_manager
+            mgr = get_multi_data_source_manager()
+            if mgr:
+                status = mgr.get_status()
+                if status.get('sources'):
+                    return True, f"数据连接正常，可用数据源: {list(status['sources'].keys())}"
+                return False, "数据源为空"
+            return False, "数据管理器未初始化"
+        except Exception as e:
+            return False, f"数据连接检查失败: {str(e)}"
+    
+    def _check_risk_control(self) -> tuple:
+        """检查风险控制配置"""
+        try:
+            from risk import get_data_source_risk_control
+            risk_ctrl = get_data_source_risk_control()
+            if risk_ctrl:
+                return True, "风险控制模块正常"
+            return False, "风险控制模块未初始化"
+        except Exception as e:
+            return False, f"风险控制检查失败: {str(e)}"
+    
+    def _check_port_availability(self) -> tuple:
+        """检查端口可用性"""
+        try:
+            from utils.port_manager import get_port_manager
+            pm = get_port_manager()
+            
+            # 检查默认端口
+            ports = [5000, 8000, 8080]
+            available_ports = [p for p in ports if pm.is_port_available(p)]
+            
+            if available_ports:
+                return True, f"可用端口: {available_ports}"
+            return False, "所有默认端口都被占用"
+        except Exception as e:
+            return False, f"端口检查失败: {str(e)}"
     
     def train_models(self):
         """

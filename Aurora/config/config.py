@@ -60,6 +60,18 @@ class Config:
         self.xbk_api_key = os.getenv("XBK_API_KEY", "")
         self.xbk_api_secret = os.getenv("XBK_API_SECRET", "")
         self.xbk_api_url = os.getenv("XBK_API_URL", "https://api.westquant.cn/sim")
+        
+        # DeepSeek V4 API配置
+        self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        self.deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        self.deepseek_model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        self.deepseek_thinking_mode = os.getenv("DEEPSEEK_THINKING_MODE", "non-thinking")
+        
+        # Qwen3.6-Plus API配置
+        self.qwen_api_key = os.getenv("QWEN_API_KEY", "")
+        self.qwen_platform = os.getenv("QWEN_PLATFORM", "dashscope")
+        self.qwen_base_url = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        self.qwen_model = os.getenv("QWEN_MODEL", "qwen3.6-plus")
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -94,7 +106,15 @@ class Config:
             "log_file": self.log_file,
             "xbk_api_key": self.xbk_api_key,
             "xbk_api_secret": self.xbk_api_secret,
-            "xbk_api_url": self.xbk_api_url
+            "xbk_api_url": self.xbk_api_url,
+            "deepseek_api_key": self.deepseek_api_key,
+            "deepseek_base_url": self.deepseek_base_url,
+            "deepseek_model": self.deepseek_model,
+            "deepseek_thinking_mode": self.deepseek_thinking_mode,
+            "qwen_api_key": self.qwen_api_key,
+            "qwen_platform": self.qwen_platform,
+            "qwen_base_url": self.qwen_base_url,
+            "qwen_model": self.qwen_model
         }
 
 # 创建全局配置实例

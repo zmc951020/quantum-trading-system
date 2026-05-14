@@ -442,10 +442,14 @@ class XbkTrader:
 
 
 if __name__ == '__main__':
-    # 从环境变量加载配置
-    api_key = os.getenv('XBK_API_KEY', '2029963shhr')
-    api_secret = os.getenv('XBK_API_SECRET', '123456')
+    # 从环境变量加载配置（完全从.env读取，不硬编码！）
+    api_key = os.getenv('XBK_API_KEY', '')
+    api_secret = os.getenv('XBK_API_SECRET', '')
     api_url = os.getenv('XBK_API_URL', 'https://api.westquant.cn/sim')
+    
+    # 检查必要配置
+    if not api_key or not api_secret:
+        print("⚠️ 警告：XBK_API_KEY或XBK_API_SECRET未设置，请检查.env文件！")
 
     # 创建API客户端
     client = XbkApiClient(api_key, api_secret, api_url)
