@@ -516,10 +516,28 @@
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label class="form-label">登录城市</label>
+                    <div class="input-wrapper">
+                        <select class="form-control" id="city">
+                            <option value="青州">青州</option>
+                            <option value="烟台" selected>烟台</option>
+                            <option value="北京">北京</option>
+                            <option value="上海">上海</option>
+                            <option value="深圳">深圳</option>
+                        </select>
+                        <i class="bi bi-geo-alt input-icon"></i>
+                    </div>
+                </div>
+
                 <div class="remember-row">
                     <label class="form-check">
                         <input type="checkbox" class="form-check-input" id="remember-me">
                         <span class="form-check-label">记住我</span>
+                    </label>
+                    <label class="form-check">
+                        <input type="checkbox" class="form-check-input" id="remember-device">
+                        <span class="form-check-label">信任此设备</span>
                     </label>
                     <a href="#" class="forgot-link">忘记密码？</a>
                 </div>
@@ -533,15 +551,75 @@
                 </button>
             </form>
 
+            <!-- 安全状态显示 -->
+            <div id="security-status" style="margin-top: 20px; padding: 16px; background: linear-gradient(135deg, rgba(0, 212, 200, 0.08), rgba(74, 125, 255, 0.05)); border-radius: 12px; border: 1px solid rgba(0, 212, 200, 0.15); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="bi bi-shield-check" style="color: var(--accent-cyan); font-size: 18px;"></i>
+                        <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">系统防护</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="/security-config" style="font-size: 12px; color: var(--accent-blue); text-decoration: none; display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: rgba(74, 125, 255, 0.1); border-radius: 8px; transition: all 0.3s;">
+                            <i class="bi bi-sliders"></i> 设置
+                        </a>
+                        <a href="/security-monitor" style="font-size: 12px; color: var(--accent-cyan); text-decoration: none; display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: rgba(0, 212, 200, 0.1); border-radius: 8px; transition: all 0.3s;">
+                            <i class="bi bi-tv"></i> 监控
+                        </a>
+                    </div>
+                </div>
+                <div id="security-status-details" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                    加载中...
+                </div>
+            </div>
+
             <div class="register-hint">
                 还没有账号？<a href="/register">立即注册</a>
             </div>
         </div>
     </div>
 
-    <div class="version-info">Aurora v2.0 · Powered by DeepSeek AI</div>
+    <div class="version-info">
+        <a href="/maintenance" style="color: var(--text-secondary); text-decoration: none; margin-right: 20px;">🔧 系统维护</a>
+        Aurora v2.0 · Powered by DeepSeek AI
+    </div>
 
     <script>
+        // ========== 安全配置加载 ==========
+        async function loadSecurityStatus() {
+            try {
+                const response = await fetch('/api/security/config');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const config = data.config;
+                    const details = document.getElementById('security-status-details');
+                    
+                    let statusText = '';
+                    
+                    // IP验证状态
+                    const locationStatus = config.disable_location_check ? '已关闭' : '保护中';
+                    const locationColor = config.disable_location_check ? 'var(--text-secondary)' : 'var(--success)';
+                    
+                    // 全天候登录状态
+                    const timeStatus = config.disable_off_hours_check ? '已开启' : '已限制';
+                    const timeColor = config.disable_off_hours_check ? 'var(--success)' : 'var(--text-secondary)';
+                    
+                    statusText += `IP验证: <span style="color: ${locationColor};">${locationStatus}</span>`;
+                    statusText += ' · ';
+                    statusText += `全天候: <span style="color: ${timeColor};">${timeStatus}</span>`;
+                    
+                    if (!config.disable_location_check && config.whitelist_cities && config.whitelist_cities.length > 0) {
+                        statusText += `<br>允许城市: ${config.whitelist_cities.join(', ')}`;
+                    }
+                    
+                    details.innerHTML = statusText;
+                }
+            } catch (error) {
+                console.error('加载安全状态失败:', error);
+            }
+        }
+        loadSecurityStatus();
+        
         // ========== 粒子动画 ==========
         const canvas = document.getElementById('particleCanvas');
         const ctx = canvas.getContext('2d');
@@ -648,12 +726,14 @@
         const errorMessage = document.getElementById('errorMessage');
         const errorText = document.getElementById('errorText');
         const successOverlay = document.getElementById('successOverlay');
+        const rememberDevice = document.getElementById('remember-device');
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
+            const city = document.getElementById('city').value;
 
             // 验证
             if (!username || !password) {
@@ -666,13 +746,24 @@
             errorMessage.classList.remove('show');
 
             try {
+                // 获取设备信息用于设备指纹
+                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const language = navigator.language;
+                
                 // 调用后端登录 API
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ 
+                        username, 
+                        password, 
+                        city, 
+                        timezone, 
+                        language,
+                        remember_device: rememberDevice.checked 
+                    })
                 });
 
                 const data = await response.json();

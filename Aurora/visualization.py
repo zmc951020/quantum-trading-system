@@ -51,6 +51,8 @@ health_monitor = None
 monitoring_scheduler = None
 database_manager = None
 security_control = None
+geo_location = None
+trade_validator = None
 
 try:
     from monitor.system_health import get_system_health_monitor
@@ -80,6 +82,22 @@ try:
     print("[OK] security_control imported successfully")
 except Exception as e:
     print(f"[WARNING] security_control import failed: {e}")
+
+try:
+    import geo_location as gl
+    geo_location = gl.geo_location
+    print("[OK] geo_location imported successfully")
+except Exception as e:
+    print(f"[WARNING] geo_location import failed: {e}")
+
+try:
+    from trade_security import (
+        trade_validator, critical_path_validator, 
+        fund_security_validator, trade_execution_engine
+    )
+    print("[OK] trade_validator imported successfully")
+except Exception as e:
+    print(f"[WARNING] trade_validator import failed: {e}")
 
 def load_env_config():
     """加载环境变量配置"""
@@ -129,8 +147,12 @@ class PyramidPhishingDefenseSystem:
             'circuit_breaker_min_score': 80,
             'max_daily_loss_pct': 5.0,
             'max_order_freq': 50,
-            'max_cancel_rate': 0.8
+            'max_cancel_rate': 0.8,
+            'whitelist_cities': ['青州', '烟台'],  # 白名单城市
+            'disable_off_hours_check': True  # 禁用非工作时间检查
         }
+        # 从 user_manager 加载安全配置（如果可用）
+        self._load_security_config_from_user_manager()
 
     def reset_all(self):
         """重置所有状态"""
@@ -147,6 +169,21 @@ class PyramidPhishingDefenseSystem:
             self.total_order_count = 0
             self.login_history = []
             self.behavior_profile = {}
+    
+    def _load_security_config_from_user_manager(self):
+        """从 user_manager 加载安全配置"""
+        try:
+            if user_manager:
+                security_config = user_manager.get_security_config()
+                self.config['whitelist_cities'] = security_config.get('whitelist_cities', ['青州', '烟台'])
+                self.config['disable_off_hours_check'] = security_config.get('disable_off_hours_check', True)
+                print("[OK] 已从 user_manager 加载安全配置")
+        except Exception as e:
+            print(f"[WARNING] 从 user_manager 加载安全配置失败: {e}")
+    
+    def update_security_config(self):
+        """更新安全配置（从 user_manager 重新加载）"""
+        self._load_security_config_from_user_manager()
 
     def check_and_update_daily(self):
         """每日重置统计"""
@@ -243,14 +280,25 @@ class PyramidPhishingDefenseSystem:
             score += 25
         if signals.get('new_device'):
             score += 15
-        if signals.get('unusual_location'):
-            score += 30
-        if signals.get('location_changes', 0) > 2:
-            score += 35
-        if signals.get('off_hours_login'):
-            score += 15
-        if signals.get('rapid_location_change'):
-            score += 30
+        
+        # 检查位置是否在白名单中
+        current_city = signals.get('current_city', '')
+        if current_city in self.config.get('whitelist_cities', []):
+            # 白名单城市，不检查地理位置异常
+            pass
+        else:
+            if signals.get('unusual_location'):
+                score += 30
+            if signals.get('location_changes', 0) > 2:
+                score += 35
+            if signals.get('rapid_location_change'):
+                score += 30
+        
+        # 检查是否禁用非工作时间检查
+        if not self.config.get('disable_off_hours_check', False):
+            if signals.get('off_hours_login'):
+                score += 15
+        
         return min(score, 100)
 
     def _check_behavior_layer(self, order_info, order_pct):
@@ -272,9 +320,11 @@ class PyramidPhishingDefenseSystem:
         elif order_pct >= 8:
             score += 15
 
-        current_hour = current_time.hour
-        if current_hour < 6 or current_hour > 23:
-            score += 10
+        # 检查是否禁用非工作时间检查
+        if not self.config.get('disable_off_hours_check', False):
+            current_hour = current_time.hour
+            if current_hour < 6 or current_hour > 23:
+                score += 10
 
         if hasattr(self, 'behavior_profile') and self.behavior_profile:
             avg_trade = self.behavior_profile.get('avg_trade_amount', 0)
@@ -816,6 +866,27 @@ def login():
     return render_template('login.html')
 
 
+@app.route('/security-config')
+def security_config():
+    """安全配置管理页面"""
+    return render_template('security-config.html')
+
+
+@app.route('/security-monitor')
+def security_monitor():
+    """安全监控中心页面 - 可视化展示完整安全流程"""
+    return render_template('security_monitor.html')
+
+@app.route('/maintenance')
+def maintenance():
+    """系统维护页面 - 显示系统状态、维护任务和服务状态"""
+    return render_template('maintenance.html')
+
+@app.route('/simple-test')
+def simple_test():
+    """简单测试页面"""
+    return render_template('simple_test.html')
+
 @app.route('/dashboard')
 def dashboard():
     """监控仪表盘页面"""
@@ -1059,7 +1130,7 @@ def check_risk_service():
         return {
             "status": "healthy",
             "message": "风控服务正常",
-            "circuit_breaker": "active" if phishing_defense and phishing_defense.circuit_breaker_active else "inactive"
+            "circuit_breaker": "active" if pyramid_phishing_defense and pyramid_phishing_defense.circuit_breaker_triggered else "inactive"
         }
     except Exception as e:
         return {"status": "critical", "error": str(e)}
@@ -1068,12 +1139,14 @@ def check_risk_service():
 def check_data_service():
     """检查数据服务"""
     try:
-        # 检查市场数据是否可用
-        data = generate_simulated_market_data()
+        # 检查数据缓存目录是否存在
+        import os
+        cache_dir = os.path.join(os.path.dirname(__file__), 'data_cache')
+        exists = os.path.exists(cache_dir)
         return {
-            "status": "healthy",
-            "message": "数据服务正常",
-            "data_points": len(data)
+            "status": "healthy" if exists else "warning",
+            "message": "数据缓存目录存在" if exists else "数据缓存目录不存在",
+            "cache_exists": exists
         }
     except Exception as e:
         return {"status": "critical", "error": str(e)}
@@ -1634,15 +1707,56 @@ def register():
 
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
-    """用户登录"""
+    """用户登录（自动检测地理位置 + 设备指纹）"""
     data = request.json
     username = data.get('username')
     password = data.get('password')
-
+    
+    # 自动获取真实IP和地理位置
+    detected_city = None
+    real_ip = None
+    
+    try:
+        if geo_location:
+            real_ip = geo_location.get_client_ip(request)
+            if real_ip:
+                location_info = geo_location.get_location_from_ip(real_ip)
+                if location_info.get('success'):
+                    detected_city = location_info.get('city', '')
+                    print(f"[安全] 检测到登录IP: {real_ip}, 城市: {detected_city}")
+    except Exception as e:
+        print(f"地理位置检测失败: {e}")
+    
+    # 如果检测失败，使用用户提供的城市作为备选
+    city = data.get('city', detected_city)
+    if not city:
+        city = detected_city
+    
     if not username or not password:
         return jsonify({'error': '缺少用户名或密码'}), 400
+    
+    # 生成设备指纹
+    device_fingerprint = None
+    if user_manager and geo_location:
+        # 从请求中获取设备信息
+        user_agent = request.headers.get('User-Agent')
+        # 使用geo_location来生成设备指纹（虽然geo_location已有这个方法吗？让我们用user_manager的方法
+        device_fingerprint = user_manager.generate_device_fingerprint(
+            user_agent=user_agent,
+            timezone=data.get('timezone'),
+            language=data.get('language')
+        )
+    
+    remember_device = data.get('remember_device', False)
 
-    result = user_manager.login(username, password)
+    result = user_manager.login(username, password, city, real_ip, 
+                                device_fingerprint, remember_device)
+    
+    # 添加地理位置信息到响应
+    if 'user' in result:
+        result['user']['detected_city'] = detected_city
+        result['user']['login_ip'] = real_ip
+    
     return jsonify(result)
 
 
@@ -1655,6 +1769,280 @@ def auth_logout():
 
     result = user_manager.logout(session_id)
     return jsonify(result)
+
+
+@app.route('/api/test/location')
+def test_location():
+    """测试地理位置检测功能"""
+    try:
+        result = {
+            'success': True,
+            'client_ip': '未检测到',
+            'detected_city': '未检测到'
+        }
+        
+        if geo_location:
+            client_ip = geo_location.get_client_ip(request)
+            if client_ip:
+                location = geo_location.get_location_from_ip(client_ip)
+                result['client_ip'] = client_ip
+                if location.get('success'):
+                    result['detected_city'] = location.get('city', '未知')
+                    result['country'] = location.get('country', '')
+                    result['region'] = location.get('region', '')
+                    result['timezone'] = location.get('timezone', '')
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+# ========== 交易安全验证API ==========
+
+@app.route('/api/trade/validate', methods=['POST'])
+def validate_trade():
+    """
+    极致安全的订单验证
+    包含：时间窗口、IP白名单、API Key、金额限制、频率控制
+    """
+    if not trade_validator:
+        return jsonify({'success': False, 'message': '交易验证系统不可用'})
+    
+    data = request.json
+    
+    # 获取真实IP
+    client_ip = None
+    if geo_location:
+        client_ip = geo_location.get_client_ip(request)
+    
+    # 构建订单信息
+    order_info = {
+        'symbol': data.get('symbol'),
+        'amount': float(data.get('amount', 0)),
+        'price': float(data.get('price', 0)),
+        'side': data.get('side'),
+        'ip': client_ip or data.get('ip'),
+        'api_key': data.get('api_key'),
+        'user_id': data.get('user_id')
+    }
+    
+    # 执行极致安全验证
+    result = trade_validator.validate_order(order_info)
+    return jsonify(result)
+
+
+@app.route('/api/trade/security/config', methods=['GET'])
+def get_trade_security_config():
+    """获取交易安全配置"""
+    if not trade_validator:
+        return jsonify({'success': False, 'message': '交易验证系统不可用'})
+    
+    return jsonify({
+        'success': True,
+        'config': trade_validator.config
+    })
+
+
+@app.route('/api/trade/security/add-ip', methods=['POST'])
+def add_trusted_ip():
+    """添加受信任的交易IP"""
+    if not trade_validator:
+        return jsonify({'success': False, 'message': '交易验证系统不可用'})
+    
+    data = request.json
+    result = trade_validator.add_trusted_ip(
+        data.get('ip'),
+        data.get('description')
+    )
+    return jsonify(result)
+
+
+@app.route('/api/trade/security/add-api-key', methods=['POST'])
+def add_valid_api_key():
+    """添加有效API Key"""
+    if not trade_validator:
+        return jsonify({'success': False, 'message': '交易验证系统不可用'})
+    
+    data = request.json
+    result = trade_validator.add_valid_api_key(
+        data.get('api_key'),
+        data.get('name')
+    )
+    return jsonify(result)
+
+
+@app.route('/api/trade/critical/validate', methods=['POST'])
+def validate_critical_path():
+    """
+    毫秒级关键路径验证 - 订单执行前的绝对卡死
+    这是发送交易所订单前的最后一道防线
+    """
+    if not critical_path_validator:
+        return jsonify({'allowed': False, 'reason': 'CRITICAL: 关键路径验证器不可用'})
+    
+    data = request.json
+    ip = data.get('ip', '')
+    api_key = data.get('api_key', '')
+    check_time = data.get('check_time', True)
+    
+    # 获取真实IP
+    if geo_location and not ip:
+        ip = geo_location.get_client_ip(request)
+    
+    # 关键路径毫秒级验证
+    allowed, reason = critical_path_validator.validate_critical_path(ip, api_key, check_time)
+    
+    return jsonify({
+        'allowed': allowed,
+        'reason': reason,
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/trade/critical/refresh', methods=['POST'])
+def refresh_critical_config():
+    """刷新关键路径配置（非关键路径调用）"""
+    if not critical_path_validator:
+        return jsonify({'success': False, 'message': '关键路径验证器不可用'})
+    
+    critical_path_validator.refresh_config()
+    return jsonify({'success': True, 'message': '关键路径配置已刷新'})
+
+
+# ========== 资金安全验证API ==========
+
+@app.route('/api/fund/validate', methods=['POST'])
+def validate_fund_withdrawal():
+    """
+    资金提现验证 - 极致卡死模式
+    默认：完全禁止任何资金提取
+    """
+    if not fund_security_validator:
+        return jsonify({'allowed': False, 'reason': 'FUND: 资金安全验证器不可用'})
+    
+    data = request.json
+    account_id = data.get('account_id', '')
+    amount = float(data.get('amount', 0))
+    admin_approved = data.get('admin_approved', False)
+    
+    # 资金提现验证
+    allowed, reason = fund_security_validator.validate_withdrawal(
+        account_id, amount, admin_approved
+    )
+    
+    return jsonify({
+        'allowed': allowed,
+        'reason': reason,
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/fund/block-all', methods=['POST'])
+def block_all_withdrawals():
+    """完全卡死所有资金提现"""
+    if not fund_security_validator:
+        return jsonify({'success': False, 'message': '资金安全验证器不可用'})
+    
+    result = fund_security_validator.block_all_withdrawals()
+    return jsonify(result)
+
+
+@app.route('/api/fund/blacklist/add', methods=['POST'])
+def add_to_withdrawal_blacklist():
+    """添加账户到提现黑名单"""
+    if not fund_security_validator:
+        return jsonify({'success': False, 'message': '资金安全验证器不可用'})
+    
+    data = request.json
+    account_id = data.get('account_id', '')
+    result = fund_security_validator.add_to_blacklist(account_id)
+    return jsonify(result)
+
+
+@app.route('/api/fund/mode/only-trading', methods=['POST'])
+def set_only_trading_mode():
+    """设置仅交易模式（禁止任何资金提取）"""
+    if not fund_security_validator:
+        return jsonify({'success': False, 'message': '资金安全验证器不可用'})
+    
+    data = request.json
+    enabled = data.get('enabled', True)
+    result = fund_security_validator.set_only_trading_mode(enabled)
+    return jsonify(result)
+
+
+@app.route('/api/fund/config', methods=['GET'])
+def get_fund_security_config():
+    """获取资金安全配置"""
+    if not fund_security_validator:
+        return jsonify({'success': False, 'message': '资金安全验证器不可用'})
+    
+    return jsonify({
+        'success': True,
+        'config': fund_security_validator.config
+    })
+
+
+# ========== 完整交易执行API ==========
+
+@app.route('/api/trade/execute', methods=['POST'])
+def execute_full_trade():
+    """
+    完整的交易执行流程
+    1. 毫秒级关键路径验证
+    2. 验证通过 -> 执行交易
+    3. 验证失败 -> 拒绝交易
+    
+    参数:
+        monitor: bool (可选) - 是否返回监控日志
+    """
+    if not trade_execution_engine:
+        return jsonify({
+            'status': 'ERROR',
+            'action': '❌ 执行引擎不可用',
+            'reason': '交易执行引擎未初始化',
+        }), 500
+    
+    data = request.json
+    
+    # 获取真实IP
+    client_ip = data.get('ip', '')
+    if geo_location and not client_ip:
+        client_ip = geo_location.get_client_ip(request)
+    
+    # 构建订单信息
+    order_info = {
+        'symbol': data.get('symbol', ''),
+        'side': data.get('side', 'buy'),
+        'amount': float(data.get('amount', 0)),
+        'price': float(data.get('price', 0)),
+        'ip': client_ip,
+        'api_key': data.get('api_key', ''),
+        'user_id': data.get('user_id', ''),
+    }
+    
+    # 是否开启监控
+    monitor = data.get('monitor', False)
+    
+    # 调用完整交易执行引擎（带监控
+    result = trade_execution_engine.execute_trade(order_info, monitor=monitor)
+    
+    return jsonify(result)
+
+
+@app.route('/api/trade/report', methods=['GET'])
+def get_trade_report():
+    """获取交易执行报告"""
+    if not trade_execution_engine:
+        return jsonify({
+            'success': False,
+            'message': '交易执行引擎不可用',
+        })
+    
+    return jsonify({
+        'success': True,
+        'report': trade_execution_engine.get_execution_report(),
+    })
 
 
 @app.route('/api/auth/validate')
@@ -1711,6 +2099,160 @@ def update_user(username):
 
     data = request.json
     result = user_manager.update_user(username, data)
+    return jsonify(result)
+
+
+@app.route('/api/security/config', methods=['GET'])
+def get_security_config():
+    """获取安全配置"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+
+    config = user_manager.get_security_config()
+    return jsonify({'success': True, 'config': config})
+
+
+@app.route('/api/security/whitelist/add', methods=['POST'])
+def add_whitelist_city():
+    """添加城市到白名单"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+    
+    # 检查是否是管理员
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+
+    data = request.json
+    city = data.get('city')
+    if not city:
+        return jsonify({'error': '缺少城市名'}), 400
+
+    result = user_manager.add_whitelist_city(city)
+    
+    # 更新风控系统配置
+    if pyramid_phishing_defense:
+        pyramid_phishing_defense.update_security_config()
+    
+    return jsonify(result)
+
+
+@app.route('/api/security/whitelist/remove', methods=['POST'])
+def remove_whitelist_city():
+    """从白名单移除城市"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+    
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+
+    data = request.json
+    city = data.get('city')
+    if not city:
+        return jsonify({'error': '缺少城市名'}), 400
+
+    result = user_manager.remove_whitelist_city(city)
+    
+    if pyramid_phishing_defense:
+        pyramid_phishing_defense.update_security_config()
+    
+    return jsonify(result)
+
+
+@app.route('/api/security/off-hours', methods=['POST'])
+def set_off_hours_check():
+    """设置非工作时间检查"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+    
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+
+    data = request.json
+    enabled = data.get('enabled', True)
+    
+    result = user_manager.set_off_hours_check(enabled)
+    
+    if pyramid_phishing_defense:
+        pyramid_phishing_defense.update_security_config()
+    
+    return jsonify(result)
+
+
+@app.route('/api/security/location-check', methods=['POST'])
+def set_location_check():
+    """设置地域验证开关"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+    
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+
+    data = request.json
+    enabled = data.get('enabled', True)
+    
+    result = user_manager.toggle_location_check(enabled)
+    
+    if pyramid_phishing_defense:
+        pyramid_phishing_defense.update_security_config()
+    
+    return jsonify(result)
+
+
+@app.route('/api/security/all-check', methods=['POST'])
+def set_all_security_check():
+    """设置所有安全检查开关"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+    
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+
+    data = request.json
+    enabled = data.get('enabled', True)
+    
+    result = user_manager.toggle_all_security(enabled)
+    
+    if pyramid_phishing_defense:
+        pyramid_phishing_defense.update_security_config()
+    
+    return jsonify(result)
+
+
+@app.route('/api/security/config-update', methods=['POST'])
+def update_security_config():
+    """批量更新安全配置"""
+    session_id = request.headers.get('X-Session-ID')
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return jsonify({'error': '未授权访问'}), 401
+    
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+
+    data = request.json
+    result = user_manager.set_security_config(data)
+    
+    if pyramid_phishing_defense:
+        pyramid_phishing_defense.update_security_config()
+    
     return jsonify(result)
 
 

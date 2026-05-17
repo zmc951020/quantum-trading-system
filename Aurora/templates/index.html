@@ -3,1937 +3,1339 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aurora量化交易系统</title>
+    <title>Aurora量化交易可视化系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        :root {
-            --bg-primary: #080c14;
-            --bg-secondary: #0f1520;
-            --bg-card: #111827;
-            --bg-card-hover: #151d2e;
-            --border: #1a2740;
-            --border-glow: #1e3a5f;
-            --accent: #06b6d4;
-            --accent2: #3b82f6;
-            --accent-glow: rgba(6, 182, 212, 0.35);
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --green: #10b981;
-            --green-bg: rgba(16, 185, 129, 0.12);
-            --red: #ef4444;
-            --red-bg: rgba(239, 68, 68, 0.12);
-            --gold: #f59e0b;
-            --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-            --font-sans: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-            --radius: 8px;
-            --radius-sm: 4px;
-            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        * { box-sizing: border-box; }
         body {
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: var(--font-sans);
-            margin: 0;
-            padding: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
-            letter-spacing: 0.01em;
-            -webkit-font-smoothing: antialiased;
         }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--border-glow); }
-        .dashboard { padding: 16px; max-width: 1920px; margin: 0 auto; }
         .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 12px;
-            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-bottom: 20px;
         }
-        .card:hover { border-color: var(--border-glow); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
         .card-header {
-            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
-            border-bottom: 1px solid var(--border);
-            padding: 12px 16px;
-            border-radius: var(--radius) var(--radius) 0 0 !important;
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: bold;
         }
-        .card-body { padding: 12px 16px; }
-        .chart-container { height: 280px; margin: 8px 0; border-radius: var(--radius-sm); }
-        .status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-        .status-running { background-color: var(--green); box-shadow: 0 0 8px var(--green); }
-        .status-stopped { background-color: var(--red); box-shadow: 0 0 8px var(--red); }
-        .market-state { font-size: 14px; margin: 4px 0; color: var(--text-secondary); }
-        .market-state strong { color: var(--text-primary); margin-right: 4px; }
-        .performance-metric { font-size: 20px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .indicator-value { font-size: 11px; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); margin: 2px; display: inline-block; color: var(--text-secondary); border: 1px solid var(--border); }
-        .indicator-group { margin-bottom: 12px; }
-        .indicator-group-title { font-weight: 600; margin-bottom: 6px; color: var(--text-primary); font-size: 14px; }
-        .stock-item { padding: 10px 12px; border-bottom: 1px solid var(--border); transition: var(--transition); }
-        .stock-item:hover { background-color: var(--bg-card-hover); }
-        .trade-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-        .trade-profit { color: var(--green); font-weight: 600; }
-        .trade-loss { color: var(--red); font-weight: 600; }
-        .nav-tabs { margin-bottom: 12px; border-bottom: 1px solid var(--border); }
-        .nav-tabs .nav-link { color: var(--text-secondary); border: none; padding: 8px 16px; font-size: 13px; transition: var(--transition); }
-        .nav-tabs .nav-link:hover { color: var(--accent); border-color: transparent; }
-        .nav-tabs .nav-link.active { color: var(--accent); background: transparent; border: none; border-bottom: 2px solid var(--accent); }
-        .tab-content { padding: 12px; background: transparent; }
-        .risk-meter { height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; margin: 8px 0; }
-        .risk-meter-fill { height: 100%; transition: width 0.3s ease; border-radius: 4px; }
-        .risk-item { text-align: center; padding: 8px; }
-        .risk-value { font-size: 22px; font-weight: 700; }
-        .phishing-level { font-size: 14px; padding: 8px; }
-        .alert-item { padding: 8px; }
-        .ml-item { text-align: center; padding: 10px; background: var(--bg-secondary); border-radius: var(--radius); border: 1px solid var(--border); }
-        .ml-value { font-size: 18px; font-weight: 700; margin: 4px 0; }
-        .pyramid-layer { padding: 6px 12px; margin: 3px 0; border-radius: var(--radius-sm); color: white; text-align: center; font-size: 14px; font-weight: 600; }
-        .layer-5 { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 2px 8px rgba(239,68,68,0.3); }
-        .layer-4 { background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 2px 8px rgba(249,115,22,0.3); }
-        .layer-3 { background: linear-gradient(135deg, #eab308, #ca8a04); box-shadow: 0 2px 8px rgba(234,179,8,0.3); }
-        .layer-2 { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 2px 8px rgba(34,197,94,0.3); }
-        .layer-1 { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
-        .form-control, .form-select {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            border-radius: var(--radius-sm);
-            font-size: 13px;
-            padding: 8px 12px;
+        .system-switch {
+            background: linear-gradient(90deg, #ff6b35, #f7931e);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
         }
-        .form-control:focus, .form-select:focus {
-            background: var(--bg-secondary);
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-glow);
-            color: var(--text-primary);
+        .strategy-control {
+            border-left: 4px solid #3498db;
         }
-        .form-control::placeholder { color: var(--text-muted); }
-        .btn { padding: 8px 16px; font-size: 13px; font-weight: 600; border-radius: var(--radius-sm); transition: var(--transition); border: none; }
-        .btn-primary { background: linear-gradient(135deg, var(--accent2), #2563eb); color: white; }
-        .btn-primary:hover { background: linear-gradient(135deg, #4a7dff, #1d4ed8); box-shadow: 0 4px 12px rgba(59,130,246,0.4); transform: translateY(-1px); }
-        .btn-success { background: linear-gradient(135deg, var(--green), #059669); color: white; }
-        .btn-success:hover { background: linear-gradient(135deg, #10b981, #047857); box-shadow: 0 4px 12px rgba(16,185,129,0.4); transform: translateY(-1px); }
-        .btn-danger { background: linear-gradient(135deg, var(--red), #dc2626); color: white; }
-        .btn-danger:hover { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 4px 12px rgba(239,68,68,0.4); transform: translateY(-1px); }
-        .btn-warning { background: linear-gradient(135deg, var(--gold), #d97706); color: white; }
-        .btn-warning:hover { background: linear-gradient(135deg, #f59e0b, #b45309); box-shadow: 0 4px 12px rgba(245,158,11,0.4); transform: translateY(-1px); }
-        .btn-info { background: linear-gradient(135deg, var(--accent), #0891b2); color: white; }
-        .btn-secondary { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--border-glow); }
-        .badge { padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 4px; }
-        .bg-success { background: var(--green-bg) !important; color: var(--green) !important; border: 1px solid var(--green); }
-        .bg-danger { background: var(--red-bg) !important; color: var(--red) !important; border: 1px solid var(--red); }
-        .bg-warning { background: rgba(245,158,11,0.12) !important; color: var(--gold) !important; border: 1px solid var(--gold); }
-        .bg-info { background: rgba(6,182,212,0.12) !important; color: var(--accent) !important; border: 1px solid var(--accent); }
-        .bg-secondary { background: var(--bg-secondary) !important; color: var(--text-secondary) !important; border: 1px solid var(--border); }
-        .bg-dark { background: var(--bg-primary) !important; color: var(--text-primary) !important; border: 1px solid var(--border); }
-        .text-muted { color: var(--text-muted) !important; }
-        .text-success { color: var(--green) !important; }
-        .text-danger { color: var(--red) !important; }
-        .text-warning { color: var(--gold) !important; }
-        .text-info { color: var(--accent) !important; }
-        .text-primary { color: var(--accent2) !important; }
-        .border { border-color: var(--border) !important; }
-        .list-group-item { background: var(--bg-secondary); border-color: var(--border); color: var(--text-secondary); font-size: 14px; }
-        .modal-content { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); border-radius: var(--radius); }
-        .modal-header { border-bottom-color: var(--border); }
-        .modal-footer { border-top-color: var(--border); }
-        .btn-close { filter: invert(1); opacity: 0.5; }
-        .btn-close:hover { opacity: 1; }
-        .header-bar {
-            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
-            border-bottom: 1px solid var(--border);
-            padding: 8px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            height: 52px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+        .market-data {
+            border-left: 4px solid #9b59b6;
         }
-        .header-logo {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-weight: 700;
-            font-size: 16px;
-            letter-spacing: 0.02em;
+        .market-status {
+            border-left: 4px solid #2ecc71;
         }
-        .header-logo .icon-gem {
-            width: 32px;
-            height: 32px;
+        .strategy-performance {
+            border-left: 4px solid #1abc9c;
+        }
+        .technical-indicators {
+            border-left: 4px solid #e67e22;
+        }
+        .anti-phishing {
+            border-left: 4px solid #e74c3c;
+        }
+        .risk-control {
+            border-left: 4px solid #3498db;
+        }
+        .alert-system {
+            border-left: 4px solid #95a5a6;
+        }
+        .traffic-monitor {
+            border-left: 4px solid #3498db;
+        }
+        .ml-optimization {
+            border-left: 4px solid #2ecc71;
+        }
+        .stock-pool {
+            border-left: 4px solid #3498db;
+        }
+        .strategy-comparison {
+            border-left: 4px solid #2ecc71;
+        }
+        .performance-attribution {
+            border-left: 4px solid #e67e22;
+        }
+        .risk-heatmap {
+            border-left: 4px solid #9b59b6;
+        }
+        .rolling-backtest {
+            border-left: 4px solid #3498db;
+        }
+        .western-quant {
+            border-left: 4px solid #9b59b6;
+        }
+        .strategy组合 {
+            border-left: 4px solid #2ecc71;
+        }
+        .data-export {
+            border-left: 4px solid #3498db;
+        }
+        .model-management {
+            border-left: 4px solid #9b59b6;
+        }
+        .user-management {
+            border-left: 4px solid #95a5a6;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 8px;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            box-shadow: 0 0 16px var(--accent-glow);
+            padding: 15px;
+            text-align: center;
+            margin: 5px;
         }
-        .header-metrics {
-            display: flex;
-            gap: 24px;
-            align-items: center;
-            font-size: 14px;
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
         }
-        .header-metric { text-align: center; }
-        .header-metric .label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .header-metric .value { font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
-        .header-metric .value.up { color: var(--green); }
-        .header-metric .value.down { color: var(--red); }
-        .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; background: var(--green); box-shadow: 0 0 6px var(--green); }
-        .compact-row { display: flex; gap: 12px; align-items: center; }
-        .compact-row > * { flex: 1; }
-        .compact-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .stat-label {
+            font-size: 12px;
+            color: #bdc3c7;
+        }
+        .chart-container {
+            height: 300px;
+            margin-top: 15px;
+        }
+        .table-dark {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        .badge-success {
+            background-color: #2ecc71;
+        }
+        .badge-danger {
+            background-color: #e74c3c;
+        }
+        .badge-warning {
+            background-color: #f39c12;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            border: none;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            border: none;
+        }
+        .navbar {
+            background: rgba(0, 0, 0, 0.3) !important;
+        }
+        .nav-link {
+            color: #ffffff !important;
+        }
+        .nav-link:hover {
+            color: #667eea !important;
+        }
+        .phishing-defense {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), rgba(192, 57, 43, 0.1));
+            border: 2px solid #e74c3c;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .defense-layer {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid;
+        }
+        .layer-1 { border-color: #e74c3c; }
+        .layer-2 { border-color: #f39c12; }
+        .layer-3 { border-color: #3498db; }
+        .layer-4 { border-color: #9b59b6; }
+        .layer-5 { border-color: #2ecc71; }
+        .traffic-stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .traffic-stat {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            flex: 1;
+            margin: 0 10px;
+        }
+        .threat-low { color: #2ecc71; }
+        .threat-medium { color: #f39c12; }
+        .threat-high { color: #e67e22; }
+        .threat-critical { color: #e74c3c; }
+        .log-entry {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 <body>
-    <div class="dashboard container">
-        <!-- 导航菜单 -->
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <nav class="navbar navbar-expand-lg navbar-dark bg-dark rounded-lg mb-4">
-                    <div class="container-fluid">
-                        <a class="navbar-brand" href="/">Aurora量化交易系统</a>
-                        <div class="collapse navbar-collapse">
-                            <ul class="navbar-nav me-auto">
-                                <li class="nav-item">
-                                    <a class="nav-link active" href="/">📊 完整可视化</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="/dashboard">📈 监控仪表盘</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="/deepseek">🤖 DeepSeek AI助手</a>
-                                </li>
-                            </ul>
-                            <div class="d-flex align-items-center">
-                                <span class="text-white me-3">
-                                    <strong>用户名：</strong><span id="user-username">--</span>
-                                </span>
-                                <button class="btn btn-primary btn-sm me-2" id="change-password-btn">修改密码</button>
-                                <button class="btn btn-danger btn-sm" id="logout-btn">登出</button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
-            </div>
-        </div>
-
-        <!-- 系统切换模块 -->
-        <div class="card">
-            <div class="card-header bg-dark">
-                <h3>系统切换</h3>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label>选择分析系统：</label>
-                        <select id="analysis-system-select" class="form-select">
-                            <option value="aurora" selected>Aurora量化交易系统</option>
-                            <option value="westquant">西部宽客技术分析系统</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>交易模式：</label>
-                        <select id="trading-mode-select" class="form-select">
-                            <option value="sim" selected>模拟交易</option>
-                            <option value="live">实盘交易</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>操作：</label>
-                        <button id="switch-system-btn" class="btn btn-primary w-100">切换系统</button>
-                    </div>
-                </div>
-                <div class="mt-2" id="system-status">
-                    <span class="badge bg-success">当前系统：Aurora量化交易系统</span>
-                    <span class="badge bg-secondary ms-2">交易模式：模拟交易</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 策略控制 -->
-        <div class="card">
-            <div class="card-header"><h3>策略控制</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label>选择策略：</label>
-                        <select id="strategy-select" class="form-select">
-                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                            <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label>初始资金：</label>
-                        <input type="number" id="initial-balance" class="form-control" value="100000">
-                    </div>
-                    <div class="col-md-5">
-                        <label>操作：</label>
-                        <div class="d-flex gap-2">
-                            <button id="start-btn" class="btn btn-success">启动策略</button>
-                            <button id="stop-btn" class="btn btn-danger">停止策略</button>
-                            <button id="backtest-btn" class="btn btn-info">运行回测</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-3" id="strategy-status">
-                    <span class="status-indicator status-stopped"></span>
-                    <span>策略状态：已停止</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 市场数据 -->
-        <div class="card">
-            <div class="card-header"><h3>市场数据</h3></div>
-            <div class="card-body">
-                <div class="chart-container" id="price-chart"></div>
-                <div class="row mt-3">
-                    <div class="col-md-3"><strong>当前价格：</strong><span id="current-price">0.00</span></div>
-                    <div class="col-md-3"><strong>时间：</strong><span id="current-time">--</span></div>
-                    <div class="col-md-3"><strong>交易量：</strong><span id="current-volume">0</span></div>
-                    <div class="col-md-3"><strong>波动率：</strong><span id="current-volatility">--</span></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 双维度市场状态 -->
-        <div class="card">
-            <div class="card-header"><h3>双维度市场状态</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>HMM状态：</strong><span id="hmm-state">--</span></div>
-                        <div class="market-state"><strong>趋势类型：</strong><span id="trend-type">--</span></div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>推荐信号：</strong><span id="recommended-signal">--</span></div>
-                        <div class="market-state"><strong>推荐仓位：</strong><span id="recommended-position">--</span></div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>推荐策略：</strong><span id="recommended-strategy">--</span></div>
-                        <div class="market-state"><strong>决策描述：</strong><span id="decision-description">--</span></div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>风险评分：</strong><span id="risk-score">--</span></div>
-                        <div class="market-state"><strong>市场状态：</strong><span id="regime-label">--</span></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 策略性能 -->
-        <div class="card">
-            <div class="card-header"><h3>策略性能</h3></div>
-            <div class="card-body">
-                <div class="chart-container" id="performance-chart"></div>
-                <div class="row mt-3">
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="total-return">0.00%</div>
-                        <div class="text-muted">总收益率</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="current-balance">0.00</div>
-                        <div class="text-muted">当前余额</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="current-position">0</div>
-                        <div class="text-muted">当前持仓</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="total-trades">0</div>
-                        <div class="text-muted">总交易次数</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 技术分析指标 -->
-        <div class="card">
-            <div class="card-header"><h3>技术分析指标</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="chart-container" id="rsi-chart" style="height: 200px;"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="chart-container" id="macd-chart" style="height: 200px;"></div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <div class="chart-container" id="bollinger-chart" style="height: 200px;"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="chart-container" id="kdj-chart" style="height: 200px;"></div>
-                    </div>
-                </div>
-                <div class="row mt-3" id="indicators-grid"></div>
-            </div>
-        </div>
-
-        <!-- 五层金字塔防钓鱼系统 -->
-        <div class="card">
-            <div class="card-header bg-danger">
-                <h3>五层金字塔防钓鱼系统</h3>
-            </div>
-            <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <div class="pyramid-layer layer-5">第五层：风险监控层</div>
-                        <div class="pyramid-layer layer-4">第四层：交易验证层</div>
-                        <div class="pyramid-layer layer-3">第三层：行为分析层</div>
-                        <div class="pyramid-layer layer-2">第二层：身份认证层</div>
-                        <div class="pyramid-layer layer-1">第一层：网络层防护</div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="risk-item">
-                            <label>综合风险评分：</label>
-                            <div class="risk-meter">
-                                <div class="risk-meter-fill" id="pyramid-risk-meter" style="width: 0%;"></div>
-                            </div>
-                            <div><span id="pyramid-risk-value">0</span>/100</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="risk-item">
-                            <label>风险等级：</label>
-                            <div id="pyramid-risk-level" class="badge bg-success">正常</div>
-                        </div>
-                        <div class="risk-item">
-                            <label>熔断状态：</label>
-                            <div id="pyramid-circuit-breaker" class="badge bg-secondary">未触发</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-2"><div class="alert alert-info p-2 text-center">网络层:<br><span id="layer1-score">0</span></div></div>
-                    <div class="col-md-2"><div class="alert alert-success p-2 text-center">身份层:<br><span id="layer2-score">0</span></div></div>
-                    <div class="col-md-2"><div class="alert alert-warning p-2 text-center">行为层:<br><span id="layer3-score">0</span></div></div>
-                    <div class="col-md-2"><div class="alert alert-primary p-2 text-center">交易层:<br><span id="layer4-score">0</span></div></div>
-                    <div class="col-md-2"><div class="alert alert-danger p-2 text-center">风险层:<br><span id="layer5-score">0</span></div></div>
-                    <div class="col-md-2">
-                        <button class="btn btn-warning" id="manual-risk-btn">人工干预</button>
-                        <button class="btn btn-secondary" id="reset-fuse-btn">重置熔断</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 风控模块 -->
-        <div class="card">
-            <div class="card-header bg-warning text-dark"><h3>风控模块</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>总风险评分：</label>
-                            <div class="risk-meter">
-                                <div class="risk-meter-fill" id="total-risk-meter" style="width: 0%;"></div>
-                            </div>
-                            <div><span id="total-risk-value">0</span>/100</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>最大回撤：</label>
-                            <div class="risk-value text-danger" id="max-drawdown">--%</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>夏普比率：</label>
-                            <div class="risk-value text-info" id="sharpe-ratio">--</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>VaR(95%)：</label>
-                            <div class="risk-value text-warning" id="var-95">--%</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>止损线：</label>
-                            <div class="risk-value text-danger" id="stop-loss-line">--%</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>风险敞口：</label>
-                            <div class="risk-value text-warning" id="risk-exposure">--%</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>波动率风险：</label>
-                            <div class="risk-value text-info" id="volatility-risk">--</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="risk-item">
-                            <label>杠杆使用：</label>
-                            <div class="risk-value text-info" id="leverage-usage">--x</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 防钓鱼报警模块 -->
-        <div class="card">
-            <div class="card-header bg-secondary"><h3>防钓鱼报警</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="alert-item">
-                            <label>钓鱼风险等级：</label>
-                            <div class="phishing-level" id="phishing-level">
-                                <span class="badge bg-success">安全</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="alert-item">
-                            <label>可疑URL检查：</label>
-                            <div id="url-check-result">未检测</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="alert-item">
-                            <label>登录异常检测：</label>
-                            <div id="login-anomaly">正常</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <div class="alert-item">
-                            <label>最近告警：</label>
-                            <ul id="recent-alerts" class="list-group">
-                                <li class="list-group-item">暂无告警</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="alert-item">
-                            <label>安全建议：</label>
-                            <ul class="list-group">
-                                <li class="list-group-item">请勿将账户信息透露给他人</li>
-                                <li class="list-group-item">定期更换密码</li>
-                                <li class="list-group-item">启用双因素认证</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 机器学习网格动态优化数据 -->
-        <div class="card">
-            <div class="card-header bg-success"><h3>机器学习网格动态优化数据</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>波动率等级：</label>
-                            <div class="ml-value text-primary" id="volatility-level">--</div>
-                            <small class="text-muted">低/中/高</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>动态网格间距：</label>
-                            <div class="ml-value text-info" id="dynamic-grid-spacing">--%</div>
-                            <small class="text-muted">实时调整</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>预测置信度：</label>
-                            <div class="ml-value text-success" id="prediction-confidence">--%</div>
-                            <small class="text-muted">模型预测</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>模型精度：</label>
-                            <div class="ml-value text-warning" id="model-accuracy">--%</div>
-                            <small class="text-muted">训练评估</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>市场状态预测：</label>
-                            <div class="ml-value" id="market-state-prediction">--</div>
-                            <small class="text-muted">涨/跌/震荡</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>最优持仓建议：</label>
-                            <div class="ml-value text-danger" id="optimal-position">--%</div>
-                            <small class="text-muted">AI推荐</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>网格层数：</label>
-                            <div class="ml-value text-info" id="grid-levels">--</div>
-                            <small class="text-muted">动态调整</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="ml-item">
-                            <label>训练样本数：</label>
-                            <div class="ml-value" id="training-samples">--</div>
-                            <small class="text-muted">数据集大小</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="chart-container mt-3" id="ml-grid-chart" style="height: 200px;"></div>
-            </div>
-        </div>
-
-        <!-- 股票池和交易池 -->
-        <div class="card">
-            <div class="card-header"><h3>股票池与交易池</h3></div>
-            <div class="card-body">
-                <ul class="nav nav-tabs" role="tablist">
-                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#stock-pool">股票池</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#trading-pool">交易池</button></li>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark rounded-lg mb-6">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Aurora量化交易系统</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">📊 完整可视化</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">📈 监控仪表盘</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/deepseek">🤖 机器人助手</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/security-monitor">🛡️ 安全监控中心</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/security-config">⚙️ 安全配置</a>
+                    </li>
                 </ul>
-                <div class="tab-content">
-                    <div class="tab-pane fade show active" id="stock-pool">
-                        <div class="row mb-3">
+                <div class="d-flex align-items-center gap-4">
+                    <span class="status-badge status-running">
+                        <span style="display: inline-block; width: 10px; height: 10px; background-color: var(--success-color); border-radius: 50%; margin-right: 8px;"></span>
+                        系统运行中
+                    </span>
+                    <span class="status-badge status-alert">
+                        <span style="display: inline-block; width: 10px; height: 10px; background-color: var(--warning-color); border-radius: 50%; margin-right: 8px;"></span>
+                        安全警报: 0
+                    </span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-4">
+        <div class="system-switch">
+            <h4 class="mb-3">⚡系统切换模块</h4>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="switchDeepSeek" checked>
+                        <label class="form-check-label" for="switchDeepSeek">
+                            <strong>DeepSeek AI</strong>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="switchClaude" checked>
+                        <label class="form-check-label" for="switchClaude">
+                            <strong>Claude</strong>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="switchAutoTrade">
+                        <label class="form-check-label" for="switchAutoTrade">
+                            <strong>自动交易</strong>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary" onclick="applyChanges()">应用更改</button>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <a href="/deepseek" class="btn btn-outline-primary w-100">
+                        🤖 机器人助手
+                    </a>
+                </div>
+                <div class="col-md-6">
+                    <a href="/security-monitor" class="btn btn-outline-success w-100">
+                        🛡️ 安全监控中心
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card strategy-control">
+                    <div class="card-header">
+                        <h5>📊 策略控制模块</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
                             <div class="col-md-4">
-                                <input type="text" id="new-stock-symbol" class="form-control" placeholder="股票代码">
+                                <div class="stat-card">
+                                    <div class="stat-value" id="strategyCount">12</div>
+                                    <div class="stat-label">活跃策略数</div>
+                                </div>
                             </div>
                             <div class="col-md-4">
-                                <input type="text" id="new-stock-name" class="form-control" placeholder="股票名称">
+                                <div class="stat-card">
+                                    <div class="stat-value" id="runningStatus" style="color: #2ecc71;">运行中</div>
+                                    <div class="stat-label">运行状态</div>
+                                </div>
                             </div>
                             <div class="col-md-4">
-                                <button id="add-stock-btn" class="btn btn-primary">添加股票</button>
-                            </div>
-                        </div>
-                        <div id="stock-list"></div>
-                    </div>
-                    <div class="tab-pane fade" id="trading-pool">
-                        <div id="trade-list"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 多策略对比 -->
-        <div class="card">
-            <div class="card-header"><h3>多策略对比</h3></div>
-            <div class="card-body">
-                <div class="chart-container" id="strategy-comparison-chart"></div>
-                <div class="mt-3">
-                    <label>选择周期：</label>
-                    <select id="comparison-period" class="form-select" style="width: 200px; display: inline-block;">
-                        <option value="1h">1小时</option>
-                        <option value="4h">4小时</option>
-                        <option value="1d">1天</option>
-                        <option value="7d" selected>7天</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-             <!-- 🔝 顶级可视化：性能归因分析 -->
-        <div class="card">
-            <div class="card-header bg-info">
-                <h3>📊 性能归因分析</h3>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div id="attribution-chart" style="height: 350px;"></div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="list-group">
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between">
-                                    <strong>总收益率</strong>
-                                    <span class="text-success">+12.5%</span>
-                                </div>
-                            </div>
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between">
-                                    <span>策略选择贡献</span>
-                                    <span class="text-info">+8.2%</span>
-                                </div>
-                            </div>
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between">
-                                    <span>择时贡献</span>
-                                    <span class="text-warning">+3.5%</span>
-                                </div>
-                            </div>
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between">
-                                    <span>风险管理贡献</span>
-                                    <span class="text-secondary">+0.8%</span>
+                                <div class="stat-card">
+                                    <div class="stat-value" id="totalTrades">1,847</div>
+                                    <div class="stat-label">今日交易数</div>
                                 </div>
                             </div>
                         </div>
+                        <div class="chart-container" id="strategyChart"></div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- 🔝 顶级可视化：风险热力图 -->
-        <div class="card">
-            <div class="card-header bg-warning">
-                <h3>🔥 风险热力图</h3>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-12">
-                        <div id="risk-heatmap-chart" style="height: 400px;"></div>
+            <div class="col-md-6">
+                <div class="card market-data">
+                    <div class="card-header">
+                        <h5>📈 市场数据模块</h5>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 🔝 顶级可视化：滚动回测 -->
-        <div class="card">
-            <div class="card-header bg-dark text-light">
-                <h3>🔄 滚动回测</h3>
-            </div>
-            <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <label>滚动窗口：</label>
-                        <select id="rolling-window" class="form-select">
-                            <option value="30">30天</option>
-                            <option value="60" selected>60天</option>
-                            <option value="90">90天</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label>步长：</label>
-                        <select id="rolling-step" class="form-select">
-                            <option value="7">7天</option>
-                            <option value="14" selected>14天</option>
-                            <option value="30">30天</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-8">
-                        <div id="walk-forward-chart" style="height: 300px;"></div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="alert alert-info">
-                            <h5>📈 回测性能统计</h5>
-                            <div>年化收益率：<strong id="wf-annual-return">18.5%</strong></div>
-                            <div>夏普比率：<strong id="wf-sharpe">1.82</strong></div>
-                            <div>最大回撤：<strong id="wf-max-drawdown">-9.2%</strong></div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>代码</th>
+                                        <th>名称</th>
+                                        <th>价格</th>
+                                        <th>涨跌</th>
+                                        <th>成交量</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="marketDataTable">
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>    
+        </div>
 
-        <!-- 西部宽客技术分析模块 -->
-        <div class="card" id="westquant-analysis" style="display: none;">
-            <div class="card-header bg-info">
-                <h3>📈 西部宽客技术分析</h3>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card market-status">
+                    <div class="card-header">
+                        <h5>🌍 双维度市场状态</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-card">
+                            <div class="stat-label">宏观状态</div>
+                            <div class="stat-value" style="color: #2ecc71;" id="macroStatus">牛市</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">微观状态</div>
+                            <div class="stat-value" style="color: #f39c12;" id="microStatus">震荡</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">市场情绪</div>
+                            <div class="stat-value" style="color: #9b59b6;" id="sentiment">乐观</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card strategy-performance">
+                    <div class="card-header">
+                        <h5>💹 策略性能模块</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-card">
+                            <div class="stat-label">累计收益率</div>
+                            <div class="stat-value" style="color: #2ecc71;" id="totalReturn">+23.45%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">胜率</div>
+                            <div class="stat-value" id="winRate">67.8%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">夏普比率</div>
+                            <div class="stat-value" id="sharpeRatio">2.34</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">最大回撤</div>
+                            <div class="stat-value" style="color: #e74c3c;" id="maxDrawdown">-8.23%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card technical-indicators">
+                    <div class="card-header">
+                        <h5>📉 技术分析指标</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="technicalIndicators">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>MA5:</span>
+                                <span id="ma5">156.78</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>MA10:</span>
+                                <span id="ma10">154.23</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>MA20:</span>
+                                <span id="ma20">151.45</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>RSI:</span>
+                                <span id="rsi">62.34</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>MACD:</span>
+                                <span id="macd">+2.45</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>布林带上轨:</span>
+                                <span id="bbUpper">162.50</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>布林带下轨:</span>
+                                <span id="bbLower">148.20</span>
+                            </div>
+                        </div>
+                        <div class="chart-container" id="technicalChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="phishing-defense">
+            <div class="card-header" style="background: rgba(231, 76, 60, 0.2);">
+                <h5 class="text-danger">🛡️ 五层金字塔防钓鱼系统</h5>
             </div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-6">
-                        <div id="westquant-kline-chart" style="height: 400px;"></div>
+                    <div class="col-md-2">
+                        <div class="defense-layer layer-1">
+                            <h6 class="text-danger">第一层：URL验证</h6>
+                            <p class="small">实时检查URL合法性，识别仿冒域名</p>
+                            <span class="badge bg-danger">活跃</span>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <div id="westquant-indicators-chart" style="height: 400px;"></div>
+                    <div class="col-md-2">
+                        <div class="defense-layer layer-2">
+                            <h6 class="text-warning">第二层：行为分析</h6>
+                            <p class="small">监控异常登录行为和操作模式</p>
+                            <span class="badge bg-warning">活跃</span>
+                        </div>
                     </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
+                        <div class="defense-layer layer-3">
+                            <h6 class="text-primary">第三层：设备指纹</h6>
+                            <p class="small">验证登录设备和浏览器特征</p>
+                            <span class="badge bg-primary">活跃</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="defense-layer layer-4">
+                            <h6 class="text-purple">第四层：IP信誉</h6>
+                            <p class="small">检查IP历史行为和地理位置</p>
+                            <span class="badge" style="background: #9b59b6;">活跃</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="defense-layer layer-5">
+                            <h6 class="text-success">第五层：AI防御</h6>
+                            <p class="small">深度学习识别新型攻击</p>
+                            <span class="badge bg-success">活跃</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
                         <div class="text-center">
-                            <div class="text-success font-weight-bold">胜率</div>
-                            <div id="westquant-win-rate" class="text-xl">--</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="text-info font-weight-bold">盈亏比</div>
-                            <div id="westquant-profit-ratio" class="text-xl">--</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="text-warning font-weight-bold">信号强度</div>
-                            <div id="westquant-signal-strength" class="text-xl">--</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="text-danger font-weight-bold">风险等级</div>
-                            <div id="westquant-risk-level" class="text-xl">--</div>
+                            <div style="font-size: 48px;">🛡️</div>
+                            <div class="small">总体防护状态</div>
+                            <span class="badge bg-success">安全</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 策略组合管理 -->
-        <div class="card">
-            <div class="card-header"><h3>策略组合管理</h3></div>
-            <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <label>初始资金：</label>
-                        <input type="number" id="combiner-balance" class="form-control" value="100000">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card risk-control">
+                    <div class="card-header">
+                        <h5>⚠️ 风控模块</h5>
                     </div>
-                    <div class="col-md-6">
-                        <label>操作：</label>
-                        <button id="create-combiner-btn" class="btn btn-primary w-100">创建策略组合</button>
-                    </div>
-                </div>
-                
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label>添加策略：</label>
-                        <select id="add-strategy-select" class="form-select">
-                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                            <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>权重：</label>
-                        <input type="number" id="strategy-weight" class="form-control" value="0.33" min="0" max="1" step="0.01">
-                    </div>
-                    <div class="col-md-4">
-                        <label>操作：</label>
-                        <button id="add-strategy-btn" class="btn btn-success w-100">添加策略</button>
-                    </div>
-                </div>
-                
-                <div class="mb-3">
-                    <h4>组合策略列表</h4>
-                    <div id="combiner-strategies-list" class="border rounded p-3"></div>
-                </div>
-                
-                <div class="d-flex gap-2">
-                    <button id="start-combiner-btn" class="btn btn-success">启动策略组合</button>
-                    <button id="stop-combiner-btn" class="btn btn-danger">停止策略组合</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 数据导出 -->
-        <div class="card">
-            <div class="card-header"><h3>数据导出</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label>导出类型：</label>
-                        <select id="export-type" class="form-select">
-                            <option value="market">市场数据</option>
-                            <option value="performance">性能数据</option>
-                            <option value="trades">交易数据</option>
-                            <option value="indicators">技术指标</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>导出格式：</label>
-                        <select id="export-format" class="form-select">
-                            <option value="csv">CSV</option>
-                            <option value="excel">Excel</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>操作：</label>
-                        <button id="export-btn" class="btn btn-success w-100">导出数据</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 模型管理 -->
-        <div class="card">
-            <div class="card-header"><h3>模型管理</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h4>版本列表</h4>
-                        <div class="version-list" id="version-list"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <h4>操作</h4>
-                        <div class="mb-3">
-                            <input type="text" id="save-description" class="form-control" placeholder="保存描述">
+                    <div class="card-body">
+                        <div class="stat-card">
+                            <div class="stat-label">风险等级</div>
+                            <div class="stat-value" style="color: #f39c12;" id="riskLevel">中等</div>
                         </div>
-                        <div class="d-flex gap-2">
-                            <button id="save-model-btn" class="btn btn-primary">保存模型</button>
-                            <button id="load-model-btn" class="btn btn-info">加载模型</button>
+                        <div class="stat-card">
+                            <div class="stat-label">总敞口</div>
+                            <div class="stat-value" id="totalExposure">¥2,345,678</div>
+                        </div>
+                        <div class="progress mt-3">
+                            <div class="progress-bar bg-warning" role="progressbar" style="width: 65%;" id="riskProgress">65%</div>
+                        </div>
+                        <div class="small mt-2 text-center">风险敞口使用率</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card alert-system">
+                    <div class="card-header">
+                        <h5>🔔 防钓鱼报警模块</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-card">
+                            <div class="stat-label">钓鱼风险等级</div>
+                            <div class="stat-value threat-low" id="phishingRisk">低</div>
+                        </div>
+                        <div class="small mt-3">
+                            <div class="mb-2">✓ 可疑URL检查: <span class="text-success">通过</span></div>
+                            <div class="mb-2">✓ 登录异常检测: <span class="text-success">正常</span></div>
+                            <div class="mb-2">✓ 最近告警: <span class="text-success">0条</span></div>
+                        </div>
+                        <div class="alert alert-success small mt-3">
+                            <strong>安全建议：</strong>系统运行正常，未检测到可疑活动
                         </div>
                     </div>
                 </div>
             </div>
+
+            <div class="col-md-4">
+                <div class="card traffic-monitor">
+                    <div class="card-header">
+                        <h5>🛡️ 实时流量监控模块</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="traffic-stats">
+                            <div class="traffic-stat">
+                                <div class="stat-value" id="totalConnections">0</div>
+                                <div class="stat-label">今日总连接数</div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-6">
+                                <div class="stat-card">
+                                    <div class="stat-value text-success" id="allowedConnections">0</div>
+                                    <div class="stat-label">已放行</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stat-card">
+                                    <div class="stat-value text-danger" id="blockedConnections">0</div>
+                                    <div class="stat-label">已拦截</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-6">
+                                <div class="small mb-2">威胁等级分布：</div>
+                                <div class="small">🟢 低威胁: <span id="threatLow">0</span></div>
+                                <div class="small">🟡 中威胁: <span id="threatMedium">0</span></div>
+                                <div class="small">🟠 高威胁: <span id="threatHigh">0</span></div>
+                                <div class="small">🔴 严重: <span id="threatCritical">0</span></div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small mb-2">拦截原因统计：</div>
+                                <div class="small" id="blockReason1">IP不在白名单: 0</div>
+                                <div class="small" id="blockReason2">异常端口: 0</div>
+                                <div class="small" id="blockReason3">可疑地区: 0</div>
+                                <div class="small" id="blockReason4">频繁请求: 0</div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <div class="small mb-2">实时连接日志（最近10条）：</div>
+                            <div id="trafficLog" style="max-height: 200px; overflow-y: auto; font-size: 11px;"></div>
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-primary" onclick="refreshTrafficLog()">刷新日志</button>
+                            <button class="btn btn-sm btn-danger" onclick="viewBlockDetails()">查看拦截详情</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- 管理员用户管理 -->
-        <div class="card" id="admin-user-management" style="display: none;">
-            <div class="card-header bg-warning text-dark"><h3>用户管理（管理员）</h3></div>
-            <div class="card-body">
-                <h4>用户列表</h4>
-                <div class="mb-3">
-                    <input type="text" id="new-user-username" class="form-control" placeholder="新用户名">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card ml-optimization">
+                    <div class="card-header">
+                        <h5>🤖 机器学习网格动态优化数据</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="mlOptimizationChart"></div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <input type="password" id="new-user-password" class="form-control" placeholder="新用户密码">
+            </div>
+
+            <div class="col-md-6">
+                <div class="card stock-pool">
+                    <div class="card-header">
+                        <h5>📋 股票池和交易池</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>股票代码</th>
+                                        <th>名称</th>
+                                        <th>评分</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockPoolTable">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <input type="email" id="new-user-email" class="form-control" placeholder="新用户邮箱">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card strategy-comparison">
+                    <div class="card-header">
+                        <h5>📊 多策略对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="strategyComparisonChart"></div>
+                    </div>
                 </div>
-                <button id="add-user-btn" class="btn btn-success mb-4">添加用户</button>
-                <div id="user-list" class="border rounded p-3"></div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card performance-attribution">
+                    <div class="card-header">
+                        <h5>💰 性能归因分析</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="performanceAttributionChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card risk-heatmap">
+                    <div class="card-header">
+                        <h5>🔥 风险热力图</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="riskHeatmapChart"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card rolling-backtest">
+                    <div class="card-header">
+                        <h5>🔄 滚动回测</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="rollingBacktestChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card western-quant">
+                    <div class="card-header">
+                        <h5>🌐 西部宽客技术分析模块</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="westernQuantChart"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card strategy组合">
+                    <div class="card-header">
+                        <h5>⚙️ 策略组合管理</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>策略名称</th>
+                                        <th>权重</th>
+                                        <th>收益</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="strategyPortfolioTable">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card data-export">
+                    <div class="card-header">
+                        <h5>💾 数据导出</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-primary btn-sm m-1">导出CSV</button>
+                        <button class="btn btn-success btn-sm m-1">导出Excel</button>
+                        <button class="btn btn-info btn-sm m-1">导出JSON</button>
+                        <button class="btn btn-warning btn-sm m-1">导出PDF报告</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card model-management">
+                    <div class="card-header">
+                        <h5>🧠 模型管理</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>模型名称</th>
+                                        <th>版本</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>趋势预测模型</td>
+                                        <td>v2.1</td>
+                                        <td><span class="badge bg-success">运行中</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>风险评估模型</td>
+                                        <td>v1.5</td>
+                                        <td><span class="badge bg-success">运行中</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card user-management">
+                    <div class="card-header">
+                        <h5>👥 用户管理</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>用户名</th>
+                                        <th>角色</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>admin</td>
+                                        <td>管理员</td>
+                                        <td><span class="badge bg-success">在线</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>trader01</td>
+                                        <td>交易员</td>
+                                        <td><span class="badge bg-success">在线</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- 修改密码模态框 -->
-    <div class="modal fade" id="changePasswordModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">修改密码</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="change-password-form">
-                        <div class="form-group">
-                            <label for="old-password">旧密码</label>
-                            <input type="password" id="old-password" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="new-password">新密码</label>
-                            <input type="password" id="new-password" class="form-control" required>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirm-change-password">确认修改</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const priceChart = echarts.init(document.getElementById('price-chart'));
-        const performanceChart = echarts.init(document.getElementById('performance-chart'));
-        const rsiChart = echarts.init(document.getElementById('rsi-chart'));
-        const macdChart = echarts.init(document.getElementById('macd-chart'));
-        const bollingerChart = echarts.init(document.getElementById('bollinger-chart'));
-        const kdjChart = echarts.init(document.getElementById('kdj-chart'));
-        const strategyComparisonChart = echarts.init(document.getElementById('strategy-comparison-chart'));
-        const mlGridChart = echarts.init(document.getElementById('ml-grid-chart'));
-        // 🔝 新增：顶级可视化图表
-        let attributionChart = null;
-        let riskHeatmapChart = null;
-        let walkForwardChart = null;
+        let marketData = [
+            { code: '600519', name: '贵州茅台', price: 1856.78, change: 2.34, volume: 2345000 },
+            { code: '000858', name: '五粮液', price: 178.90, change: -1.23, volume: 1567000 },
+            { code: '601318', name: '中国平安', price: 52.34, change: 0.87, volume: 3456000 },
+            { code: '600036', name: '招商银行', price: 38.67, change: 1.45, volume: 2890000 },
+            { code: '000001', name: '平安银行', price: 12.45, change: -0.56, volume: 1234000 }
+        ];
 
-        function initProfessionalVisualization() {
-            attributionChart = echarts.init(document.getElementById('attribution-chart'));
-            riskHeatmapChart = echarts.init(document.getElementById('risk-heatmap-chart'));
-            walkForwardChart = echarts.init(document.getElementById('walk-forward-chart'));
-            
-            updateAttributionChart();
-            updateRiskHeatmap();
-            updateWalkForward();
+        let trafficData = {
+            totalConnections: 0,
+            allowedConnections: 0,
+            blockedConnections: 0,
+            threatLevels: { low: 0, medium: 0, high: 0, critical: 0 },
+            blockReasons: { ipNotInWhitelist: 0, abnormalPort: 0, suspiciousRegion: 0, frequentRequests: 0 },
+            logs: []
+        };
+
+        function getCountryFlag(countryCode) {
+            const flagMap = {
+                'US': '🇺🇸', 'GB': '🇬🇧', 'DE': '🇩🇪', 'JP': '🇯🇵', 'KR': '🇰🇷',
+                'SG': '🇸🇬', 'RU': '🇷🇺', 'IN': '🇮🇳', 'BR': '🇧🇷', 'AU': '🇦🇺',
+                'NL': '🇳🇱', 'FR': '🇫🇷', 'HK': '🇭🇰', 'CN': '🇨🇳', 'TW': '🇹🇼',
+                'CA': '🇨🇦', 'IT': '🇮🇹', 'ES': '🇪🇸', 'SE': '🇸🇪', 'CH': '🇨🇭'
+            };
+            return flagMap[countryCode] || '🌐';
         }
 
-        function updateAttributionChart() {
-            const option = {
-                title: { text: '收益贡献分解', left: 'center' },
+        function getRandomIP() {
+            const rand = Math.random();
+            let country;
+            let isPhishingHub = false;
+            
+            if (rand < 0.4) {
+                country = 'CN';
+                isPhishingHub = false;
+            } else if (rand < 0.5) {
+                const westernCountries = ['US', 'GB', 'DE', 'JP', 'KR', 'SG', 'AU', 'NL', 'FR'];
+                country = westernCountries[Math.floor(Math.random() * westernCountries.length)];
+                isPhishingHub = false;
+            } else {
+                const phishingHubs = ['RU', 'KP', 'IR', 'NG', 'PK', 'UA', 'BY', 'TR', 'VN', 'BR', 'IN'];
+                country = phishingHubs[Math.floor(Math.random() * phishingHubs.length)];
+                isPhishingHub = true;
+            }
+            
+            const ip = `${Math.floor(Math.random() * 223) + 1}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+            return { ip, country, isPhishingHub };
+        }
+
+        function getRandomCity(country) {
+            const cities = {
+                'US': ['New York', 'Los Angeles', 'San Francisco', 'Seattle'],
+                'GB': ['London', 'Manchester', 'Birmingham'],
+                'DE': ['Berlin', 'Munich', 'Frankfurt'],
+                'JP': ['Tokyo', 'Osaka', 'Nagoya'],
+                'KR': ['Seoul', 'Busan', 'Incheon'],
+                'SG': ['Singapore'],
+                'RU': ['Moscow', 'St. Petersburg'],
+                'IN': ['Mumbai', 'Delhi', 'Bangalore'],
+                'BR': ['São Paulo', 'Rio de Janeiro'],
+                'AU': ['Sydney', 'Melbourne', 'Brisbane'],
+                'NL': ['Amsterdam', 'Rotterdam'],
+                'FR': ['Paris', 'Lyon', 'Marseille'],
+                'HK': ['Hong Kong'],
+                'CN': ['Beijing', 'Shanghai', 'Shenzhen', 'Guangzhou', 'Hangzhou', 'Qingzhou', 'Yantai'],
+                'KP': ['Pyongyang', 'Chongjin'],
+                'IR': ['Tehran', 'Mashhad', 'Isfahan'],
+                'NG': ['Lagos', 'Abuja', 'Kano'],
+                'PK': ['Karachi', 'Lahore', 'Islamabad'],
+                'UA': ['Kyiv', 'Kharkiv', 'Odesa'],
+                'BY': ['Minsk', 'Gomel'],
+                'TR': ['Istanbul', 'Ankara', 'Izmir'],
+                'VN': ['Hanoi', 'Ho Chi Minh City']
+            };
+            const cityList = cities[country] || ['Unknown City'];
+            return cityList[Math.floor(Math.random() * cityList.length)];
+        }
+
+        function generateInitialLogs() {
+            const threats = ['low', 'medium', 'high', 'critical'];
+            const reasons = ['IP不在白名单', '异常端口', '可疑地区', '频繁请求', '正常访问'];
+            const phishingReasons = ['境外钓鱼高风险区', 'APT组织活跃区', '网络犯罪频发区'];
+            
+            for (let i = 0; i < 10; i++) {
+                const { ip, country, isPhishingHub } = getRandomIP();
+                let threat;
+                let reason;
+                let isBlocked;
+                
+                if (isPhishingHub) {
+                    threat = Math.random() < 0.5 ? 'high' : 'critical';
+                    reason = phishingReasons[Math.floor(Math.random() * phishingReasons.length)];
+                    isBlocked = true;
+                } else {
+                    threat = threats[Math.floor(Math.random() * threats.length)];
+                    isBlocked = threat !== 'low' || Math.random() < 0.2;
+                    reason = isBlocked ? reasons[Math.floor(Math.random() * 4)] : '正常访问';
+                }
+                
+                const log = {
+                    timestamp: new Date(Date.now() - Math.random() * 300000).toLocaleTimeString(),
+                    ip: ip,
+                    port: Math.floor(Math.random() * 65535) + 1,
+                    country: country,
+                    city: getRandomCity(country),
+                    threat: threat,
+                    reason: reason,
+                    blocked: isBlocked,
+                    isPhishingHub: isPhishingHub
+                };
+                
+                trafficData.logs.push(log);
+            }
+        }
+
+        function updateTrafficData() {
+            const { ip, country, isPhishingHub } = getRandomIP();
+            const threats = ['low', 'medium', 'high', 'critical'];
+            const reasons = ['IP不在白名单', '异常端口', '可疑地区', '频繁请求'];
+            const phishingReasons = ['境外钓鱼高风险区', 'APT组织活跃区', '网络犯罪频发区'];
+            
+            let threat;
+            let reason;
+            let isBlocked;
+            
+            if (isPhishingHub) {
+                threat = Math.random() < 0.5 ? 'high' : 'critical';
+                reason = phishingReasons[Math.floor(Math.random() * phishingReasons.length)];
+                isBlocked = true;
+            } else {
+                threat = threats[Math.floor(Math.random() * threats.length)];
+                isBlocked = threat !== 'low' || Math.random() < 0.2;
+                reason = isBlocked ? reasons[Math.floor(Math.random() * 4)] : '正常访问';
+            }
+            
+            trafficData.totalConnections++;
+            
+            if (isBlocked) {
+                trafficData.blockedConnections++;
+                trafficData.threatLevels[threat]++;
+                
+                if (reason === 'IP不在白名单') trafficData.blockReasons.ipNotInWhitelist++;
+                else if (reason === '异常端口') trafficData.blockReasons.abnormalPort++;
+                else if (reason === '可疑地区') trafficData.blockReasons.suspiciousRegion++;
+                else if (reason === '频繁请求') trafficData.blockReasons.frequentRequests++;
+                else trafficData.blockReasons.suspiciousRegion++;
+            } else {
+                trafficData.allowedConnections++;
+            }
+            
+            const newLog = {
+                timestamp: new Date().toLocaleTimeString(),
+                ip: ip,
+                port: Math.floor(Math.random() * 65535) + 1,
+                country: country,
+                city: getRandomCity(country),
+                threat: threat,
+                reason: reason,
+                blocked: isBlocked,
+                isPhishingHub: isPhishingHub
+            };
+            
+            trafficData.logs.unshift(newLog);
+            if (trafficData.logs.length > 10) {
+                trafficData.logs.pop();
+            }
+            
+            renderTrafficLog();
+            updateTrafficStats();
+        }
+
+        function renderTrafficLog() {
+            const logContainer = document.getElementById('trafficLog');
+            let html = '';
+            
+            trafficData.logs.forEach(log => {
+                const flag = getCountryFlag(log.country);
+                const threatClass = `threat-${log.threat}`;
+                const statusIcon = log.blocked ? '🔴' : '🟢';
+                const phishingWarning = log.isPhishingHub ? '⚠️' : '';
+                const phishingLabel = log.isPhishingHub ? '<span class="badge bg-danger ms-1">🚨钓鱼攻击高风险区</span>' : '';
+                
+                html += `
+                    <div class="log-entry ${log.blocked ? 'text-danger' : 'text-success'}">
+                        ${phishingWarning}${statusIcon} ${log.timestamp} | ${flag} ${log.ip}:${log.port} | ${log.city} | <span class="${threatClass}">${log.threat.toUpperCase()}</span> | ${log.reason}${phishingLabel}
+                    </div>
+                `;
+            });
+            
+            logContainer.innerHTML = html;
+        }
+
+        function updateTrafficStats() {
+            document.getElementById('totalConnections').textContent = trafficData.totalConnections.toLocaleString();
+            document.getElementById('allowedConnections').textContent = trafficData.allowedConnections.toLocaleString();
+            document.getElementById('blockedConnections').textContent = trafficData.blockedConnections.toLocaleString();
+            
+            document.getElementById('threatLow').textContent = trafficData.threatLevels.low;
+            document.getElementById('threatMedium').textContent = trafficData.threatLevels.medium;
+            document.getElementById('threatHigh').textContent = trafficData.threatLevels.high;
+            document.getElementById('threatCritical').textContent = trafficData.threatLevels.critical;
+            
+            document.getElementById('blockReason1').textContent = `IP不在白名单: ${trafficData.blockReasons.ipNotInWhitelist}`;
+            document.getElementById('blockReason2').textContent = `异常端口: ${trafficData.blockReasons.abnormalPort}`;
+            document.getElementById('blockReason3').textContent = `可疑地区: ${trafficData.blockReasons.suspiciousRegion}`;
+            document.getElementById('blockReason4').textContent = `频繁请求: ${trafficData.blockReasons.frequentRequests}`;
+        }
+
+        function refreshTrafficLog() {
+            updateTrafficData();
+        }
+
+        function viewBlockDetails() {
+            alert(`总拦截数: ${trafficData.blockedConnections}\n\n拦截原因分布:\n- IP不在白名单: ${trafficData.blockReasons.ipNotInWhitelist}\n- 异常端口: ${trafficData.blockReasons.abnormalPort}\n- 可疑地区: ${trafficData.blockReasons.suspiciousRegion}\n- 频繁请求: ${trafficData.blockReasons.frequentRequests}`);
+        }
+
+        function updateMarketData() {
+            const tbody = document.getElementById('marketDataTable');
+            let html = '';
+            
+            marketData.forEach(stock => {
+                const changeClass = stock.change >= 0 ? 'text-success' : 'text-danger';
+                const changeSymbol = stock.change >= 0 ? '+' : '';
+                
+                html += `
+                    <tr>
+                        <td>${stock.code}</td>
+                        <td>${stock.name}</td>
+                        <td>${stock.price.toFixed(2)}</td>
+                        <td class="${changeClass}">${changeSymbol}${stock.change.toFixed(2)}%</td>
+                        <td>${(stock.volume / 10000).toFixed(2)}万</td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        }
+
+        function calculateTechnicalIndicators() {
+            const basePrice = 155.50;
+            const randomFactor = Math.random() * 10 - 5;
+            
+            document.getElementById('ma5').textContent = (basePrice + randomFactor + 2).toFixed(2);
+            document.getElementById('ma10').textContent = (basePrice + randomFactor + 0.5).toFixed(2);
+            document.getElementById('ma20').textContent = (basePrice + randomFactor - 1.2).toFixed(2);
+            document.getElementById('rsi').textContent = (50 + Math.random() * 30).toFixed(2);
+            
+            const macdValue = (Math.random() * 6 - 3).toFixed(2);
+            document.getElementById('macd').textContent = (macdValue >= 0 ? '+' : '') + macdValue;
+            
+            document.getElementById('bbUpper').textContent = (basePrice + randomFactor + 7).toFixed(2);
+            document.getElementById('bbLower').textContent = (basePrice + randomFactor - 7).toFixed(2);
+        }
+
+        function initCharts() {
+            const strategyChart = echarts.init(document.getElementById('strategyChart'));
+            const strategyOption = {
+                title: { text: '策略分布', textStyle: { color: '#fff' } },
+                tooltip: { trigger: 'item' },
+                legend: { textStyle: { color: '#fff' } },
+                series: [{
+                    type: 'pie',
+                    radius: '60%',
+                    data: [
+                        { value: 335, name: '趋势跟踪' },
+                        { value: 234, name: '均值回归' },
+                        { value: 154, name: '统计套利' },
+                        { value: 135, name: '事件驱动' },
+                        { value: 148, name: '高频交易' }
+                    ]
+                }]
+            };
+            strategyChart.setOption(strategyOption);
+
+            const technicalChart = echarts.init(document.getElementById('technicalChart'));
+            const technicalOption = {
+                title: { text: '价格走势', textStyle: { color: '#fff' } },
                 tooltip: { trigger: 'axis' },
+                xAxis: {
+                    type: 'category',
+                    data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                series: [{
+                    data: [150, 152, 148, 155, 158, 162],
+                    type: 'line',
+                    smooth: true
+                }]
+            };
+            technicalChart.setOption(technicalOption);
+
+            const mlChart = echarts.init(document.getElementById('mlOptimizationChart'));
+            const mlOption = {
+                title: { text: 'ML优化效果', textStyle: { color: '#fff' } },
+                tooltip: { trigger: 'axis' },
+                xAxis: {
+                    type: 'category',
+                    data: ['周一', '周二', '周三', '周四', '周五'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
                 series: [
                     {
-                        name: '贡献度',
-                        type: 'pie',
-                        radius: ['40%', '70%'],
-                        data: [
-                            { value: 65.6, name: '策略选择', itemStyle: { color: '#4ecdc4' } },
-                            { value: 28.0, name: '择时', itemStyle: { color: '#ff6b6b' } },
-                            { value: 6.4, name: '风险管理', itemStyle: { color: '#ffc107' } }
-                        ]
+                        name: '优化前',
+                        type: 'line',
+                        data: [120, 132, 101, 134, 90],
+                        lineStyle: { type: 'dashed' }
+                    },
+                    {
+                        name: '优化后',
+                        type: 'line',
+                        data: [120, 142, 131, 148, 120]
                     }
                 ]
             };
-            attributionChart.setOption(option);
-        }
+            mlChart.setOption(mlOption);
 
-        function updateRiskHeatmap() {
-            const assets = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'BTC', 'ETH'];
-            const dummyData = [];
-            for (let i = 0; i < 6; i++) {
-                for (let j = 0; j < 6; j++) {
-                    dummyData.push([i, j, Math.random() * (i === j ? 1 : 0.6)]);
-                }
-            }
-            
-            riskHeatmapChart.setOption({
-                title: { text: '资产相关性热力图', left: 'center' },
+            const comparisonChart = echarts.init(document.getElementById('strategyComparisonChart'));
+            const comparisonOption = {
+                title: { text: '策略收益对比', textStyle: { color: '#fff' } },
+                tooltip: { trigger: 'axis' },
+                legend: { textStyle: { color: '#fff' } },
+                xAxis: {
+                    type: 'category',
+                    data: ['策略A', '策略B', '策略C', '策略D', '策略E'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                series: [{
+                    type: 'bar',
+                    data: [
+                        { value: 23.5, itemStyle: { color: '#3498db' } },
+                        { value: 18.7, itemStyle: { color: '#2ecc71' } },
+                        { value: 15.3, itemStyle: { color: '#9b59b6' } },
+                        { value: 12.8, itemStyle: { color: '#e67e22' } },
+                        { value: 9.4, itemStyle: { color: '#e74c3c' } }
+                    ]
+                }]
+            };
+            comparisonChart.setOption(comparisonOption);
+
+            const attributionChart = echarts.init(document.getElementById('performanceAttributionChart'));
+            const attributionOption = {
+                title: { text: '收益归因', textStyle: { color: '#fff' } },
+                tooltip: { trigger: 'item' },
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    data: [
+                        { value: 35, name: '选股' },
+                        { value: 25, name: '择时' },
+                        { value: 20, name: '风控' },
+                        { value: 15, name: '费用' },
+                        { value: 5, name: '其他' }
+                    ]
+                }]
+            };
+            attributionChart.setOption(attributionOption);
+
+            const heatmapChart = echarts.init(document.getElementById('riskHeatmapChart'));
+            const heatmapOption = {
+                title: { text: '行业风险热力图', textStyle: { color: '#fff' } },
                 tooltip: { position: 'top' },
-                grid: { height: '50%', top: '15%' },
-                xAxis: { type: 'category', data: assets },
-                yAxis: { type: 'category', data: assets },
-                visualMap: { min: 0, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: '5%' },
+                xAxis: {
+                    type: 'category',
+                    data: ['金融', '科技', '消费', '医疗', '能源'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: ['周一', '周二', '周三', '周四', '周五'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                visualMap: {
+                    min: 0,
+                    max: 100,
+                    calculable: true,
+                    orient: 'horizontal',
+                    left: 'center',
+                    bottom: '0%',
+                    inRange: { color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'] }
+                },
                 series: [{
+                    name: '风险值',
                     type: 'heatmap',
-                    data: dummyData,
-                    label: { show: true },
-                    emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } }
+                    data: [
+                        [0, 0, 45], [0, 1, 52], [0, 2, 38], [0, 3, 61], [0, 4, 55],
+                        [1, 0, 68], [1, 1, 73], [1, 2, 81], [1, 3, 76], [1, 4, 69],
+                        [2, 0, 34], [2, 1, 41], [2, 2, 37], [2, 3, 44], [2, 4, 39],
+                        [3, 0, 58], [3, 1, 63], [3, 2, 71], [3, 3, 65], [3, 4, 59],
+                        [4, 0, 82], [4, 1, 88], [4, 2, 91], [4, 3, 85], [4, 4, 79]
+                    ]
                 }]
-            });
-        }
+            };
+            heatmapChart.setOption(heatmapOption);
 
-        function updateWalkForward() {
-            const now = new Date();
-            const data = [];
-            let equity = 1.0;
-            for (let i = 90; i >= 0; i--) {
-                const date = new Date(now);
-                date.setDate(date.getDate() - i);
-                equity *= (1 + (Math.random() - 0.48) * 0.02);
-                data.push([date.getTime(), equity]);
-            }
-            
-            walkForwardChart.setOption({
-                title: { text: '滚动回测净值曲线', left: 'center' },
+            const backtestChart = echarts.init(document.getElementById('rollingBacktestChart'));
+            const backtestOption = {
+                title: { text: '滚动回测收益', textStyle: { color: '#fff' } },
                 tooltip: { trigger: 'axis' },
-                xAxis: { type: 'time' },
-                yAxis: { type: 'value', min: 0.8 },
+                xAxis: {
+                    type: 'category',
+                    data: ['2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
                 series: [{
-                    data: data,
+                    data: [100, 105, 103, 112, 118, 125],
                     type: 'line',
-                    smooth: true,
-                    lineStyle: { color: '#28a745', width: 2 },
-                    areaStyle: { color: 'rgba(40, 167, 69, 0.2)' }
+                    areaStyle: { color: 'rgba(52, 152, 219, 0.3)' }
                 }]
-            });
-        }
+            };
+            backtestChart.setOption(backtestOption);
 
-        // 🔝 新增：调用顶级可视化初始化
-        initProfessionalVisualization();
-        // ML网格图表配置
-        const mlGridOption = {
-            title: { text: '动态网格调整', left: 'center', textStyle: { fontSize: 14 } },
-            tooltip: { trigger: 'axis' },
-            legend: { data: ['上界', '下界'], top: 30 },
-            xAxis: { type: 'value', name: '网格层数' },
-            yAxis: { type: 'value', name: '价格偏差(%)' },
-            series: [
-                { name: '上界', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } },
-                { name: '下界', data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } }
-            ]
-        };
-        mlGridChart.setOption(mlGridOption);
-
-        // 图表配置
-        const priceOption = {
-            title: { text: '价格走势', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } }]
-        };
-
-        const performanceOption = {
-            title: { text: '账户余额', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } }]
-        };
-
-        const rsiOption = {
-            title: { text: 'RSI', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value', min: 0, max: 100 },
-            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }]
-        };
-
-        const macdOption = {
-            title: { text: 'MACD', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [{ data: [], type: 'bar', smooth: true }]
-        };
-
-        const bollingerOption = {
-            title: { text: '布林带', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [
-                { name: '上轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b', type: 'dashed' } },
-                { name: '中轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#4ecdc4' } },
-                { name: '下轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b', type: 'dashed' } },
-                { name: '价格', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } }
-            ],
-            legend: { data: ['上轨', '中轨', '下轨', '价格'], top: 30 }
-        };
-
-        const kdjOption = {
-            title: { text: 'KDJ', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value', min: 0, max: 100 },
-            series: [
-                { name: 'K', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } },
-                { name: 'D', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } },
-                { name: 'J', data: [], type: 'line', smooth: true, lineStyle: { color: '#4ecdc4' } }
-            ],
-            legend: { data: ['K', 'D', 'J'], top: 30 }
-        };
-
-        const strategyComparisonOption = {
-            title: { text: '策略收益率对比', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            legend: { data: ['傅里叶强化学习', '市场自适应网格', '机器学习网格'], top: 30 },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
-            series: [
-                { name: '傅里叶强化学习', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } },
-                { name: '市场自适应网格', data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } },
-                { name: '机器学习网格', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }
-            ]
-        };
-
-        priceChart.setOption(priceOption);
-        performanceChart.setOption(performanceOption);
-        rsiChart.setOption(rsiOption);
-        macdChart.setOption(macdOption);
-        strategyComparisonChart.setOption(strategyComparisonOption);
-
-        // 加载用户信息
-        function loadUserInfo() {
-            fetch('/api/user-info')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        document.getElementById('user-username').textContent = data.user.username;
-                        document.getElementById('user-role').textContent = data.user.role === 'admin' ? '管理员' : '普通用户';
-                        if (data.user.role === 'admin') {
-                            document.getElementById('admin-user-management').style.display = 'block';
-                            loadUserList();
-                        }
-                    }
-                });
-        }
-
-        // 加载用户列表
-        function loadUserList() {
-            fetch('/api/users')
-                .then(response => response.json())
-                .then(data => {
-                    if (!data.error) {
-                        const userList = document.getElementById('user-list');
-                        userList.innerHTML = '';
-                        data.users.forEach(user => {
-                            const div = document.createElement('div');
-                            div.className = 'user-item d-flex justify-content-between align-items-center p-2 border-bottom';
-                            div.innerHTML = `
-                                <div>
-                                    <strong>${user.username}</strong> - ${user.role} - ${user.email}
-                                    <div class="text-muted">状态: ${user.status} | 最后登录: ${user.last_login || '从未'}</div>
-                                </div>
-                                <div class="btn-group">
-                                    <button class="btn btn-sm btn-primary" onclick="resetUserPassword('${user.username}')">重置密码</button>
-                                    ${user.status === 'active' ? 
-                                        `<button class="btn btn-sm btn-warning" onclick="disableUser('${user.username}')">禁用</button>` : 
-                                        `<button class="btn btn-sm btn-success" onclick="enableUser('${user.username}')">启用</button>`}
-                                    ${user.username !== 'admin' ? 
-                                        `<button class="btn btn-sm btn-danger" onclick="deleteUser('${user.username}')">删除</button>` : ''}
-                                </div>
-                            `;
-                            userList.appendChild(div);
-                        });
-                    }
-                });
-        }
-
-        // 重置用户密码
-        function resetUserPassword(username) {
-            const newPassword = prompt(`请输入${username}的新密码：`);
-            if (newPassword) {
-                fetch(`/api/users/${username}/reset-password`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
-                    body: JSON.stringify({ new_password: newPassword })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    alert(data.success ? '密码重置成功' : '密码重置失败: ' + data.message);
-                });
-            }
-        }
-
-        // 禁用用户
-        function disableUser(username) {
-            if (confirm(`确定要禁用用户 ${username} 吗？`)) {
-                fetch(`/api/users/${username}/disable`, {
-                    method: 'POST',
-                    headers: { 'X-Session-ID': localStorage.getItem('session_id') }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('用户已禁用');
-                        loadUserList();
-                    }
-                });
-            }
-        }
-
-        // 启用用户
-        function enableUser(username) {
-            if (confirm(`确定要启用用户 ${username} 吗？`)) {
-                fetch(`/api/users/${username}/enable`, {
-                    method: 'POST',
-                    headers: { 'X-Session-ID': localStorage.getItem('session_id') }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('用户已启用');
-                        loadUserList();
-                    }
-                });
-            }
-        }
-
-        // 删除用户
-        function deleteUser(username) {
-            if (confirm(`确定要删除用户 ${username} 吗？`)) {
-                fetch(`/api/users/${username}`, {
-                    method: 'DELETE',
-                    headers: { 'X-Session-ID': localStorage.getItem('session_id') }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('用户已删除');
-                        loadUserList();
-                    }
-                });
-            }
-        }
-
-        // 添加用户
-        document.getElementById('add-user-btn').addEventListener('click', function() {
-            const username = document.getElementById('new-user-username').value;
-            const password = document.getElementById('new-user-password').value;
-            const email = document.getElementById('new-user-email').value;
-
-            if (!username || !password || !email) {
-                alert('请填写所有必填字段');
-                return;
-            }
-
-            fetch('/api/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
-                body: JSON.stringify({ username: username, password: password, email: email })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('用户添加成功');
-                    document.getElementById('new-user-username').value = '';
-                    document.getElementById('new-user-password').value = '';
-                    document.getElementById('new-user-email').value = '';
-                    loadUserList();
-                } else {
-                    alert('添加失败: ' + data.message);
-                }
-            });
-        });
-
-        // 修改密码
-        document.getElementById('change-password-btn').addEventListener('click', function() {
-            new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
-        });
-
-        document.getElementById('confirm-change-password').addEventListener('click', function() {
-            const oldPassword = document.getElementById('old-password').value;
-            const newPassword = document.getElementById('new-password').value;
-
-            fetch('/api/auth/change-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
-                body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('密码修改成功，请重新登录');
-                    localStorage.removeItem('session_id');
-                    localStorage.removeItem('user');
-                    document.cookie = 'session_id=; path=/; max-age=0';
-                    window.location.href = '/';
-                } else {
-                    alert('密码修改失败: ' + data.message);
-                }
-            });
-        });
-
-        // 登出
-        document.getElementById('logout-btn').addEventListener('click', function() {
-            if (confirm('确定要登出吗？')) {
-                fetch('/api/auth/logout', {
-                    method: 'POST',
-                    headers: { 'X-Session-ID': localStorage.getItem('session_id') }
-                })
-                .then(() => {
-                    localStorage.removeItem('session_id');
-                    localStorage.removeItem('user');
-                    document.cookie = 'session_id=; path=/; max-age=0';
-                    window.location.href = '/';
-                });
-            }
-        });
-
-        // 更新市场数据
-        function updateMarketData() {
-            fetch('/api/market-data')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        const prices = data.map(item => [new Date(item.timestamp).getTime(), item.price]);
-                        priceChart.setOption({ series: [{ data: prices }] });
-
-                        const latest = data[data.length - 1];
-                        document.getElementById('current-price').textContent = latest.price.toFixed(2);
-                        document.getElementById('current-time').textContent = new Date(latest.timestamp).toLocaleTimeString();
-                        document.getElementById('current-volume').textContent = latest.volume;
-
-                        if (data.length > 20) {
-                            const recentPrices = data.slice(-20).map(d => d.price);
-                            const returns = [];
-                            for (let i = 1; i < recentPrices.length; i++) {
-                                returns.push((recentPrices[i] - recentPrices[i-1]) / recentPrices[i-1]);
-                            }
-                            const volatility = Math.sqrt(returns.reduce((sum, r) => sum + r * r, 0) / returns.length) * 100;
-                            document.getElementById('current-volatility').textContent = volatility.toFixed(2) + '%';
-                        }
-                    }
-                });
-        }
-
-        // 更新性能数据
-        function updatePerformanceData() {
-            fetch('/api/performance-data')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        const balances = data.map(item => [new Date(item.timestamp).getTime(), item.balance]);
-                        performanceChart.setOption({ series: [{ data: balances }] });
-                    }
-                });
-        }
-
-        // 更新策略状态
-        function updateStrategyStatus() {
-            fetch('/api/strategy-status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'running') {
-                        document.querySelector('.status-indicator').className = 'status-indicator status-running';
-                        document.querySelector('#strategy-status span:nth-child(2)').textContent = `策略状态：运行中 (${data.strategy})`;
-
-                        if (data.performance) {
-                            document.getElementById('total-return').textContent = `${(data.performance.total_return * 100).toFixed(2)}%`;
-                            document.getElementById('current-balance').textContent = data.performance.balance.toFixed(2);
-                            document.getElementById('total-trades').textContent = data.performance.total_trades;
-                        }
-                        document.getElementById('current-position').textContent = data.position;
-
-                        if (data.market_state && data.market_state.dual_dimension) {
-                            const dual = data.market_state.dual_dimension;
-                            document.getElementById('hmm-state').textContent = dual.hmm_label;
-                            document.getElementById('trend-type').textContent = dual.trend_label;
-                            document.getElementById('recommended-signal').textContent = dual.signal;
-                            document.getElementById('recommended-position').textContent = (dual.recommended_position_ratio * 100).toFixed(0) + '%';
-                            document.getElementById('recommended-strategy').textContent = dual.recommended_strategy;
-                            document.getElementById('decision-description').textContent = dual.description;
-                        }
-                        if (data.market_state) {
-                            document.getElementById('regime-label').textContent = data.market_state.regime_label || '--';
-                        }
-                    } else {
-                        document.querySelector('.status-indicator').className = 'status-indicator status-stopped';
-                        document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
-                    }
-                });
-        }
-
-        // 更新技术分析指标
-        function updateTechnicalIndicators() {
-            fetch('/api/technical-indicators')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.indicators) {
-                        const grid = document.getElementById('indicators-grid');
-                        grid.innerHTML = '';
-
-                        const groups = {
-                            '趋势指标': ['ma5', 'ma10', 'ma20', 'ma50', 'ema12', 'ema26'],
-                            '动量指标': ['rsi14', 'k', 'd', 'j', 'macd', 'signal'],
-                            '波动指标': ['atr14', 'upper', 'middle', 'lower'],
-                            '成交量指标': ['volume_ma5', 'volume_ma20', 'obv'],
-                            '其他指标': ['adx', 'cci', 'roc']
-                        };
-
-                        Object.entries(groups).forEach(([groupName, indicators]) => {
-                            const groupDiv = document.createElement('div');
-                            groupDiv.className = 'col-md-4 indicator-group';
-                            groupDiv.innerHTML = `<div class="indicator-group-title">${groupName}</div>`;
-
-                            indicators.forEach(ind => {
-                                if (data.indicators[ind] !== undefined) {
-                                    const val = typeof data.indicators[ind] === 'number' ? data.indicators[ind].toFixed(2) : data.indicators[ind];
-                                    const span = document.createElement('span');
-                                    span.className = 'indicator-value';
-                                    span.innerHTML = `<strong>${ind.toUpperCase()}</strong>: ${val}`;
-                                    groupDiv.appendChild(span);
-                                }
-                            });
-
-                            grid.appendChild(groupDiv);
-                        });
-
-                        if (data.full_indicators && data.full_indicators.rsi14) {
-                            const rsiData = [];
-                            data.price_data.forEach((item, i) => {
-                                if (data.full_indicators.rsi14[i] !== null) {
-                                    rsiData.push([new Date(item.timestamp).getTime(), data.full_indicators.rsi14[i]]);
-                                }
-                            });
-                            rsiChart.setOption({
-                                series: [{ data: rsiData, type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }],
-                                yAxis: { type: 'value', min: 0, max: 100 }
-                            });
-                        }
-
-                        if (data.full_indicators && data.full_indicators.histogram) {
-                            const macdData = [];
-                            data.price_data.forEach((item, i) => {
-                                if (data.full_indicators.histogram[i] !== null) {
-                                    macdData.push([new Date(item.timestamp).getTime(), data.full_indicators.histogram[i]]);
-                                }
-                            });
-                            macdChart.setOption({
-                                series: [{ data: macdData, type: 'bar', itemStyle: { color: function(p) { return p.value >= 0 ? '#28a745' : '#dc3545'; } } }]
-                            });
-                        }
-                    }
-                });
-        }
-
-        // 更新风控模块
-        function updateRiskControl() {
-            fetch('/api/risk-control/status')
-                .then(response => response.json())
-                .then(data => {
-                    // 更新金字塔防钓鱼系统
-                    const pyramid = data.pyramid_defense;
-                    document.getElementById('pyramid-risk-value').textContent = pyramid.risk_score;
-                    document.getElementById('pyramid-risk-meter').style.width = pyramid.risk_score + '%';
-
-                    // 更新风险等级颜色
-                    let levelClass = 'bg-success';
-                    if (pyramid.risk_level === 'medium_low') levelClass = 'bg-info';
-                    else if (pyramid.risk_level === 'medium') levelClass = 'bg-warning';
-                    else if (pyramid.risk_level === 'high') levelClass = 'bg-danger';
-                    else if (pyramid.risk_level === 'critical') levelClass = 'bg-dark';
-                    document.getElementById('pyramid-risk-level').className = `badge ${levelClass}`;
-                    document.getElementById('pyramid-risk-level').textContent = pyramid.risk_level === 'low' ? '正常' :
-                        pyramid.risk_level === 'medium_low' ? '关注' :
-                        pyramid.risk_level === 'medium' ? '警告' :
-                        pyramid.risk_level === 'high' ? '高危' : '熔断';
-
-                    document.getElementById('pyramid-circuit-breaker').className = pyramid.circuit_breaker ? 'badge bg-danger' : 'badge bg-secondary';
-                    document.getElementById('pyramid-circuit-breaker').textContent = pyramid.circuit_breaker ? '已触发' : '未触发';
-
-                    // 更新各层得分
-                    if (pyramid.layer_scores) {
-                        document.getElementById('layer1-score').textContent = pyramid.layer_scores.layer1_network || 0;
-                        document.getElementById('layer2-score').textContent = pyramid.layer_scores.layer2_identity || 0;
-                        document.getElementById('layer3-score').textContent = pyramid.layer_scores.layer3_behavior || 0;
-                        document.getElementById('layer4-score').textContent = pyramid.layer_scores.layer4_transaction || 0;
-                        document.getElementById('layer5-score').textContent = pyramid.layer_scores.layer5_risk || 0;
-                    }
-
-                    // 更新风控指标
-                    const metrics = data.risk_metrics;
-                    document.getElementById('total-risk-value').textContent = metrics.total_risk_score;
-                    document.getElementById('total-risk-meter').style.width = metrics.total_risk_score + '%';
-                    document.getElementById('max-drawdown').textContent = metrics.max_drawdown + '%';
-                    document.getElementById('sharpe-ratio').textContent = metrics.sharpe_ratio;
-                    document.getElementById('var-95').textContent = metrics.var_95 + '%';
-                    document.getElementById('stop-loss-line').textContent = metrics.stop_loss_line + '%';
-                    document.getElementById('risk-exposure').textContent = metrics.risk_exposure + '%';
-                    document.getElementById('volatility-risk').textContent = metrics.volatility_risk;
-                    document.getElementById('leverage-usage').textContent = metrics.leverage_usage + 'x';
-                });
-        }
-
-        // 更新机器学习网格数据
-        function updateMLGridData() {
-            fetch('/api/ml-grid/data')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('volatility-level').textContent = data.volatility_level;
-                    document.getElementById('dynamic-grid-spacing').textContent = data.dynamic_grid_spacing.toFixed(4) + '%';
-                    document.getElementById('prediction-confidence').textContent = data.prediction_confidence + '%';
-                    document.getElementById('model-accuracy').textContent = data.model_accuracy + '%';
-                    document.getElementById('market-state-prediction').textContent = data.market_state_prediction;
-                    document.getElementById('optimal-position').textContent = data.optimal_position_suggestion + '%';
-                    document.getElementById('grid-levels').textContent = data.grid_levels;
-                    document.getElementById('training-samples').textContent = data.training_samples;
-
-                    if (data.grid_chart_data) {
-                        mlGridChart.setOption({
-                            series: [
-                                { name: '上界', data: data.grid_chart_data.levels.map((l, i) => [l, data.grid_chart_data.upper_bounds[i]]) },
-                                { name: '下界', data: data.grid_chart_data.levels.map((l, i) => [l, data.grid_chart_data.lower_bounds[i]]) }
-                            ]
-                        });
-                    }
-                });
-        }
-
-        // 人工干预
-        document.getElementById('manual-risk-btn').addEventListener('click', function() {
-            const action = prompt('输入人工干预操作：\n1. increase_risk - 提高风险\n2. decrease_risk - 降低风险');
-            if (action) {
-                fetch('/api/risk-control/manual', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    alert(data.message);
-                    updateRiskControl();
-                });
-            }
-        });
-
-        // 重置熔断
-        document.getElementById('reset-fuse-btn').addEventListener('click', function() {
-            fetch('/api/risk-control/manual', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reset_circuit_breaker' })
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(data.message);
-                updateRiskControl();
-            });
-        });
-
-        // 西部宽客图表初始化
-        let westquantKlineChart = null;
-        let westquantIndicatorsChart = null;
-        
-        function initWestquantCharts() {
-            if (!document.getElementById('westquant-kline-chart')) return;
-            
-            westquantKlineChart = echarts.init(document.getElementById('westquant-kline-chart'));
-            westquantIndicatorsChart = echarts.init(document.getElementById('westquant-indicators-chart'));
-            
-            const now = new Date();
-            const klineData = [];
-            const indicatorData = [];
-            let basePrice = 50000;
-            
-            for (let i = 100; i >= 0; i--) {
-                const time = new Date(now.getTime() - i * 60 * 60 * 1000);
-                const change = (Math.random() - 0.5) * 2;
-                basePrice = basePrice * (1 + change / 100);
-                
-                klineData.push([
-                    time.getTime(),
-                    basePrice * (1 - Math.random() * 0.5 / 100),
-                    basePrice * (1 + Math.random() * 0.5 / 100),
-                    basePrice * (1 - Math.random() * 0.3 / 100),
-                    basePrice * (1 + Math.random() * 0.3 / 100)
-                ]);
-                
-                indicatorData.push([time.getTime(), 30 + Math.random() * 40]);
-            }
-            
-            westquantKlineChart.setOption({
-                title: { text: '西部宽客K线图', left: 'center' },
+            const westernChart = echarts.init(document.getElementById('westernQuantChart'));
+            const westernOption = {
+                title: { text: '技术指标综合', textStyle: { color: '#fff' } },
                 tooltip: { trigger: 'axis' },
-                xAxis: { type: 'time' },
-                yAxis: { type: 'value' },
-                series: [{ type: 'candlestick', data: klineData }]
-            });
-            
-            westquantIndicatorsChart.setOption({
-                title: { text: '综合技术指标', left: 'center' },
-                tooltip: { trigger: 'axis' },
-                legend: { data: ['RSI', 'MACD'], top: 30 },
-                xAxis: { type: 'time' },
-                yAxis: { type: 'value' },
+                legend: { textStyle: { color: '#fff' } },
+                xAxis: {
+                    type: 'category',
+                    data: ['9:30', '10:30', '11:30', '13:00', '14:00', '15:00'],
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#fff' } }
+                },
                 series: [
-                    { name: 'RSI', type: 'line', data: indicatorData, lineStyle: { color: '#ff6b6b' } },
-                    { name: 'MACD', type: 'bar', data: indicatorData.map(d => [d[0], (Math.random() - 0.5) * 2]) }
+                    { name: '价格', type: 'line', data: [155, 156, 154, 158, 160, 162] },
+                    { name: 'MA5', type: 'line', data: [154, 155, 155, 156, 157, 158], lineStyle: { type: 'dashed' } },
+                    { name: 'MA20', type: 'line', data: [150, 151, 151, 152, 153, 154], lineStyle: { type: 'dotted' } }
                 ]
+            };
+            westernChart.setOption(westernOption);
+
+            window.addEventListener('resize', function() {
+                strategyChart.resize();
+                technicalChart.resize();
+                mlChart.resize();
+                comparisonChart.resize();
+                attributionChart.resize();
+                heatmapChart.resize();
+                backtestChart.resize();
+                westernChart.resize();
             });
+        }
+
+        function loadStockPool() {
+            const tbody = document.getElementById('stockPoolTable');
+            const stocks = [
+                { code: '600519', name: '贵州茅台', score: 95, status: '买入' },
+                { code: '000858', name: '五粮液', score: 88, status: '持有' },
+                { code: '601318', name: '中国平安', score: 82, status: '持有' },
+                { code: '600036', name: '招商银行', score: 79, status: '观望' },
+                { code: '000001', name: '平安银行', score: 75, status: '观望' }
+            ];
             
-            document.getElementById('westquant-win-rate').textContent = '68%';
-            document.getElementById('westquant-profit-ratio').textContent = '2.3:1';
-            document.getElementById('westquant-signal-strength').textContent = '强';
-            document.getElementById('westquant-risk-level').textContent = '低';
+            let html = '';
+            stocks.forEach(stock => {
+                const statusClass = stock.status === '买入' ? 'bg-success' : (stock.status === '持有' ? 'bg-info' : 'bg-warning');
+                html += `
+                    <tr>
+                        <td>${stock.code}</td>
+                        <td>${stock.name}</td>
+                        <td>${stock.score}</td>
+                        <td><span class="badge ${statusClass}">${stock.status}</span></td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
         }
 
-        // 系统切换
-        document.getElementById('switch-system-btn').addEventListener('click', function() {
-            const system = document.getElementById('analysis-system-select').value;
-            const mode = document.getElementById('trading-mode-select').value;
+        function loadStrategyPortfolio() {
+            const tbody = document.getElementById('strategyPortfolioTable');
+            const strategies = [
+                { name: '趋势跟踪v2', weight: 35, return: 23.5, status: '运行中' },
+                { name: '均值回归v1', weight: 25, return: 18.7, status: '运行中' },
+                { name: '统计套利v3', weight: 20, return: 15.3, status: '暂停' },
+                { name: '事件驱动v2', weight: 15, return: 12.8, status: '运行中' },
+                { name: '高频策略v1', weight: 5, return: 9.4, status: '运行中' }
+            ];
             
-            if (system === 'westquant') {
-                if (mode === 'live') {
-                    const apiKey = prompt('请输入西部宽客API密钥：');
-                    const apiSecret = prompt('请输入西部宽客API密钥密码：');
-                    
-                    if (apiKey && apiSecret) {
-                        localStorage.setItem('xbk_api_key', apiKey);
-                        localStorage.setItem('xbk_api_secret', apiSecret);
-                        localStorage.setItem('xbk_trading_mode', 'live');
-                        
-                        document.getElementById('system-status').innerHTML = 
-                            '<span class="badge bg-info">当前系统：西部宽客技术分析系统</span>' +
-                            '<span class="badge bg-danger ms-2">交易模式：实盘交易</span>';
-                        
-                        document.getElementById('westquant-analysis').style.display = 'block';
-                        initWestquantCharts();
-                    } else {
-                        alert('请输入有效的API密钥');
-                    }
-                } else {
-                    localStorage.setItem('xbk_trading_mode', 'sim');
-                    document.getElementById('system-status').innerHTML = 
-                        '<span class="badge bg-info">当前系统：西部宽客技术分析系统</span>' +
-                        '<span class="badge bg-secondary ms-2">交易模式：模拟交易</span>';
-                    
-                    document.getElementById('westquant-analysis').style.display = 'block';
-                    initWestquantCharts();
-                }
-            } else {
-                localStorage.setItem('xbk_trading_mode', 'sim');
-                document.getElementById('system-status').innerHTML = 
-                    '<span class="badge bg-success">当前系统：Aurora量化交易系统</span>' +
-                    '<span class="badge bg-secondary ms-2">交易模式：模拟交易</span>';
-                
-                document.getElementById('westquant-analysis').style.display = 'none';
-            }
-        });
-
-        // 更新股票池
-        function updateStockPool() {
-            fetch('/api/stock-pool')
-                .then(response => response.json())
-                .then(data => {
-                    const list = document.getElementById('stock-list');
-                    list.innerHTML = '';
-                    data.stocks.forEach(stock => {
-                        const div = document.createElement('div');
-                        div.className = 'stock-item d-flex justify-content-between align-items-center';
-                        div.innerHTML = `
-                            <div>
-                                <strong>${stock.symbol}</strong> - ${stock.name}
-                                <div class="text-muted">${stock.status} | 添加时间: ${new Date(stock.added_time).toLocaleString()}</div>
-                            </div>
-                            <div class="btn-group">
-                                <button class="btn btn-sm btn-success" onclick="moveToTrading('${stock.symbol}')">加入交易</button>
-                                <button class="btn btn-sm btn-danger" onclick="removeStock('${stock.symbol}')">移除</button>
-                            </div>
-                        `;
-                        list.appendChild(div);
-                    });
-                });
+            let html = '';
+            strategies.forEach(strategy => {
+                const statusClass = strategy.status === '运行中' ? 'bg-success' : 'bg-secondary';
+                const returnClass = strategy.return >= 15 ? 'text-success' : 'text-warning';
+                html += `
+                    <tr>
+                        <td>${strategy.name}</td>
+                        <td>${strategy.weight}%</td>
+                        <td class="${returnClass}">+${strategy.return}%</td>
+                        <td><span class="badge ${statusClass}">${strategy.status}</span></td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
         }
 
-        // 更新交易池
-        function updateTradingPool() {
-            fetch('/api/trading-pool')
-                .then(response => response.json())
-                .then(data => {
-                    const list = document.getElementById('trade-list');
-                    list.innerHTML = '';
-                    data.open_trades.forEach(trade => {
-                        const pnlClass = trade.pnl >= 0 ? 'trade-profit' : 'trade-loss';
-                        const div = document.createElement('div');
-                        div.className = 'trade-item d-flex justify-content-between align-items-center';
-                        div.innerHTML = `
-                            <div>
-                                <strong>${trade.symbol}</strong> - ${trade.strategy_type}
-                                <div class="text-muted">开仓价: ${trade.entry_price} | 数量: ${trade.quantity}</div>
-                            </div>
-                            <div>
-                                <span class="${pnlClass}">${(trade.pnl * 100).toFixed(2)}%</span>
-                                <button class="btn btn-sm btn-warning ms-2" onclick="closeTrade('${trade.symbol}')">平仓</button>
-                            </div>
-                        `;
-                        list.appendChild(div);
-                    });
-                });
+        function applyChanges() {
+            const deepseek = document.getElementById('switchDeepSeek').checked;
+            const claude = document.getElementById('switchClaude').checked;
+            const autoTrade = document.getElementById('switchAutoTrade').checked;
+            
+            alert(`配置已更新:\n- DeepSeek AI: ${deepseek ? '启用' : '禁用'}\n- Claude: ${claude ? '启用' : '禁用'}\n- 自动交易: ${autoTrade ? '启用' : '禁用'}`);
         }
 
-        // 移动到交易池
-        function moveToTrading(symbol) {
-            fetch('/api/stock-pool/move-to-trading', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol, strategy_type: 'default' })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updateStockPool();
-                    updateTradingPool();
-                }
-            });
+        function updatePerformance() {
+            const totalReturn = (Math.random() * 10 + 20).toFixed(2);
+            const winRate = (60 + Math.random() * 15).toFixed(1);
+            const sharpeRatio = (1.5 + Math.random() * 1.5).toFixed(2);
+            const maxDrawdown = (-Math.random() * 5 - 5).toFixed(2);
+            
+            document.getElementById('totalReturn').textContent = `+${totalReturn}%`;
+            document.getElementById('winRate').textContent = `${winRate}%`;
+            document.getElementById('sharpeRatio').textContent = sharpeRatio;
+            document.getElementById('maxDrawdown').textContent = `${maxDrawdown}%`;
         }
 
-        // 移除股票
-        function removeStock(symbol) {
-            fetch('/api/stock-pool/remove', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) updateStockPool();
-            });
+        function startRealTimeUpdates() {
+            setInterval(() => {
+                marketData = marketData.map(stock => ({
+                    ...stock,
+                    price: stock.price * (1 + (Math.random() * 0.02 - 0.01)),
+                    change: stock.change + (Math.random() * 0.4 - 0.2),
+                    volume: stock.volume + Math.floor(Math.random() * 50000 - 25000)
+                }));
+                updateMarketData();
+                calculateTechnicalIndicators();
+                updatePerformance();
+            }, 3000);
+
+            setInterval(() => {
+                updateTrafficData();
+            }, 5000);
         }
 
-        // 平仓
-        function closeTrade(symbol) {
-            fetch('/api/trading-pool/close', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) updateTradingPool();
-            });
-        }
-
-        // 添加股票
-        document.getElementById('add-stock-btn').addEventListener('click', function() {
-            const symbol = document.getElementById('new-stock-symbol').value;
-            const name = document.getElementById('new-stock-name').value;
-
-            fetch('/api/stock-pool/add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol, name: name })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('new-stock-symbol').value = '';
-                    document.getElementById('new-stock-name').value = '';
-                    updateStockPool();
-                } else {
-                    alert(data.error);
-                }
-            });
-        });
-
-        // 事件绑定
-        document.getElementById('start-btn').addEventListener('click', function() {
-            const strategy = document.getElementById('strategy-select').value;
-            const balance = parseFloat(document.getElementById('initial-balance').value);
-
-            fetch('/api/start-strategy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) alert(data.message);
-                else alert('启动失败: ' + data.error);
-            });
-        });
-
-        document.getElementById('stop-btn').addEventListener('click', function() {
-            fetch('/api/stop-strategy')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) alert(data.message);
-                });
-        });
-
-        document.getElementById('backtest-btn').addEventListener('click', function() {
-            const strategy = document.getElementById('strategy-select').value;
-            const balance = parseFloat(document.getElementById('initial-balance').value);
-
-            alert('开始回测，请稍候...');
-            fetch('/api/backtest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance, days: 30 })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`回测完成！收益率: ${(data.performance.total_return * 100).toFixed(2)}%`);
-                    updateStrategyStatus();
-                }
-            });
-        });
-
-        // 加载模型版本
-        function loadModelVersions() {
-            fetch('/api/model-versions')
-                .then(response => response.json())
-                .then(versions => {
-                    const list = document.getElementById('version-list');
-                    list.innerHTML = '';
-                    versions.forEach(version => {
-                        const div = document.createElement('div');
-                        div.className = 'p-2 border-bottom';
-                        div.innerHTML = `
-                            <div><strong>${version.version_id}</strong></div>
-                            <div class="text-sm text-muted">${version.timestamp}</div>
-                            <div class="text-sm">${version.description || ''}</div>
-                        `;
-                        list.appendChild(div);
-                    });
-                });
-        }
-
-        let selectedVersionId = null;
-
-        document.getElementById('save-model-btn').addEventListener('click', function() {
-            const description = document.getElementById('save-description').value;
-            fetch('/api/save-model', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description: description })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    loadModelVersions();
-                }
-            });
-        });
-
-        document.getElementById('load-model-btn').addEventListener('click', function() {
-            if (selectedVersionId) {
-                fetch('/api/load-model', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ version_id: selectedVersionId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) alert(data.message);
-                });
-            } else {
-                alert('请先选择一个模型版本');
-            }
-        });
-
-        // 更新多策略对比
-        function updateStrategyComparison() {
-            const now = new Date();
-            const data = [];
-            for (let i = 7; i >= 0; i--) {
-                const date = new Date(now);
-                date.setDate(date.getDate() - i);
-                data.push({
-                    timestamp: date.getTime(),
-                    fourier: Math.random() * 10 - 2,
-                    market: Math.random() * 8 - 1,
-                    ml: Math.random() * 12 - 3
-                });
-            }
-
-            strategyComparisonChart.setOption({
-                series: [
-                    { data: data.map(item => [item.timestamp, item.fourier]) },
-                    { data: data.map(item => [item.timestamp, item.market]) },
-                    { data: data.map(item => [item.timestamp, item.ml]) }
-                ]
-            });
-        }
-
-        // 定期更新
-        setInterval(updateMarketData, 1000);
-        setInterval(updatePerformanceData, 2000);
-        setInterval(updateStrategyStatus, 1000);
-        setInterval(updateTechnicalIndicators, 5000);
-        setInterval(updateStockPool, 5000);
-        setInterval(updateTradingPool, 5000);
-        setInterval(updateRiskControl, 3000);
-        setInterval(updateMLGridData, 5000);
-        setInterval(updateStrategyComparison, 10000);
-
-        // 响应式
-        window.addEventListener('resize', function() {
-            priceChart.resize();
-            performanceChart.resize();
-            rsiChart.resize();
-            macdChart.resize();
-            strategyComparisonChart.resize();
-            mlGridChart.resize();
-        });
-
-        // 初始加载
-        loadUserInfo();
+        generateInitialLogs();
+        updateTrafficStats();
+        renderTrafficLog();
         updateMarketData();
-        updatePerformanceData();
-        updateStrategyStatus();
-        updateTechnicalIndicators();
-        updateStockPool();
-        updateTradingPool();
-        loadModelVersions();
-        updateStrategyComparison();
-        updateRiskControl();
-        updateMLGridData();
+        calculateTechnicalIndicators();
+        loadStockPool();
+        loadStrategyPortfolio();
+        initCharts();
+        startRealTimeUpdates();
     </script>
 </body>
 </html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>安全监控测试</title>
+    <style>
+        body { font-family: Arial; background: #0a0d14; color: #e8ecf1; padding: 20px; }
+        h1 { color: #00d4c8; }
+        .status { padding: 20px; background: #111620; border-radius: 10px; margin: 20px 0; }
+        button { background: #4a7dff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🔒 安全监控中心</h1>
+    
+    <div class="status">
+        <h3>系统状态</h3>
+        <p>✅ 全局提现功能：已禁用</p>
+        <p>✅ 仅交易模式：已启用</p>
+        <p>✅ 关键路径验证：运行中</p>
+    </div>
+    
+    <div class="status">
+        <h3>访问地址</h3>
+        <p>登录页面：<a href="/login" style="color:#00d4c8">/login</a></p>
+        <p>安全配置：<a href="/security-config" style="color:#00d4c8">/security-config</a></p>
+    </div>
+    
+    <div class="status">
+        <h3>快速测试</h3>
+        <button onclick="testSimple()">点击测试</button>
+        <div id="result" style="margin-top:10px; font-family:monospace; padding:10px; background:#000; border-radius:5px;"></div>
+    </div>
+    
+    <script>
+        function testSimple() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '✅ 测试成功！页面正常工作！';
+        }
+    </script>
+</body>
+</html>

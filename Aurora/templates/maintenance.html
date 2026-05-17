@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora量化交易系统 - 系统维护</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0e17;
+            --bg-card: #111827;
+            --border-color: rgba(255,255,255,0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #9ca3af;
+            --accent-cyan: #00d4c8;
+            --accent-blue: #4a7dff;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #f87171;
+        }
+        body {
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .navbar {
+            background: rgba(17, 24, 39, 0.95) !important;
+            backdrop-filter: blur(10px);
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+        }
+        .card-header {
+            background: rgba(0, 212, 200, 0.1);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .status-online { color: var(--success); }
+        .status-offline { color: var(--danger); }
+        .status-maintenance { color: var(--warning); }
+        .maintenance-item {
+            padding: 16px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border-left: 4px solid var(--accent-cyan);
+        }
+        .maintenance-item.warning {
+            border-left-color: var(--warning);
+            background: rgba(251, 191, 36, 0.08);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border: none;
+        }
+        .btn-primary:hover {
+            box-shadow: 0 4px 20px rgba(0, 212, 200, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Aurora量化交易系统</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="/">📊 完整可视化</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/dashboard">📈 监控仪表盘</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/deepseek">🤖 机器人助手</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/security-monitor">🛡️ 安全监控中心</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/maintenance">🔧 系统维护</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-6">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🔧 系统维护中心</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card text-center p-4">
+                                    <div class="status-online mb-2">
+                                        <i class="bi bi-check-circle" style="font-size: 48px;"></i>
+                                    </div>
+                                    <div class="text-primary font-weight-bold">系统状态</div>
+                                    <div class="text-secondary small">运行正常</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center p-4">
+                                    <div style="font-size: 48px;" class="mb-2">⏰</div>
+                                    <div class="text-primary font-weight-bold">上次维护</div>
+                                    <div class="text-secondary small">2024-01-15 02:00</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center p-4">
+                                    <div style="font-size: 48px;" class="mb-2">🔄</div>
+                                    <div class="text-primary font-weight-bold">运行时长</div>
+                                    <div class="text-secondary small" id="uptime">--</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center p-4">
+                                    <div style="font-size: 48px;" class="mb-2">📊</div>
+                                    <div class="text-primary font-weight-bold">系统版本</div>
+                                    <div class="text-secondary small">v2.0.1</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4 class="mb-3">📋 维护任务列表</h4>
+                        <div class="maintenance-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>数据库备份</strong>
+                                    <div class="text-secondary small mt-1">自动备份: 每日 02:00</div>
+                                </div>
+                                <span class="status-online">✓ 已完成</span>
+                            </div>
+                        </div>
+                        <div class="maintenance-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>日志清理</strong>
+                                    <div class="text-secondary small mt-1">自动清理: 每周日</div>
+                                </div>
+                                <span class="status-online">✓ 已完成</span>
+                            </div>
+                        </div>
+                        <div class="maintenance-item warning">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>安全补丁更新</strong>
+                                    <div class="text-secondary small mt-1">有新的安全补丁待安装</div>
+                                </div>
+                                <button class="btn btn-sm btn-warning">立即更新</button>
+                            </div>
+                        </div>
+                        <div class="maintenance-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>系统性能优化</strong>
+                                    <div class="text-secondary small mt-1">建议在低峰期执行</div>
+                                </div>
+                                <button class="btn btn-sm btn-primary">执行优化</button>
+                            </div>
+                        </div>
+
+                        <h4 class="mt-4 mb-3">🔌 服务状态</h4>
+                        <table class="table table-dark">
+                            <thead>
+                                <tr>
+                                    <th>服务名称</th>
+                                    <th>状态</th>
+                                    <th>端口</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>API服务</td>
+                                    <td><span class="status-online">运行中</span></td>
+                                    <td>5000</td>
+                                    <td><button class="btn btn-sm btn-secondary">重启</button></td>
+                                </tr>
+                                <tr>
+                                    <td>WebSocket服务</td>
+                                    <td><span class="status-online">运行中</span></td>
+                                    <td>5001</td>
+                                    <td><button class="btn btn-sm btn-secondary">重启</button></td>
+                                </tr>
+                                <tr>
+                                    <td>数据库服务</td>
+                                    <td><span class="status-online">运行中</span></td>
+                                    <td>5432</td>
+                                    <td><button class="btn btn-sm btn-secondary">重启</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h4 class="mt-4 mb-3">📝 维护公告</h4>
+                        <div class="alert alert-info">
+                            <strong>计划维护通知</strong>
+                            <p class="mt-2">下次系统维护时间：2024-01-22 02:00 - 04:00</p>
+                            <p>维护内容：安全补丁更新、性能优化、数据库升级</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateUptime() {
+            const startDate = new Date('2024-01-15T02:00:00');
+            const now = new Date();
+            const diff = now - startDate;
+            
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            
+            document.getElementById('uptime').textContent = `${days}天 ${hours}小时 ${minutes}分钟`;
+        }
+        updateUptime();
+        setInterval(updateUptime, 60000);
+    </script>
+</body>
+</html>

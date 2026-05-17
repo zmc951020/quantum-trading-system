@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora 量化交易 - 安全监控中心</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0d1320;
+            --bg-card: #1a2233;
+            --bg-card-inner: #151d2d;
+            --accent-cyan: #00e0d6;
+            --accent-blue: #5a8dff;
+            --accent-purple: #8b70ff;
+            --text-primary: #ffffff;
+            --text-secondary: #e1e8f0;
+            --border-subtle: rgba(255, 255, 255, 0.35);
+            --danger: #ff5252;
+            --success: #4ade80;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-deep);
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            min-height: 100vh;
+            color: var(--text-primary);
+            position: relative;
+        }
+
+        /* 动态背景网格 */
+        .grid-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            background-image: 
+                linear-gradient(rgba(74,125,255,0.03) 1px, transparent 1px), 
+                linear-gradient(90deg, rgba(74,125,255,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 50px 50px; }
+        }
+
+        /* 浮动光晕 */
+        .floating-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.2;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .orb-1 {
+            width: 400px; height: 400px;
+            background: var(--accent-cyan);
+            top: -100px; left: -100px;
+            animation: float1 8s ease-in-out infinite;
+        }
+
+        .orb-2 {
+            width: 350px; height: 350px;
+            background: var(--accent-purple);
+            bottom: -100px; right: -100px;
+            animation: float2 10s ease-in-out infinite;
+        }
+
+        @keyframes float1 {
+            0%,100% { transform: translate(0,0); }
+            50% { transform: translate(50px,30px); }
+        }
+
+        @keyframes float2 {
+            0%,100% { transform: translate(0,0); }
+            50% { transform: translate(-40px,-30px); }
+        }
+
+        .card {
+            background: linear-gradient(145deg, rgba(26,34,51,0.98), rgba(21,29,45,0.98));
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            position: relative;
+            z-index: 1;
+            transition: all 0.3s ease;
+            box-shadow: 
+                0 6px 24px rgba(0,0,0,0.35),
+                inset 0 1px 0 rgba(255,255,255,0.08),
+                inset 0 -1px 0 rgba(0,0,0,0.25);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0,224,214,0.4), rgba(90,141,255,0.4), transparent);
+            border-radius: 16px 16px 0 0;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 
+                0 12px 40px rgba(0,0,0,0.45),
+                inset 0 1px 0 rgba(255,255,255,0.12),
+                inset 0 -1px 0 rgba(0,0,0,0.3);
+            border-color: rgba(0,224,214,0.35);
+        }
+
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px;
+        }
+
+        .status-dot.success { 
+            background: var(--success); 
+            box-shadow: 0 0 10px var(--success); 
+            animation: pulse2 2s ease-in-out infinite; 
+        }
+
+        .status-dot.danger { 
+            background: var(--danger); 
+            box-shadow: 0 0 10px var(--danger); 
+        }
+
+        @keyframes pulse2 {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        .monitor-log {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: linear-gradient(145deg, rgba(12,18,28,0.98), rgba(10,15,22,0.98));
+            border: 2px solid rgba(255,255,255,0.18);
+            border-radius: 12px;
+            padding: 16px;
+            max-height: 260px;
+            overflow-y: auto;
+            box-shadow: 
+                inset 0 2px 10px rgba(0,0,0,0.35),
+                0 2px 10px rgba(0,0,0,0.18);
+        }
+
+        .monitor-log::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .monitor-log::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+
+        .monitor-log::-webkit-scrollbar-thumb {
+            background: linear-gradient(var(--accent-cyan), var(--accent-blue));
+            border-radius: 4px;
+        }
+
+        .monitor-log .log-entry {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.5;
+        }
+
+        .monitor-log .log-entry.success { color: var(--success); }
+        .monitor-log .log-entry.danger { color: var(--danger); }
+        .monitor-log .log-entry.info { color: var(--accent-cyan); }
+        .monitor-log .log-entry.text-secondary { color: var(--text-secondary); }
+
+        /* 安全评分环 */
+        .score-ring {
+            width: 120px; height: 120px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: conic-gradient(var(--success) 0% 95%, rgba(255,255,255,0.12) 95% 100%);
+            position: relative;
+        }
+
+        .score-ring-inner {
+            width: 100px; height: 100px; border-radius: 50%;
+            background: var(--bg-deep);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        .score-value {
+            font-size: 28px; font-weight: bold; color: var(--success);
+        }
+
+        .score-label {
+            font-size: 12px; color: var(--text-secondary);
+        }
+
+        /* 实时时间 */
+        .digital-clock {
+            font-family: 'Consolas', monospace;
+            font-size: 24px;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* 安全事件时间线 */
+        .timeline-item {
+            position: relative;
+            padding-left: 20px;
+            padding-bottom: 15px;
+            border-left: 2px solid rgba(0,212,200,0.2);
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -6px; top: 5px;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        /* 微型统计卡片 */
+        .stat-card {
+            background: linear-gradient(145deg, rgba(26,34,51,0.95), rgba(21,29,45,0.95));
+            border: 2px solid rgba(255,255,255,0.18);
+            border-radius: 14px;
+            padding: 16px;
+            text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: 
+                0 4px 20px rgba(0,0,0,0.3),
+                inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 
+                0 8px 30px rgba(0,224,214,0.2),
+                inset 0 1px 0 rgba(255,255,255,0.15);
+            border-color: rgba(0,224,214,0.3);
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--accent-cyan);
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        /* 动画类 */
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-slide {
+            animation: slideIn 0.5s ease-out;
+        }
+
+        /* 进度条动画 */
+        .progress-bar {
+            height: 12px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 
+                inset 0 2px 6px rgba(0,0,0,0.35),
+                0 1px 0 rgba(255,255,255,0.08);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 6px;
+            transition: width 1s ease;
+            box-shadow: 
+                inset 0 1px 0 rgba(255,255,255,0.25);
+            position: relative;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.25), transparent);
+            border-radius: 6px 6px 0 0;
+        }
+
+        /* 新增动态效果 */
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+            animation: scan 3s linear infinite;
+            opacity: 0.7;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        .mini-chart {
+            height: 40px;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .mini-bar {
+            width: 4px;
+            background: linear-gradient(180deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 1px;
+            animation: barPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes barPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .pulse-ring {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-cyan);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pulse-ring::before,
+        .pulse-ring::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 1px solid var(--accent-cyan);
+            animation: pulseRing 2s ease-out infinite;
+        }
+
+        .pulse-ring::after {
+            animation-delay: 0.5s;
+        }
+
+        @keyframes pulseRing {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .flow-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            display: inline-block;
+            animation: flowDot 1.5s ease-in-out infinite;
+        }
+
+        @keyframes flowDot {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        .traffic-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .traffic-item:hover {
+            background: rgba(255,255,255,0.05);
+            padding-left: 8px;
+            padding-right: 8px;
+            border-radius: 8px;
+        }
+
+        .threat-detector {
+            background: linear-gradient(145deg, rgba(255,82,82,0.2), rgba(255,82,82,0.1));
+            border: 2px solid rgba(255,82,82,0.35);
+            border-radius: 14px;
+            padding: 16px;
+            margin-top: 20px;
+            box-shadow: 
+                0 4px 20px rgba(255,82,82,0.15),
+                inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+
+        .glow-text {
+            text-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .typing-effect {
+            overflow: hidden;
+            white-space: nowrap;
+            border-right: 2px solid var(--accent-cyan);
+            animation: typing 3s steps(30) infinite, blink 0.5s step-end infinite alternate;
+        }
+
+        @keyframes typing {
+            0%, 100% { width: 0; }
+            50% { width: 100%; }
+        }
+
+        @keyframes blink {
+            50% { border-color: transparent; }
+        }
+
+        .float-up {
+            animation: floatUp 3s ease-in-out infinite;
+        }
+
+        @keyframes floatUp {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .rotate-slow {
+            animation: rotateSlow 20s linear infinite;
+        }
+
+        @keyframes rotateSlow {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-overlay"></div>
+    <div class="floating-orb orb-1"></div>
+    <div class="floating-orb orb-2"></div>
+    
+    <div class="container py-4">
+        <!-- 顶部标题区 -->
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                        <h2 class="fw-bold mb-1">
+                            <i class="bi bi-shield-check text-success"></i>
+                            安全监控中心
+                        </h2>
+                        <p style="color: var(--text-secondary); font-size: 15px; font-weight: 500; margin-bottom: 0;">极致安全机制 · 先验证后提交 · 全程监控</p>
+                    </div>
+                    <div class="text-end">
+                        <div class="digital-clock" id="digitalClock">--:--:--</div>
+                        <div id="dateDisplay" style="color: var(--text-secondary); font-size: 14px; font-weight: 500;">--</div>
+                    </div>
+            <a href="/login" class="btn btn-outline-secondary ms-3">
+                <i class="bi bi-arrow-left"></i> 返回登录
+            </a>
+        </div>
+
+        <!-- 顶部统计行 -->
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="stat-value" id="statSuccess">0</div>
+                            <div class="stat-label">安全通过</div>
+                        </div>
+                        <i class="bi bi-check-circle text-success" style="font-size:32px;"></i>
+                    </div>
+                    <div class="progress-bar mt-3">
+                        <div class="progress-fill" id="progressSuccess" style="width:0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="stat-value text-danger" id="statReject">0</div>
+                            <div class="stat-label">拦截请求</div>
+                        </div>
+                        <i class="bi bi-x-circle text-danger" style="font-size:32px;"></i>
+                    </div>
+                    <div class="progress-bar mt-3">
+                        <div class="progress-fill" id="progressReject" style="width:0%; background:linear-gradient(90deg, #e74c5c, #ff6b81)"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="stat-value" id="statTime">0.00ms</div>
+                            <div class="stat-label">平均响应</div>
+                        </div>
+                        <i class="bi bi-lightning text-warning" style="font-size:32px;"></i>
+                    </div>
+                    <div class="progress-bar mt-3">
+                        <div class="progress-fill" id="progressTime" style="width:85%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card p-3 d-flex align-items-center justify-content-center">
+                    <div class="score-ring">
+                        <div class="score-ring-inner">
+                            <div class="score-value" id="securityScore">95</div>
+                            <div class="score-label">安全评分</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- 左侧：系统状态 -->
+            <div class="col-lg-4">
+                <div class="card p-4 mb-4" style="overflow: hidden;">
+                    <div class="scan-line"></div>
+                    <h5 class="mb-4" style="font-size: 18px; font-weight: 700;">
+                        <i class="bi bi-speedometer2 me-2"></i> 系统状态
+                    </h5>
+                    
+                    <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--text-primary);">全局提现功能</span>
+                            <div class="d-flex align-items-center">
+                                <span class="status-dot danger"></span>
+                                <span style="color: #ff5252; font-weight: 700; font-size: 16px;">已禁用</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--text-primary);">仅交易模式</span>
+                            <div class="d-flex align-items-center">
+                                <span class="status-dot success"></span>
+                                <span style="color: var(--success); font-weight: 700; font-size: 16px;">已启用</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--text-primary);">关键路径验证</span>
+                            <div class="d-flex align-items-center">
+                                <span class="status-dot success"></span>
+                                <span style="color: var(--success); font-weight: 700; font-size: 16px;">运行中</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 系统资源监控 -->
+                    <div class="mt-4 pt-4" style="border-top: 2px solid rgba(255,255,255,0.15);">
+                        <h6 style="font-weight: 700; margin-bottom: 16px; font-size: 15px;"><i class="bi bi-hdd-stack me-2"></i>系统资源</h6>
+                        
+                        <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span style="color: var(--text-primary); font-size: 15px; font-weight: 700;"><i class="bi bi-cpu me-2" style="color: var(--accent-cyan);"></i> CPU</span>
+                                <span style="font-weight: 700; font-size: 16px; color: var(--accent-cyan);" id="cpuValue">23%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="cpuBar" style="width: 23%;"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span style="color: var(--text-primary); font-size: 15px; font-weight: 700;"><i class="bi bi-memory me-2" style="color: var(--accent-purple);"></i> 内存</span>
+                                <span style="font-weight: 700; font-size: 16px; color: var(--accent-purple);" id="memValue">4.2GB / 16GB</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="memBar" style="width: 26%; background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));"></div>
+                            </div>
+                        </div>
+
+                        <!-- 微型图表 -->
+                        <div class="mt-4 p-3" style="background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);">
+                            <div style="color: var(--text-primary); font-size: 15px; font-weight: 700; margin-bottom: 12px;"><i class="bi bi-graph-up me-2" style="color: var(--accent-blue);"></i> 实时流量</div>
+                            <div class="mini-chart" id="miniChart"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 实时流量监控 -->
+                <div class="card p-4 mb-4">
+                    <h5 class="mb-3" style="font-size: 18px; font-weight: 700;">
+                        <i class="bi bi-diagram-3 me-2"></i> 实时流量
+                    </h5>
+                    <div id="trafficList">
+                        <div class="traffic-item">
+                            <span style="font-size: 14px; font-weight: 600;"><span class="flow-dot me-2"></span>127.0.0.1:8080</span>
+                            <span style="color: var(--success); font-size: 14px; font-weight: 700;"><i class="bi bi-check-circle"></i> 允许</span>
+                        </div>
+                        <div class="traffic-item">
+                            <span style="font-size: 14px; font-weight: 600;"><span class="flow-dot me-2"></span>192.168.1.100:443</span>
+                            <span style="color: var(--success); font-size: 14px; font-weight: 700;"><i class="bi bi-check-circle"></i> 允许</span>
+                        </div>
+                        <div class="traffic-item">
+                            <span style="font-size: 14px; font-weight: 600;"><span class="flow-dot me-2" style="background: var(--danger);"></span>8.8.8.8:53</span>
+                            <span style="color: var(--danger); font-size: 14px; font-weight: 700;"><i class="bi bi-x-circle"></i> 拦截</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 安全事件时间线 -->
+                <div class="card p-4">
+                    <h5 class="mb-4" style="font-size: 18px; font-weight: 700;">
+                        <i class="bi bi-clock-history me-2"></i> 安全事件
+                    </h5>
+                    <div id="eventTimeline">
+                        <div class="timeline-item">
+                            <div style="color: var(--success); font-size: 15px; font-weight: 700;">系统初始化</div>
+                            <div id="initTime" style="color: var(--text-secondary); font-size: 14px; font-weight: 600; margin-top: 6px;">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 中间：安全测试 -->
+            <div class="col-lg-4">
+                <div class="card p-4">
+                    <h5 class="mb-4" style="font-size: 18px; font-weight: 700;">
+                        <i class="bi bi-play-circle me-2"></i> 安全机制测试
+                    </h5>
+                    
+                    <!-- 脉冲环动画 -->
+                    <div class="d-flex justify-content-center mb-4">
+                        <div class="pulse-ring float-up">
+                            <i class="bi bi-shield-lock" style="font-size: 32px; color: var(--accent-cyan);"></i>
+                        </div>
+                    </div>
+                    
+                    <form id="testForm">
+                        <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                            <label class="form-label" style="color: var(--text-primary); font-weight: 700; font-size: 15px;">IP地址</label>
+                            <select class="form-select" id="testIp" style="background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); color: var(--text-primary); font-weight: 600; border-radius: 10px;">
+                                <option value="127.0.0.1">✅ 127.0.0.1（白名单）</option>
+                                <option value="9.9.9.9">❌ 9.9.9.9（非白名单）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-4 p-3" style="background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                            <label class="form-label" style="color: var(--text-primary); font-weight: 700; font-size: 15px;">API Key</label>
+                            <select class="form-select" id="testKey" style="background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); color: var(--text-primary); font-weight: 600; border-radius: 10px;">
+                                <option value="TEST_KEY_123">✅ TEST_KEY_123（有效）</option>
+                                <option value="INVALID_KEY">❌ INVALID_KEY（无效）</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); border: none; font-weight: 700; padding: 14px; font-size: 16px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,224,214,0.3);">
+                            <i class="bi bi-lightning-charge me-2"></i> 运行测试
+                        </button>
+                    </form>
+
+                    <!-- 威胁检测 -->
+                    <div class="threat-detector">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-search me-2" style="color: #ffc107; font-size: 18px;"></i>
+                            <span style="font-size: 16px; font-weight: 800; color: var(--text-primary);">威胁检测器</span>
+                        </div>
+                        <div class="typing-effect" id="threatStatus" style="color: var(--text-secondary); font-size: 15px; font-weight: 600;">扫描中...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：监控日志 -->
+            <div class="col-lg-4">
+                <div class="card p-4">
+                    <h5 class="mb-4" style="font-size: 18px; font-weight: 700;">
+                        <i class="bi bi-terminal me-2"></i> 实时监控日志
+                    </h5>
+                    <div class="monitor-log" id="monitorLog">
+                        <div class="log-entry info">[系统] 安全监控中心已启动</div>
+                        <div class="log-entry" style="color: var(--text-secondary);">等待测试开始...</div>
+                    </div>
+                    <div id="testResult" class="mt-3" style="display: none;">
+                        <h6 class="mb-2" style="font-weight: 700; font-size: 16px;">测试结果：</h6>
+                        <div id="resultContent"></div>
+                    </div>
+
+                    <!-- 快速统计 -->
+                    <div class="row mt-4 g-2">
+                        <div class="col-6">
+                            <div class="stat-card">
+                                <div class="stat-value" id="quickRate">0%</div>
+                                <div class="stat-label">验证通过率</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-card">
+                                <div class="stat-value" style="color: var(--accent-blue);" id="quickResp">0ms</div>
+                                <div class="stat-label">平均响应</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局统计
+        let successCount = 0;
+        let rejectCount = 0;
+        let totalResponseTime = 0;
+        let responseCount = 0;
+        let eventCount = 0;
+
+        // 初始化
+        const initTimestamp = new Date().toLocaleTimeString();
+        document.getElementById('initTime').textContent = initTimestamp;
+
+        // 初始化微型图表
+        function initMiniChart() {
+            const chartDiv = document.getElementById('miniChart');
+            chartDiv.innerHTML = '';
+            for (let i = 0; i < 20; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'mini-bar';
+                bar.style.height = (10 + Math.random() * 30) + 'px';
+                bar.style.animationDelay = (i * 0.1) + 's';
+                chartDiv.appendChild(bar);
+            }
+        }
+        initMiniChart();
+
+        // 更新微型图表
+        function updateMiniChart() {
+            const bars = document.querySelectorAll('.mini-bar');
+            bars.forEach(bar => {
+                bar.style.height = (10 + Math.random() * 30) + 'px';
+            });
+        }
+        setInterval(updateMiniChart, 1000);
+
+        // 实时时钟
+        function updateClock() {
+            const now = new Date();
+            const time = now.toTimeString().split(' ')[0];
+            const date = now.toLocaleDateString('zh-CN', { 
+                weekday: 'short', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            document.getElementById('digitalClock').textContent = time;
+            document.getElementById('dateDisplay').textContent = date;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 更新系统资源
+        function updateSystemResources() {
+            // CPU 波动
+            const cpuVal = 15 + Math.random() * 30;
+            document.getElementById('cpuValue').textContent = cpuVal.toFixed(0) + '%';
+            document.getElementById('cpuBar').style.width = cpuVal + '%';
+            
+            // 内存波动
+            const memUsed = 3.5 + Math.random() * 2;
+            document.getElementById('memValue').textContent = memUsed.toFixed(1) + 'GB / 16GB';
+            document.getElementById('memBar').style.width = (memUsed / 16 * 100) + '%';
+        }
+        setInterval(updateSystemResources, 2000);
+        updateSystemResources();
+
+        // 更新流量监控
+        const trafficIPs = [
+            { ip: '127.0.0.1:8080', status: 'success', icon: 'check-circle' },
+            { ip: '192.168.1.100:443', status: 'success', icon: 'check-circle' },
+            { ip: '10.0.0.55:80', status: 'success', icon: 'check-circle' },
+            { ip: '8.8.8.8:53', status: 'danger', icon: 'x-circle' },
+            { ip: '203.0.113.10:9999', status: 'danger', icon: 'x-circle' }
+        ];
+
+        function updateTraffic() {
+            const trafficDiv = document.getElementById('trafficList');
+            trafficDiv.innerHTML = '';
+            
+            // 随机选择3个显示
+            const shuffled = [...trafficIPs].sort(() => Math.random() - 0.5);
+            const selected = shuffled.slice(0, 3);
+            
+            selected.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'traffic-item animate-slide';
+                div.style.animationDelay = (idx * 0.1) + 's';
+                div.innerHTML = `
+                    <span style="font-size: 14px;"><span class="flow-dot me-2" style="background: var(--${item.status});"></span>${item.ip}</span>
+                    <span style="color: var(--${item.status === 'success' ? 'success' : 'danger'}); font-size: 14px; font-weight: 600;"><i class="bi bi-${item.icon}"></i> ${item.status === 'success' ? '允许' : '拦截'}</span>
+                `;
+                trafficDiv.appendChild(div);
+            });
+        }
+        setInterval(updateTraffic, 3000);
+        updateTraffic();
+
+        // 更新威胁检测器文本
+        const threatMessages = [
+            '扫描中...',
+            '检测数据包...',
+            '验证签名...',
+            '检查IP信誉...',
+            '分析行为模式...',
+            '系统安全 ✓',
+            '无威胁检测',
+            '监控正常'
+        ];
+        let threatMsgIndex = 0;
+        function updateThreatStatus() {
+            document.getElementById('threatStatus').textContent = threatMessages[threatMsgIndex];
+            threatMsgIndex = (threatMsgIndex + 1) % threatMessages.length;
+        }
+        setInterval(updateThreatStatus, 2000);
+
+        // 更新统计
+        function updateStats() {
+            // 动画数字
+            animateNumber('statSuccess', successCount);
+            animateNumber('statReject', rejectCount);
+            
+            // 进度条
+            const total = successCount + rejectCount || 1;
+            const successRate = (successCount / total) * 100;
+            const rejectRate = (rejectCount / total) * 100;
+            document.getElementById('progressSuccess').style.width = successRate + '%';
+            document.getElementById('progressReject').style.width = rejectRate + '%';
+            
+            // 响应时间
+            const avgTime = responseCount > 0 ? (totalResponseTime / responseCount).toFixed(2) : '0.00';
+            document.getElementById('statTime').textContent = avgTime + 'ms';
+            
+            // 快速统计
+            document.getElementById('quickRate').textContent = successRate.toFixed(0) + '%';
+            document.getElementById('quickResp').textContent = avgTime + 'ms';
+        }
+
+        function animateNumber(elementId, target) {
+            const el = document.getElementById(elementId);
+            const current = parseInt(el.textContent) || 0;
+            if (current < target) {
+                el.textContent = current + 1;
+                setTimeout(() => animateNumber(elementId, target), 30);
+            } else if (current > target) {
+                el.textContent = current - 1;
+                setTimeout(() => animateNumber(elementId, target), 30);
+            } else {
+                el.textContent = target;
+            }
+        }
+
+        // 添加事件到时间线
+        function addEvent(text, type) {
+            const timeline = document.getElementById('eventTimeline');
+            const now = new Date().toLocaleTimeString();
+            const eventItem = document.createElement('div');
+            eventItem.className = 'timeline-item animate-slide';
+            eventItem.innerHTML = `
+                <div style="color: var(--${type === 'success' ? 'success' : 'danger'}); font-size: 14px; font-weight: 600;">${text}</div>
+                <div style="color: var(--text-secondary); font-size: 13px; font-weight: 500; margin-top: 4px;">${now}</div>
+            `;
+            timeline.insertBefore(eventItem, timeline.firstChild);
+            
+            // 限制显示数量
+            while (timeline.children.length > 8) {
+                timeline.removeChild(timeline.lastChild);
+            }
+        }
+
+        // 测试表单处理
+        document.getElementById('testForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const logDiv = document.getElementById('monitorLog');
+            const resultDiv = document.getElementById('testResult');
+            const resultContent = document.getElementById('resultContent');
+            
+            const testStartTime = performance.now();
+            logDiv.innerHTML = '<div class="log-entry info">[系统] 开始处理交易请求...</div>';
+            resultDiv.style.display = 'none';
+            
+            const orderData = {
+                symbol: '600000.SH',
+                side: 'buy',
+                amount: 100,
+                price: 10.0,
+                ip: document.getElementById('testIp').value,
+                api_key: document.getElementById('testKey').value,
+                user_id: 'test_user',
+                monitor: true
+            };
+            
+            appendLog('⏳ 阶段1/3: 开始关键路径验证（不提交订单）...', 'info');
+            appendLog('   → 提取验证信息: IP=' + orderData.ip + ', API Key=****_KEY', 'info');
+            appendLog('   → 调用关键路径验证器...', 'info');
+            
+            try {
+                const response = await fetch('/api/trade/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+                
+                const result = await response.json();
+                const testEndTime = performance.now();
+                const elapsed = (testEndTime - testStartTime).toFixed(2);
+                totalResponseTime += parseFloat(elapsed);
+                responseCount++;
+                
+                if (result.status && result.status.indexOf('REJECTED') >= 0) {
+                    appendLog('🛑 验证失败！订单未提交！', 'danger');
+                    appendLog(`   → 响应时间: ${elapsed}ms`, 'info');
+                    addEvent('拦截可疑请求', 'danger');
+                    rejectCount++;
+                    showResult(result, false);
+                } else {
+                    appendLog('✅ 验证通过！订单已提交！', 'success');
+                    appendLog(`   → 响应时间: ${elapsed}ms`, 'info');
+                    addEvent('安全交易通过', 'success');
+                    successCount++;
+                    showResult(result, true);
+                }
+                
+                updateStats();
+            } catch (error) {
+                appendLog('❌ 错误: ' + error, 'danger');
+            }
+        });
+        
+        function appendLog(message, type) {
+            const logDiv = document.getElementById('monitorLog');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function showResult(result, success) {
+            const resultDiv = document.getElementById('testResult');
+            const resultContent = document.getElementById('resultContent');
+            const statusIcon = success ? '✅' : '❌';
+            const color = success ? 'text-success' : 'text-danger';
+            const bg = success ? 'rgba(0,200,83,0.1)' : 'rgba(231,76,92,0.1)';
+            const border = success ? 'rgba(0,200,83,0.3)' : 'rgba(231,76,92,0.3)';
+            
+            let html = '<div class="p-3 rounded" style="background: ' + bg + '; border: 1px solid ' + border + '">';
+            html += '<p class="mb-1"><strong>' + statusIcon + ' 状态:</strong> <span class="' + color + '">' + (result.status || 'Unknown') + '</span></p>';
+            html += '<p class="mb-1"><strong>📝 原因:</strong> ' + (result.reason || 'N/A') + '</p>';
+            if (result.submitted_to_exchange !== undefined) {
+                html += '<p class="mb-1"><strong>📤 提交状态:</strong> ' + (result.submitted_to_exchange ? '✅ 已提交' : '❌ 未提交') + '</p>';
+            }
+            html += '</div>';
+            resultContent.innerHTML = html;
+            resultDiv.style.display = 'block';
+        }
+
+        // 初始化：自动添加一个安全IP
+        (async function initSecurity() {
+            try {
+                await fetch('/api/trade/security/add-ip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: '127.0.0.1', description: '本地测试' })
+                });
+                await fetch('/api/trade/security/add-api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: 'TEST_KEY_123', name: '测试Key' })
+                });
+                appendLog('[系统] 白名单初始化完成', 'info');
+            } catch (e) {}
+        })();
+    </script>
+</body>
+</html>
