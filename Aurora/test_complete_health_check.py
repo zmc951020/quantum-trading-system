@@ -90,8 +90,11 @@ print("=" * 80)
 print("\n📈 系统健康总览:")
 
 # 计算整体健康状态
-overall_health = health_results["overall_status"]
+overall_health = str(health_results["overall_status"]).lower()
 health_icon = {
+    "healthstatus.healthy": "✅",
+    "healthstatus.warning": "⚠️",
+    "healthstatus.critical": "❌",
     "healthy": "✅",
     "warning": "⚠️",
     "critical": "❌",
@@ -102,13 +105,17 @@ print(f"   系统健康: {health_icon} {overall_health.upper()}")
 
 print("\n📋 模块状态汇总:")
 for module_name, module_data in health_results["modules"].items():
+    status_str = str(module_data["status"]).lower()
     status_icon = {
+        "healthstatus.healthy": "✅",
+        "healthstatus.warning": "⚠️",
+        "healthstatus.critical": "❌",
         "healthy": "✅",
         "warning": "⚠️",
         "critical": "❌",
         "unknown": "❓"
-    }.get(module_data["status"], "❓")
-    print(f"   {status_icon} {module_name}: {module_data['status'].upper()}")
+    }.get(status_str, "❓")
+    print(f"   {status_icon} {module_name}: {status_str.upper()}")
 
 print("\n📈 策略表现指标:")
 print(f"   收益率: {metrics.total_return*100:.2f}%")
@@ -128,11 +135,13 @@ else:
     print(f"   ✅ 无待优化项目！")
 
 print("\n🎯 综合评估:")
-if overall_health == "healthy" and optimization_report["summary"]["total"] == 0:
+is_healthy = overall_health in ("healthy", "healthstatus.healthy")
+is_warning = overall_health in ("warning", "healthstatus.warning")
+if is_healthy and optimization_report["summary"]["total"] == 0:
     print(f"   ✅ 系统运行良好，策略表现优秀！")
-elif overall_health == "healthy":
+elif is_healthy:
     print(f"   ⚠️ 系统健康，但策略有优化空间")
-elif overall_health == "warning":
+elif is_warning:
     print(f"   ⚠️ 系统需要关注，建议检查警告")
 else:
     print(f"   ❌ 系统有严重问题，需要立即处理")
