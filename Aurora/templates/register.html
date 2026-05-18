@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aurora 量化交易系统 - 登录</title>
+    <title>Aurora 量化交易系统 - 注册</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -99,98 +99,78 @@
             50% { transform: translate(-40px, -30px); }
         }
         @keyframes pulseGlow {
-            0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
-            50% { opacity: 0.5; transform: translate(-50%, -50%) scale(1.3); }
+            0%, 100% { opacity: 0.35; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.5; transform: translate(-50%, -50%) scale(1.1); }
         }
 
-        /* 主容器 */
+        /* 注册卡片 */
         .login-wrapper {
             position: relative;
-            z-index: 10;
+            z-index: 1;
             width: 100%;
-            max-width: 420px;
-            padding: 0 20px;
-            animation: fadeInUp 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+            max-width: 440px;
+            padding: 20px;
         }
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(40px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* 登录卡片 */
         .login-card {
             background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--border-subtle);
             border-radius: 20px;
-            padding: 38px 34px 32px;
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-subtle), 0 0 80px rgba(74, 125, 255, 0.08);
-            transition: box-shadow 0.4s, border-color 0.4s;
+            padding: 40px 36px;
             position: relative;
             overflow: hidden;
-        }
-        .login-card:hover {
-            box-shadow: 0 12px 56px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(74, 125, 255, 0.2), 0 0 100px rgba(74, 125, 255, 0.12);
-            border-color: rgba(74, 125, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         }
         .login-card::before {
             content: '';
             position: absolute;
-            top: 0; left: 30px; right: 30px;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0, 212, 200, 0.6), rgba(74, 125, 255, 0.6), rgba(124, 92, 252, 0.6), transparent);
-            opacity: 0.7;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), var(--accent-blue), transparent);
         }
 
         /* Logo */
         .brand-section {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
         }
         .logo-icon {
-            width: 54px; height: 54px;
+            width: 56px; height: 56px;
             background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
             border-radius: 14px;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 14px;
-            box-shadow: 0 4px 20px rgba(0, 212, 200, 0.3);
-            animation: logoPulse 3s ease-in-out infinite;
-        }
-        @keyframes logoPulse {
-            0%, 100% { box-shadow: 0 4px 20px rgba(0, 212, 200, 0.3); }
-            50% { box-shadow: 0 4px 30px rgba(0, 212, 200, 0.5); }
-        }
-        .logo-icon i {
-            font-size: 26px;
+            margin: 0 auto 16px;
+            font-size: 28px;
             color: white;
+            box-shadow: 0 4px 16px rgba(0, 212, 200, 0.3);
         }
         .brand-title {
             font-size: 22px;
-            font-weight: 600;
-            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin-bottom: 4px;
         }
         .brand-subtitle {
             font-size: 13px;
             color: var(--text-secondary);
+            margin-top: 6px;
         }
 
-        /* 表单样式 */
+        /* 表单 */
         .form-group {
-            margin-bottom: 18px;
+            margin-bottom: 20px;
         }
         .form-label {
+            display: block;
             font-size: 13px;
+            font-weight: 500;
             color: var(--text-secondary);
             margin-bottom: 8px;
-            display: block;
-            font-weight: 500;
         }
         .input-wrapper {
             position: relative;
@@ -230,40 +210,8 @@
         .form-control:focus ~ .input-icon {
             color: var(--accent-cyan);
         }
-        /* 输入框聚焦时底部发光线条 */
-        .input-wrapper::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            width: 0;
-            height: 2px;
-            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
-            border-radius: 0 0 10px 10px;
-            transition: all 0.3s ease;
-            transform: translateX(-50%);
-        }
-        .input-wrapper.focused::after {
-            width: 100%;
-        }
-        /* 输入字符计数指示器 */
-        .input-wrapper {
-            position: relative;
-        }
-        .char-indicator {
-            position: absolute;
-            right: 14px;
-            bottom: 8px;
-            font-size: 10px;
-            color: var(--text-secondary);
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-            font-family: 'Courier New', monospace;
-        }
-        .input-wrapper.focused .char-indicator {
-            opacity: 0.6;
-        }
+
+        /* 密码可见切换 */
         .password-toggle {
             position: absolute;
             right: 14px;
@@ -278,53 +226,31 @@
         .password-toggle:hover {
             color: var(--accent-cyan);
         }
-        /* 密码框的字符指示器要避开眼睛图标 */
-        .input-wrapper:has(.password-toggle) .char-indicator {
-            right: 40px;
-        }
 
-        /* 记住我 */
-        .remember-row {
+        /* 密码强度指示器 */
+        .password-strength {
+            margin-top: 8px;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 22px;
+            gap: 4px;
         }
-        .form-check {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
+        .strength-bar {
+            flex: 1;
+            height: 3px;
+            background: var(--border-subtle);
+            border-radius: 2px;
+            transition: all 0.3s;
         }
-        .form-check-input {
-            width: 16px; height: 16px;
-            background: var(--input-bg);
-            border: 1px solid var(--border-subtle);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .form-check-input:checked {
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
-            border-color: var(--accent-cyan);
-        }
-        .form-check-label {
-            font-size: 13px;
+        .strength-bar.active.weak { background: var(--danger); }
+        .strength-bar.active.medium { background: var(--accent-gold); }
+        .strength-bar.active.strong { background: var(--success); }
+        .strength-text {
+            font-size: 11px;
             color: var(--text-secondary);
-            cursor: pointer;
-        }
-        .forgot-link {
-            font-size: 13px;
-            color: var(--accent-blue);
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-        .forgot-link:hover {
-            color: var(--accent-cyan);
+            margin-top: 4px;
         }
 
-        /* 登录按钮 */
-        .btn-login {
+        /* 注册按钮 */
+        .btn-register {
             width: 100%;
             padding: 13px;
             background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
@@ -342,14 +268,14 @@
             justify-content: center;
             gap: 8px;
         }
-        .btn-login:hover {
+        .btn-register:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 24px rgba(0, 212, 200, 0.35);
         }
-        .btn-login:active {
+        .btn-register:active {
             transform: translateY(0);
         }
-        .btn-login::before {
+        .btn-register::before {
             content: '';
             position: absolute;
             top: 0; left: -100%;
@@ -357,14 +283,14 @@
             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
             transition: left 0.5s;
         }
-        .btn-login:hover::before {
+        .btn-register:hover::before {
             left: 100%;
         }
-        .btn-login.loading {
+        .btn-register.loading {
             pointer-events: none;
             opacity: 0.85;
         }
-        .btn-login .spinner {
+        .btn-register .spinner {
             width: 18px; height: 18px;
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-top-color: white;
@@ -372,10 +298,10 @@
             animation: spin 0.8s linear infinite;
             display: none;
         }
-        .btn-login.loading .spinner {
+        .btn-register.loading .spinner {
             display: inline-block;
         }
-        .btn-login.loading .btn-text {
+        .btn-register.loading .btn-text {
             display: none;
         }
         @keyframes spin {
@@ -405,7 +331,7 @@
             gap: 8px;
         }
 
-        /* 成功动画 */
+        /* 成功提示 */
         .success-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -450,8 +376,8 @@
             color: var(--success);
         }
 
-        /* 注册提示 */
-        .register-hint {
+        /* 登录提示 */
+        .login-hint {
             text-align: center;
             margin-top: 22px;
             padding-top: 20px;
@@ -459,13 +385,13 @@
             font-size: 13px;
             color: var(--text-secondary);
         }
-        .register-hint a {
+        .login-hint a {
             color: var(--accent-cyan);
             text-decoration: none;
             font-weight: 500;
             transition: color 0.3s;
         }
-        .register-hint a:hover {
+        .login-hint a:hover {
             color: var(--accent-blue);
         }
 
@@ -507,7 +433,7 @@
         </a>
     </div>
 
-    <!-- 登录卡片 -->
+    <!-- 注册卡片 -->
     <div class="login-wrapper">
         <div class="login-card">
             <!-- 成功动画 -->
@@ -515,26 +441,26 @@
                 <div class="success-icon">
                     <i class="bi bi-check-lg"></i>
                 </div>
-                <div class="success-text">登录成功！</div>
+                <div class="success-text">注册成功！</div>
             </div>
 
             <!-- Logo -->
             <div class="brand-section">
                 <div class="logo-icon">
-                    <i class="bi bi-lightning-charge-fill"></i>
+                    <i class="bi bi-person-plus-fill"></i>
                 </div>
-                <div class="brand-title">Aurora 量化交易</div>
-                <div class="brand-subtitle">智能量化 · 稳健收益</div>
+                <div class="brand-title">创建账号</div>
+                <div class="brand-subtitle">加入 Aurora 量化交易平台</div>
             </div>
 
             <!-- 错误提示 -->
             <div class="error-message" id="errorMessage">
                 <i class="bi bi-exclamation-circle-fill"></i>
-                <span id="errorText">用户名或密码错误</span>
+                <span id="errorText">注册失败</span>
             </div>
 
-            <!-- 登录表单 -->
-            <form id="loginForm">
+            <!-- 注册表单 -->
+            <form id="registerForm">
                 <div class="form-group">
                     <label class="form-label">用户名</label>
                     <div class="input-wrapper">
@@ -542,9 +468,12 @@
                             type="text"
                             class="form-control"
                             id="username"
-                            placeholder="请输入用户名"
+                            placeholder="请输入用户名（3-20位字母或数字）"
                             autocomplete="username"
                             required
+                            minlength="3"
+                            maxlength="20"
+                            pattern="[a-zA-Z0-9_]+"
                         >
                         <i class="bi bi-person input-icon"></i>
                     </div>
@@ -557,12 +486,36 @@
                             type="password"
                             class="form-control"
                             id="password"
-                            placeholder="请输入密码"
-                            autocomplete="current-password"
+                            placeholder="请输入密码（至少6位）"
+                            autocomplete="new-password"
                             required
+                            minlength="6"
                         >
                         <i class="bi bi-lock input-icon"></i>
                         <i class="bi bi-eye password-toggle" id="togglePassword"></i>
+                    </div>
+                    <!-- 密码强度 -->
+                    <div class="password-strength" id="passwordStrength">
+                        <div class="strength-bar" data-index="0"></div>
+                        <div class="strength-bar" data-index="1"></div>
+                        <div class="strength-bar" data-index="2"></div>
+                    </div>
+                    <div class="strength-text" id="strengthText">请输入密码</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">确认密码</label>
+                    <div class="input-wrapper">
+                        <input
+                            type="password"
+                            class="form-control"
+                            id="confirmPassword"
+                            placeholder="请再次输入密码"
+                            autocomplete="new-password"
+                            required
+                        >
+                        <i class="bi bi-shield-lock input-icon"></i>
+                        <i class="bi bi-eye password-toggle" id="toggleConfirmPassword"></i>
                     </div>
                 </div>
 
@@ -580,96 +533,27 @@
                     </div>
                 </div>
 
-                <div class="remember-row">
-                    <label class="form-check">
-                        <input type="checkbox" class="form-check-input" id="remember-me">
-                        <span class="form-check-label">记住我</span>
-                    </label>
-                    <label class="form-check">
-                        <input type="checkbox" class="form-check-input" id="remember-device">
-                        <span class="form-check-label">信任此设备</span>
-                    </label>
-                    <a href="#" class="forgot-link">忘记密码？</a>
-                </div>
-
-                <button type="submit" class="btn-login" id="loginBtn">
+                <button type="submit" class="btn-register" id="registerBtn">
                     <span class="spinner"></span>
                     <span class="btn-text">
-                        <i class="bi bi-box-arrow-in-right"></i>
-                        登录系统
+                        <i class="bi bi-person-plus"></i>
+                        立即注册
                     </span>
                 </button>
             </form>
 
-            <!-- 安全状态显示 -->
-            <div id="security-status" style="margin-top: 20px; padding: 16px; background: linear-gradient(135deg, rgba(0, 212, 200, 0.08), rgba(74, 125, 255, 0.05)); border-radius: 12px; border: 1px solid rgba(0, 212, 200, 0.15); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <i class="bi bi-shield-check" style="color: var(--accent-cyan); font-size: 18px;"></i>
-                        <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">系统防护</span>
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                        <a href="/security-config" style="font-size: 12px; color: var(--accent-blue); text-decoration: none; display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: rgba(74, 125, 255, 0.1); border-radius: 8px; transition: all 0.3s;">
-                            <i class="bi bi-sliders"></i> 设置
-                        </a>
-                        <a href="/security-monitor" style="font-size: 12px; color: var(--accent-cyan); text-decoration: none; display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: rgba(0, 212, 200, 0.1); border-radius: 8px; transition: all 0.3s;">
-                            <i class="bi bi-tv"></i> 监控
-                        </a>
-                    </div>
-                </div>
-                <div id="security-status-details" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
-                    加载中...
-                </div>
-            </div>
-
-            <div class="register-hint">
-                还没有账号？<a href="/register">立即注册</a>
+            <!-- 登录提示 -->
+            <div class="login-hint">
+                已有账号？<a href="/login">立即登录</a>
             </div>
         </div>
     </div>
 
     <div class="version-info">
-        <a href="/maintenance" style="color: var(--text-secondary); text-decoration: none; margin-right: 20px;">🔧 系统维护</a>
         Aurora v2.0 · Powered by DeepSeek AI
     </div>
 
     <script>
-        // ========== 安全配置加载 ==========
-        async function loadSecurityStatus() {
-            try {
-                const response = await fetch('/api/security/config');
-                const data = await response.json();
-                
-                if (data.success) {
-                    const config = data.config;
-                    const details = document.getElementById('security-status-details');
-                    
-                    let statusText = '';
-                    
-                    // IP验证状态
-                    const locationStatus = config.disable_location_check ? '已关闭' : '保护中';
-                    const locationColor = config.disable_location_check ? 'var(--text-secondary)' : 'var(--success)';
-                    
-                    // 全天候登录状态
-                    const timeStatus = config.disable_off_hours_check ? '已开启' : '已限制';
-                    const timeColor = config.disable_off_hours_check ? 'var(--success)' : 'var(--text-secondary)';
-                    
-                    statusText += `IP验证: <span style="color: ${locationColor};">${locationStatus}</span>`;
-                    statusText += ' · ';
-                    statusText += `全天候: <span style="color: ${timeColor};">${timeStatus}</span>`;
-                    
-                    if (!config.disable_location_check && config.whitelist_cities && config.whitelist_cities.length > 0) {
-                        statusText += `<br>允许城市: ${config.whitelist_cities.join(', ')}`;
-                    }
-                    
-                    details.innerHTML = statusText;
-                }
-            } catch (error) {
-                console.error('加载安全状态失败:', error);
-            }
-        }
-        loadSecurityStatus();
-        
         // ========== 粒子动画 ==========
         const canvas = document.getElementById('particleCanvas');
         const ctx = canvas.getContext('2d');
@@ -751,57 +635,101 @@
         // ========== 密码显示/隐藏 ==========
         const togglePassword = document.getElementById('togglePassword');
         const passwordInput = document.getElementById('password');
-
         togglePassword.addEventListener('click', () => {
             const type = passwordInput.type === 'password' ? 'text' : 'password';
             passwordInput.type = type;
             togglePassword.className = type === 'password' ? 'bi bi-eye password-toggle' : 'bi bi-eye-slash password-toggle';
         });
 
-        // ========== 记住我功能 ==========
-        const rememberMe = document.getElementById('remember-me');
-        const savedUsername = localStorage.getItem('saved_username');
-        const savedPassword = localStorage.getItem('saved_password');
-        const rememberEnabled = localStorage.getItem('remember_me');
+        const toggleConfirmPassword = document.getElementById('toggleConfirmPassword');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+        toggleConfirmPassword.addEventListener('click', () => {
+            const type = confirmPasswordInput.type === 'password' ? 'text' : 'password';
+            confirmPasswordInput.type = type;
+            toggleConfirmPassword.className = type === 'password' ? 'bi bi-eye password-toggle' : 'bi bi-eye-slash password-toggle';
+        });
 
-        if (savedUsername && savedPassword && rememberEnabled === 'true') {
-            document.getElementById('username').value = savedUsername;
-            document.getElementById('password').value = savedPassword;
-            rememberMe.checked = true;
-        }
+        // ========== 密码强度检测 ==========
+        const strengthBars = document.querySelectorAll('.strength-bar');
+        const strengthText = document.getElementById('strengthText');
 
-        // ========== 登录处理 ==========
-        const loginForm = document.getElementById('loginForm');
-        const loginBtn = document.getElementById('loginBtn');
+        passwordInput.addEventListener('input', () => {
+            const val = passwordInput.value;
+            let strength = 0;
+            
+            if (val.length >= 6) strength++;
+            if (val.length >= 10) strength++;
+            if (/[A-Z]/.test(val) && /[a-z]/.test(val) && /[0-9]/.test(val)) strength++;
+            if (/[!@#$%^&*(),.?":{}|<>]/.test(val)) strength++;
+            
+            // 归一化到 0-3
+            let level = 0;
+            if (val.length === 0) level = 0;
+            else if (val.length < 6) level = 0;
+            else if (strength <= 1) level = 1;
+            else if (strength <= 2) level = 2;
+            else level = 3;
+
+            strengthBars.forEach((bar, index) => {
+                bar.className = 'strength-bar';
+                if (index < level) {
+                    if (level === 1) bar.classList.add('active', 'weak');
+                    else if (level === 2) bar.classList.add('active', 'medium');
+                    else if (level === 3) bar.classList.add('active', 'strong');
+                }
+            });
+
+            const texts = ['请输入密码', '弱 - 建议增加复杂度', '中 - 可以加强', '强 - 密码安全'];
+            strengthText.textContent = texts[level];
+        });
+
+        // ========== 注册处理 ==========
+        const registerForm = document.getElementById('registerForm');
+        const registerBtn = document.getElementById('registerBtn');
         const errorMessage = document.getElementById('errorMessage');
         const errorText = document.getElementById('errorText');
         const successOverlay = document.getElementById('successOverlay');
-        const rememberDevice = document.getElementById('remember-device');
 
-        loginForm.addEventListener('submit', async (e) => {
+        registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
             const city = document.getElementById('city').value;
 
             // 验证
-            if (!username || !password) {
-                showError('请输入用户名和密码');
+            if (!username || !password || !confirmPassword) {
+                showError('请填写所有必填字段');
+                return;
+            }
+
+            if (username.length < 3 || username.length > 20) {
+                showError('用户名长度需在3-20位之间');
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                showError('用户名只能包含字母、数字和下划线');
+                return;
+            }
+
+            if (password.length < 6) {
+                showError('密码长度至少6位');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showError('两次输入的密码不一致');
                 return;
             }
 
             // 显示加载状态
-            loginBtn.classList.add('loading');
+            registerBtn.classList.add('loading');
             errorMessage.classList.remove('show');
 
             try {
-                // 获取设备信息用于设备指纹
-                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                const language = navigator.language;
-                
-                // 调用后端登录 API
-                const response = await fetch('/api/auth/login', {
+                const response = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -809,53 +737,29 @@
                     body: JSON.stringify({ 
                         username, 
                         password, 
-                        city, 
-                        timezone, 
-                        language,
-                        remember_device: rememberDevice.checked 
+                        city
                     })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    // 保存 session 到 localStorage
-                    localStorage.setItem('session_id', data.session_id);
-                    localStorage.setItem('user', JSON.stringify(data.user));
-
-                    // 记住我功能
-                    if (rememberMe.checked) {
-                        localStorage.setItem('saved_username', username);
-                        localStorage.setItem('saved_password', password);
-                        localStorage.setItem('remember_me', 'true');
-                    } else {
-                        localStorage.removeItem('saved_username');
-                        localStorage.removeItem('saved_password');
-                        localStorage.removeItem('remember_me');
-                    }
-
-                    // 设置 Cookie 用于后端验证
-                    const expires = new Date();
-                    expires.setTime(expires.getTime() + 24 * 60 * 60 * 1000); // 1天
-                    document.cookie = `session_id=${data.session_id}; path=/; expires=${expires.toUTCString()}; SameSite=Strict`;
-
                     // 显示成功动画
                     successOverlay.classList.add('show');
 
-                    // 延迟跳转
+                    // 延迟跳转到登录页
                     setTimeout(() => {
-                        window.location.href = '/deepseek';
-                    }, 800);
-
+                        window.location.href = '/login';
+                    }, 1500);
                 } else {
-                    showError(data.message || '用户名或密码错误');
-                    loginBtn.classList.remove('loading');
+                    showError(data.message || '注册失败，请稍后重试');
+                    registerBtn.classList.remove('loading');
                 }
 
             } catch (error) {
-                console.error('登录请求失败:', error);
+                console.error('注册请求失败:', error);
                 showError('网络错误，请稍后重试');
-                loginBtn.classList.remove('loading');
+                registerBtn.classList.remove('loading');
             }
         });
 
@@ -882,8 +786,8 @@
 
         // ========== 键盘事件 ==========
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !loginBtn.classList.contains('loading')) {
-                loginForm.dispatchEvent(new Event('submit'));
+            if (e.key === 'Enter' && !registerBtn.classList.contains('loading')) {
+                registerForm.dispatchEvent(new Event('submit'));
             }
         });
     </script>

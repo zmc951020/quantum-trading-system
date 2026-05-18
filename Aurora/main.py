@@ -45,6 +45,41 @@ except ImportError as e:
     logger.error(f"导入策略模块失败: {str(e)}")
     STRATEGIES_AVAILABLE = False
 
+# 导入系统健康监控和安全模块
+health_monitor = None
+monitoring_scheduler = None
+database_manager = None
+security_control = None
+
+try:
+    from monitor.system_health import get_system_health_monitor
+    health_monitor = get_system_health_monitor()
+    logger.info("[OK] system_health_monitor imported successfully")
+except Exception as e:
+    logger.warning(f"[WARNING] system_health_monitor import failed: {e}")
+
+try:
+    from monitor.scheduler import get_monitoring_scheduler, initialize_default_tasks
+    initialize_default_tasks()
+    monitoring_scheduler = get_monitoring_scheduler()
+    logger.info("[OK] monitoring_scheduler imported successfully")
+except Exception as e:
+    logger.warning(f"[WARNING] monitoring_scheduler import failed: {e}")
+
+try:
+    from utils.database_manager import get_database_manager
+    database_manager = get_database_manager()
+    logger.info("[OK] database_manager imported successfully")
+except Exception as e:
+    logger.warning(f"[WARNING] database_manager import failed: {e}")
+
+try:
+    from risk.data_source_risk_control import get_security_control
+    security_control = get_security_control()
+    logger.info("[OK] security_control imported successfully")
+except Exception as e:
+    logger.warning(f"[WARNING] security_control import failed: {e}")
+
 class AuroraSystem:
     """
     Aurora 量化交易系统
@@ -65,7 +100,30 @@ class AuroraSystem:
         self.risk_manager = None
         self.strategy_manager = StrategyManager()
         
+        # 初始化新模块
+        self.health_monitor = health_monitor
+        self.monitoring_scheduler = monitoring_scheduler
+        self.database_manager = database_manager
+        self.security_control = security_control
+        
+        # 记录系统启动日志
+        if self.database_manager:
+            try:
+                self.database_manager.insert_system_log(
+                    'INFO', 'AuroraSystem', '系统初始化', 'Aurora 量化交易系统正在初始化'
+                )
+            except Exception as e:
+                logger.warning(f"记录系统日志失败: {e}")
+        
         self._initialize_strategies()
+        
+        # 启动监控调度器
+        if self.monitoring_scheduler:
+            try:
+                self.monitoring_scheduler.start()
+                logger.info("监控调度器已启动")
+            except Exception as e:
+                logger.warning(f"启动监控调度器失败: {e}")
     
     def _initialize_strategies(self):
         """
@@ -448,6 +506,33 @@ def select_strategy(strategy_name):
         logger.info(f"成功选择策略: {strategy_name}")
     else:
         logger.error(f"策略 {strategy_name} 不存在")
+
+@cli.command()
+def web():
+    """启动Web可视化界面"""
+    logger.info("启动Web可视化界面...")
+    try:
+        from visualization import app
+        host = os.getenv('WEB_HOST', '0.0.0.0')
+        port = int(os.getenv('WEB_PORT', 5000))
+        logger.info(f"Web服务启动于 http://{host}:{port}")
+        app.run(host=host, port=port, debug=False)
+    except Exception as e:
+        logger.error(f"启动Web服务失败: {str(e)}")
+
+@cli.command()
+@click.option('--host', default='0.0.0.0', help='监听地址')
+@click.option('--port', default=5000, help='监听端口')
+@click.option('--debug', is_flag=True, help='调试模式')
+def serve(host, port, debug):
+    """启动Web服务（带参数）"""
+    logger.info(f"启动Web服务: {host}:{port}")
+    try:
+        from visualization import app
+        logger.info(f"Web服务启动于 http://{host}:{port}")
+        app.run(host=host, port=port, debug=debug)
+    except Exception as e:
+        logger.error(f"启动Web服务失败: {str(e)}")
 
 if __name__ == "__main__":
     cli()

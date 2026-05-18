@@ -791,9 +791,14 @@ stock_pool_manager = StockPool()
 trading_pool_manager = TradingPool()
 
 
+# 数据更新线程的失败计数
+_data_update_error_count = 0
+_last_error_log_time = 0
+
 def data_update_thread():
     """后台数据更新线程"""
     global market_data, performance_data, current_symbol
+    global _data_update_error_count, _last_error_log_time
 
     while True:
         try:
@@ -828,7 +833,11 @@ def data_update_thread():
                         performance_data = performance_data[-500:]
 
                 except Exception as e:
-                    print(f"更新策略时出错: {e}")
+                    _data_update_error_count += 1
+                    now = time.time()
+                    if _data_update_error_count <= 1 or now - _last_error_log_time >= 30:
+                        print(f"更新策略时出错: {e}")
+                        _last_error_log_time = now
 
             if new_data['price'] > 0:
                 for trade in trading_pool_manager.get_open_trades():
@@ -837,9 +846,14 @@ def data_update_thread():
             ml_grid_optimizer.update_metrics()
 
         except Exception as e:
-            print(f"获取市场数据时出错: {e}")
+            _data_update_error_count += 1
+            now = time.time()
+            if _data_update_error_count <= 1 or now - _last_error_log_time >= 30:
+                print(f"获取市场数据时出错: {e}")
+                _last_error_log_time = now
 
         time.sleep(1)
+
 
 
 threading.Thread(target=data_update_thread, daemon=True).start()
@@ -855,7 +869,7 @@ def index():
     if session_id and user_manager:
         user = user_manager.validate_session(session_id)
         if user:
-            return render_template('index.html', user=user)
+            return render_template('dashboard.html', user=user)
 
     return redirect('/login')
 
@@ -864,6 +878,12 @@ def index():
 def login():
     """登录页面"""
     return render_template('login.html')
+
+
+@app.route('/register')
+def register_page():
+    """注册页面"""
+    return render_template('register.html')
 
 
 @app.route('/security-config')
@@ -889,7 +909,7 @@ def simple_test():
 
 @app.route('/dashboard')
 def dashboard():
-    """监控仪表盘页面"""
+    """监控仪表盘页面 - 渲染完整仪表盘"""
     session_id = request.cookies.get('session_id')
     if not session_id:
         session_id = request.headers.get('X-Session-ID')
@@ -1692,14 +1712,15 @@ def save_model():
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    """用户注册"""
+    """用户注册（兼容前端发送的 city 字段）"""
     data = request.json
     username = data.get('username')
     password = data.get('password')
-    email = data.get('email')
+    # 兼容前端 register.html 发送 city 字段，同时支持 email 字段
+    email = data.get('email', data.get('city', ''))
 
-    if not username or not password or not email:
-        return jsonify({'error': '缺少必要参数'}), 400
+    if not username or not password:
+        return jsonify({'success': False, 'message': '缺少用户名或密码'}), 400
 
     result = user_manager.register(username, password, email)
     return jsonify(result)

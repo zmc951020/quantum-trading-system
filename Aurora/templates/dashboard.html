@@ -3,352 +3,415 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aurora量化交易系统 - 监控仪表盘</title>
+    <title>监控仪表盘 - Aurora 量化交易系统</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root {
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --bg-nav: #0d1117;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-muted: #8b949e;
             --primary-color: #00d4ff;
             --success-color: #00ff88;
             --warning-color: #ffaa00;
             --danger-color: #ff4757;
-            --bg-dark: #0d1117;
-            --bg-card: #161b22;
-            --text-primary: #e6edf3;
-            --text-muted: #8b949e;
         }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background-color: var(--bg-dark);
+            background: var(--bg-dark);
             color: var(--text-primary);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            min-height: 100vh;
         }
-        
-        .dashboard {
-            padding: 20px;
+        /* ===== 导航栏 ===== */
+        .navbar-custom {
+            background: var(--bg-nav) !important;
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 20px;
         }
-        
-        .status-badge {
+        .navbar-custom .navbar-brand {
+            color: var(--primary-color);
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        .navbar-custom .navbar-brand small {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+        .nav-link-custom {
+            color: var(--text-muted) !important;
+            padding: 8px 16px !important;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .nav-link-custom:hover,
+        .nav-link-custom.active {
+            color: var(--primary-color) !important;
+            background: rgba(0, 212, 255, 0.08);
+        }
+        .user-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        /* ===== 返回按钮 ===== */
+        .back-to-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             padding: 8px 16px;
-            border-radius: 20px;
+            background: rgba(0, 212, 255, 0.08);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 8px;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.3s;
+            margin-bottom: 16px;
+        }
+        .back-to-nav:hover {
+            background: rgba(0, 212, 255, 0.15);
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+        /* ===== 仪表盘内容 ===== */
+        .container-fluid { padding: 20px; }
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .page-title small {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .stat-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.1);
+        }
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .stat-change {
+            font-size: 13px;
+        }
+        .stat-change.positive { color: var(--success-color); }
+        .stat-change.negative { color: var(--danger-color); }
+        .stat-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        .progress-bar-custom {
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.6s ease;
+        }
+        .progress-info { background: var(--primary-color); }
+        .progress-success { background: var(--success-color); }
+        .progress-warning { background: var(--warning-color); }
+        .progress-danger { background: var(--danger-color); }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        .card-header-custom {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border-color);
             font-weight: 600;
             font-size: 14px;
         }
-        
-        .status-running {
-            background-color: rgba(0, 255, 136, 0.15);
-            color: var(--success-color);
+        .card-body { padding: 20px; }
+        .module-border {
+            border-left: 3px solid var(--primary-color);
         }
-        
-        .status-alert {
-            background-color: rgba(255, 71, 87, 0.15);
-            color: var(--danger-color);
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, var(--bg-card) 0%, #1c2128 100%);
-            border: 1px solid #30363d;
-            border-radius: 12px;
-            padding: 20px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(0, 212, 255, 0.1);
-        }
-        
-        .stat-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--primary-color);
-        }
-        
-        .stat-label {
+        .table-custom {
+            color: var(--text-primary);
             font-size: 14px;
+        }
+        .table-custom th {
             color: var(--text-muted);
-            margin-bottom: 4px;
+            font-weight: 500;
+            border-bottom: 1px solid var(--border-color);
         }
-        
-        .stat-change {
-            font-size: 14px;
-            margin-top: 8px;
+        .table-custom td {
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            vertical-align: middle;
         }
-        
-        .stat-change.positive {
-            color: var(--success-color);
+        .badge-running { background: rgba(0,255,136,0.15); color: var(--success-color); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+        .badge-paused { background: rgba(255,170,0,0.15); color: var(--warning-color); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+        .badge-stopped { background: rgba(255,71,87,0.15); color: var(--danger-color); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+        .badge-waiting { background: rgba(139,148,158,0.15); color: var(--text-muted); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+        .chart-container {
+            width: 100%;
+            height: 300px;
         }
-        
-        .stat-change.negative {
-            color: var(--danger-color);
+        .chart-container-sm {
+            width: 100%;
+            height: 250px;
         }
-        
-        .progress-bar {
-            height: 8px;
-            border-radius: 4px;
-            background-color: #30363d;
-            overflow: hidden;
+        @media (max-width: 768px) {
+            .stat-value { font-size: 1.4rem; }
+            .chart-container { height: 220px; }
+            .chart-container-sm { height: 200px; }
         }
-        
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-        
-        .progress-success {
-            background: linear-gradient(90deg, var(--success-color), #00cc6a);
-        }
-        
-        .progress-warning {
-            background: linear-gradient(90deg, var(--warning-color), #ff8c00);
-        }
-        
-        .card-header-custom {
-            background: linear-gradient(90deg, rgba(0, 212, 255, 0.1), transparent);
-            border-bottom: 1px solid #30363d;
-        }
-        
-        .nav-link-custom {
-            color: var(--text-muted);
-            border-radius: 8px;
-            padding: 8px 16px;
-            margin-right: 8px;
-            transition: all 0.2s;
-        }
-        
-        .nav-link-custom:hover, .nav-link-custom.active {
-            color: var(--primary-color);
-            background-color: rgba(0, 212, 255, 0.1);
-        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
     </style>
 </head>
 <body>
-    <div class="dashboard">
-        <!-- 导航菜单 -->
-        <nav class="navbar navbar-expand-lg navbar-dark bg-dark rounded-lg mb-6">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="/">Aurora量化交易系统</a>
-                <div class="collapse navbar-collapse">
-                    <ul class="navbar-nav me-auto">
-                        <li class="nav-item">
-                            <a class="nav-link" href="/">📊 完整可视化</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="/dashboard">� 监控仪表盘</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/deepseek">🤖 DeepSeek AI助手</a>
-                        </li>
-                    </ul>
-                    <div class="d-flex align-items-center gap-4">
-                        <span class="status-badge status-running">
-                            <span style="display: inline-block; width: 10px; height: 10px; background-color: var(--success-color); border-radius: 50%; margin-right: 8px;"></span>
-                            系统运行中
-                        </span>
-                        <span class="status-badge status-alert">
-                            <span style="display: inline-block; width: 10px; height: 10px; background-color: var(--danger-color); border-radius: 50%; margin-right: 8px;"></span>
-                            4 活动告警
-                        </span>
-                        <button class="btn btn-primary" style="background: linear-gradient(90deg, var(--primary-color), #0099cc); border: none; border-radius: 8px;">
-                            实时监控
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </nav>
 
-        <!-- 页面标题 -->
-        <div class="mb-6">
-            <h1 class="text-2xl font-bold" style="color: var(--primary-color);">量化交易监控</h1>
-            <p class="text-muted mt-1">实时监控交易状态与风险指标</p>
+<!-- ===== 导航栏 ===== -->
+<nav class="navbar navbar-expand-lg navbar-custom">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">
+            ⚡ Aurora <small>v3.2</small>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link-custom" href="/">📊 智能可视化</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link-custom active" href="/dashboard">📈 监控仪表盘</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link-custom" href="/deepseek">🤖 机器人助手</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link-custom" href="/security-monitor">🛡️ 安全监控</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link-custom" href="/security-config">⚙️ 安全配置</a>
+                </li>
+            </ul>
+            <div class="user-info-bar">
+                <span class="text-muted" style="font-size:14px;">
+                    👤 <span id="user-username">--</span>
+                </span>
+                <button class="btn btn-outline-primary btn-sm" id="change-password-btn">修改密码</button>
+                <button class="btn btn-outline-danger btn-sm" id="logout-btn">登出</button>
+            </div>
         </div>
+    </div>
+</nav>
 
-        <!-- 统计卡片 -->
-        <div class="row g-4 mb-6">
-            <div class="col-lg-3">
-                <div class="stat-card">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="stat-label">账户净值</div>
-                            <div class="stat-value">¥ 100,082.73</div>
-                            <div class="stat-change positive">
-                                <span>+0.08%</span>
-                                <span class="text-muted" style="margin-left: 8px;">当前账户总值</span>
-                            </div>
-                        </div>
-                        <div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                            <span style="font-size: 20px;">$</span>
+<div class="container-fluid p-4">
+
+    <!-- ===== 返回导航栏按钮 ===== -->
+    <a href="/" class="back-to-nav">
+        <i class="bi bi-arrow-left"></i> 返回导航栏
+    </a>
+
+    <!-- ===== 页面标题 ===== -->
+    <div class="page-title">
+        📈 监控仪表盘
+        <small>实时监控系统运行状态</small>
+    </div>
+
+    <!-- ===== 顶部统计卡片 ===== -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="stat-label">💰 账户净值</div>
+                        <div class="stat-value" id="accountValue">¥ 100,082.73</div>
+                        <div class="stat-change positive">
+                            <span>+0.08%</span>
+                            <span class="text-muted ms-2" style="font-size:12px;">今日盈亏</span>
                         </div>
                     </div>
-                    <div class="progress-bar mt-4">
-                        <div class="progress-fill progress-success" style="width: 75%;"></div>
-                    </div>
+                    <div class="stat-icon" style="background:rgba(0,212,255,0.12);color:var(--primary-color);">$</div>
                 </div>
-            </div>
-
-            <div class="col-lg-3">
-                <div class="stat-card">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="stat-label">风险敞口</div>
-                            <div class="stat-value">27.55%</div>
-                            <div class="stat-change positive">
-                                <span>安全</span>
-                                <span class="text-muted" style="margin-left: 8px;">当前风险敞口</span>
-                            </div>
-                        </div>
-                        <div class="w-12 h-12 rounded-full bg-warning/20 flex items-center justify-center">
-                            <span style="font-size: 20px;">⚠</span>
-                        </div>
-                    </div>
-                    <div class="progress-bar mt-4">
-                        <div class="progress-fill progress-success" style="width: 27.55%;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-3">
-                <div class="stat-card">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="stat-label">仓位使用</div>
-                            <div class="stat-value">24.70%</div>
-                            <div class="stat-change positive">
-                                <span>开仓数量: 2</span>
-                                <span class="text-muted" style="margin-left: 8px;">总仓位使用率</span>
-                            </div>
-                        </div>
-                        <div class="w-12 h-12 rounded-full bg-info/20 flex items-center justify-center">
-                            <span style="font-size: 20px;">📊</span>
-                        </div>
-                    </div>
-                    <div class="progress-bar mt-4">
-                        <div class="progress-fill progress-success" style="width: 24.7%;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-3">
-                <div class="stat-card">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="stat-label">今日收益</div>
-                            <div class="stat-value">¥ 82.73</div>
-                            <div class="stat-change positive">
-                                <span>+0.08%</span>
-                                <span class="text-muted" style="margin-left: 8px;">今日盈亏</span>
-                            </div>
-                        </div>
-                        <div class="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center">
-                            <span style="font-size: 20px;">📈</span>
-                        </div>
-                    </div>
-                    <div class="progress-bar mt-4">
-                        <div class="progress-fill progress-success" style="width: 60%;"></div>
-                    </div>
+                <div class="progress-bar-custom">
+                    <div class="progress-fill progress-info" style="width:75%;"></div>
                 </div>
             </div>
         </div>
-
-        <div class="row g-4">
-            <div class="col-lg-8">
-                <div class="card stat-card">
-                    <div class="card-header card-header-custom">
-                        <h3 class="card-title">收益曲线</h3>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="stat-label">⚠️ 风险敞口</div>
+                        <div class="stat-value" id="riskExposure" style="color:var(--success-color);">27.55%</div>
+                        <div class="stat-change positive">
+                            <span>安全</span>
+                            <span class="text-muted ms-2" style="font-size:12px;">当前风险敞口</span>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <canvas id="profitChart"></canvas>
-                    </div>
+                    <div class="stat-icon" style="background:rgba(255,170,0,0.12);color:var(--warning-color);">⚠</div>
                 </div>
-            </div>
-
-            <div class="col-lg-4">
-                <div class="card stat-card">
-                    <div class="card-header card-header-custom">
-                        <h3 class="card-title">持仓分布</h3>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="positionChart"></canvas>
-                    </div>
+                <div class="progress-bar-custom">
+                    <div class="progress-fill progress-success" style="width:27.55%;"></div>
                 </div>
             </div>
         </div>
-
-        <div class="row g-4 mt-4">
-            <div class="col-lg-6">
-                <div class="card stat-card">
-                    <div class="card-header card-header-custom">
-                        <h3 class="card-title">策略状态</h3>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="stat-label">📊 仓位使用</div>
+                        <div class="stat-value" id="positionUsage" style="color:var(--warning-color);">24.70%</div>
+                        <div class="stat-change positive">
+                            <span>开仓数量: 2</span>
+                            <span class="text-muted ms-2" style="font-size:12px;">总仓位使用率</span>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <table class="table table-dark table-hover">
-                            <thead>
-                                <tr>
-                                    <th>策略名称</th>
-                                    <th>状态</th>
-                                    <th>收益率</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>趋势跟踪策略</td>
-                                    <td><span class="badge bg-success">运行中</span></td>
-                                    <td class="text-success">+2.35%</td>
-                                    <td><button class="btn btn-sm btn-danger">停止</button></td>
-                                </tr>
-                                <tr>
-                                    <td>均值回归策略</td>
-                                    <td><span class="badge bg-success">运行中</span></td>
-                                    <td class="text-success">+1.82%</td>
-                                    <td><button class="btn btn-sm btn-danger">停止</button></td>
-                                </tr>
-                                <tr>
-                                    <td>套利策略</td>
-                                    <td><span class="badge bg-warning">等待中</span></td>
-                                    <td class="text-muted">--</td>
-                                    <td><button class="btn btn-sm btn-primary">启动</button></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    <div class="stat-icon" style="background:rgba(0,212,255,0.12);color:var(--primary-color);">📊</div>
+                </div>
+                <div class="progress-bar-custom">
+                    <div class="progress-fill progress-warning" style="width:24.7%;"></div>
                 </div>
             </div>
-
-            <div class="col-lg-6">
-                <div class="card stat-card">
-                    <div class="card-header card-header-custom">
-                        <h3 class="card-title">系统告警</h3>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="stat-label">📈 今日收益</div>
+                        <div class="stat-value" id="todayProfit" style="color:var(--success-color);">¥ 82.73</div>
+                        <div class="stat-change positive">
+                            <span>+0.08%</span>
+                            <span class="text-muted ms-2" style="font-size:12px;">今日盈亏</span>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="list-group">
-                            <div class="list-group-item bg-dark border-dark">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h5 class="text-danger">风险阈值告警</h5>
-                                        <p class="text-muted text-sm">风险敞口达到阈值85%</p>
-                                    </div>
-                                    <span class="text-muted text-sm">2分钟前</span>
-                                </div>
+                    <div class="stat-icon" style="background:rgba(0,255,136,0.12);color:var(--success-color);">📈</div>
+                </div>
+                <div class="progress-bar-custom">
+                    <div class="progress-fill progress-success" style="width:60%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 第一行：收益曲线 + 持仓分布 ===== -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header-custom">📈 收益曲线</div>
+                <div class="card-body">
+                    <div class="chart-container" id="profitChart"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header-custom">🥧 持仓分布</div>
+                <div class="card-body">
+                    <div class="chart-container-sm" id="positionChart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 第二行：策略状态 + 系统告警 ===== -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+            <div class="card module-border">
+                <div class="card-header-custom">🎯 策略状态</div>
+                <div class="card-body">
+                    <table class="table table-custom">
+                        <thead>
+                            <tr>
+                                <th>策略名称</th>
+                                <th>状态</th>
+                                <th>收益率</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>趋势跟踪策略</td>
+                                <td><span class="badge-running">运行中</span></td>
+                                <td style="color:var(--success-color);">+2.35%</td>
+                                <td><button class="btn btn-sm btn-outline-danger">停止</button></td>
+                            </tr>
+                            <tr>
+                                <td>均值回归策略</td>
+                                <td><span class="badge-running">运行中</span></td>
+                                <td style="color:var(--success-color);">+1.82%</td>
+                                <td><button class="btn btn-sm btn-outline-danger">停止</button></td>
+                            </tr>
+                            <tr>
+                                <td>套利策略</td>
+                                <td><span class="badge-waiting">等待中</span></td>
+                                <td class="text-muted">--</td>
+                                <td><button class="btn btn-sm btn-outline-primary">启动</button></td>
+                            </tr>
+                            <tr>
+                                <td>高频交易策略</td>
+                                <td><span class="badge-running">运行中</span></td>
+                                <td style="color:var(--success-color);">+3.12%</td>
+                                <td><button class="btn btn-sm btn-outline-danger">停止</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card module-border">
+                <div class="card-header-custom">🔔 系统告警</div>
+                <div class="card-body">
+                    <div id="alertList">
+                        <div class="alert-item" style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span><span style="color:var(--warning-color);">⚠</span> 风险敞口超过阈值</span>
+                                <span class="text-muted" style="font-size:12px;">2分钟前</span>
                             </div>
-                            <div class="list-group-item bg-dark border-dark">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h5 class="text-warning">持仓超限警告</h5>
-                                        <p class="text-muted text-sm">单只股票持仓超过10%</p>
-                                    </div>
-                                    <span class="text-muted text-sm">15分钟前</span>
-                                </div>
+                        </div>
+                        <div class="alert-item" style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span><span style="color:var(--success-color);">✓</span> 策略模型更新成功</span>
+                                <span class="text-muted" style="font-size:12px;">15分钟前</span>
                             </div>
-                            <div class="list-group-item bg-dark border-dark">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h5 class="text-primary">策略重启</h5>
-                                        <p class="text-muted text-sm">趋势跟踪策略已自动重启</p>
-                                    </div>
-                                    <span class="text-muted text-sm">30分钟前</span>
-                                </div>
+                        </div>
+                        <div class="alert-item" style="padding:8px 0;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span><span style="color:var(--primary-color);">ℹ</span> 数据同步完成</span>
+                                <span class="text-muted" style="font-size:12px;">1小时前</span>
                             </div>
                         </div>
                     </div>
@@ -357,53 +420,151 @@
         </div>
     </div>
 
-    <script>
-        const profitCtx = document.getElementById('profitChart').getContext('2d');
-        const profitChart = new Chart(profitCtx, {
-            type: 'line',
-            data: {
-                labels: ['10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00'],
-                datasets: [{
-                    label: '账户净值',
-                    data: [99800, 99950, 100100, 99900, 100050, 100150, 100080, 100120, 100082],
-                    borderColor: '#00d4ff',
-                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 0,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
-                    y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } }
-                }
+    <!-- ===== 第三行：系统健康状态 ===== -->
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header-custom">🩺 系统健康状态</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3 col-6">
+                            <div class="text-center p-3" style="background:rgba(0,255,136,0.05);border-radius:10px;">
+                                <div style="font-size:24px;color:var(--success-color);">✓</div>
+                                <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">认证服务</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="text-center p-3" style="background:rgba(0,255,136,0.05);border-radius:10px;">
+                                <div style="font-size:24px;color:var(--success-color);">✓</div>
+                                <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">策略服务</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="text-center p-3" style="background:rgba(0,255,136,0.05);border-radius:10px;">
+                                <div style="font-size:24px;color:var(--success-color);">✓</div>
+                                <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">风控服务</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="text-center p-3" style="background:rgba(0,255,136,0.05);border-radius:10px;">
+                                <div style="font-size:24px;color:var(--success-color);">✓</div>
+                                <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">数据服务</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+    // ========== 用户信息加载 ==========
+    async function loadUserInfo() {
+        try {
+            const sessionId = localStorage.getItem('session_id');
+            if (!sessionId) return;
+            const response = await fetch('/api/user-info', {
+                headers: { 'X-Session-ID': sessionId }
+            });
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('user-username').textContent = data.user.username;
             }
+        } catch (e) {
+            console.error('加载用户信息失败:', e);
+        }
+    }
+    loadUserInfo();
+
+    // ========== 登出 ==========
+    document.getElementById('logout-btn')?.addEventListener('click', async () => {
+        const sessionId = localStorage.getItem('session_id');
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'X-Session-ID': sessionId }
+        });
+        localStorage.removeItem('session_id');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    });
+
+    // ========== 初始化图表 ==========
+    function initCharts() {
+        // 收益曲线图
+        const profitChart = echarts.init(document.getElementById('profitChart'));
+        const dates = [];
+        const profits = [];
+        for (let i = 30; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            dates.push(d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }));
+            profits.push(100000 + Math.sin(i * 0.3) * 2000 + Math.random() * 500);
+        }
+        profitChart.setOption({
+            backgroundColor: 'transparent',
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            tooltip: { trigger: 'axis', backgroundColor: 'rgba(22,27,34,0.9)', borderColor: '#30363d' },
+            xAxis: {
+                type: 'category',
+                data: dates,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 11 }
+            },
+            yAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+                axisLabel: { color: '#8b949e', fontSize: 11 }
+            },
+            series: [{
+                type: 'line',
+                data: profits,
+                smooth: true,
+                symbol: 'none',
+                lineStyle: { width: 2, color: '#00d4ff' },
+                areaStyle: {
+                    color: {
+                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(0,212,255,0.3)' },
+                            { offset: 1, color: 'rgba(0,212,255,0.02)' }
+                        ]
+                    }
+                }
+            }]
         });
 
-        const positionCtx = document.getElementById('positionChart').getContext('2d');
-        const positionChart = new Chart(positionCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['贵州茅台', '比亚迪', '宁德时代', '其他'],
-                datasets: [{
-                    data: [35, 25, 20, 20],
-                    backgroundColor: ['#00d4ff', '#00ff88', '#ffaa00', '#8b949e'],
-                    borderWidth: 0,
-                    hoverOffset: 10
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom', labels: { color: '#e6edf3', padding: 15 } }
-                },
-                cutout: '65%'
-            }
+        // 持仓分布图
+        const positionChart = echarts.init(document.getElementById('positionChart'));
+        positionChart.setOption({
+            backgroundColor: 'transparent',
+            tooltip: { trigger: 'item', backgroundColor: 'rgba(22,27,34,0.9)', borderColor: '#30363d' },
+            series: [{
+                type: 'pie',
+                radius: ['45%', '70%'],
+                center: ['50%', '50%'],
+                avoidLabelOverlap: false,
+                label: { show: true, color: '#8b949e', fontSize: 11, formatter: '{b}\n{d}%' },
+                labelLine: { lineStyle: { color: '#30363d' } },
+                data: [
+                    { value: 45, name: 'BTC', itemStyle: { color: '#f7931a' } },
+                    { value: 30, name: 'ETH', itemStyle: { color: '#627eea' } },
+                    { value: 15, name: 'SOL', itemStyle: { color: '#00ff88' } },
+                    { value: 10, name: '其他', itemStyle: { color: '#8b949e' } }
+                ]
+            }]
         });
-    </script>
+
+        // 窗口大小变化时自适应
+        window.addEventListener('resize', () => {
+            profitChart.resize();
+            positionChart.resize();
+        });
+    }
+    initCharts();
+</script>
 </body>
 </html>

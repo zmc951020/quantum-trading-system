@@ -64,6 +64,10 @@ class XbkApiClient:
 
         return signature
 
+    # 失败计数和退避控制
+    _request_fail_count = 0
+    _last_fail_log_time = 0
+
     def _request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
         """
         发送API请求
@@ -91,15 +95,25 @@ class XbkApiClient:
 
         try:
             if method.upper() == 'GET':
-                response = self.session.get(url, params=data, headers=headers)
+                response = self.session.get(url, params=data, headers=headers, timeout=5)
             else:
-                response = self.session.post(url, json=data, headers=headers)
+                response = self.session.post(url, json=data, headers=headers, timeout=5)
 
             response.raise_for_status()
+            # 成功后重置失败计数
+            XbkApiClient._request_fail_count = 0
             return response.json()
         except requests.RequestException as e:
-            print(f"API请求失败: {e}")
+            XbkApiClient._request_fail_count += 1
+            now = time.time()
+            # 控制日志频率：首次失败立即打印，之后每10秒或每10次打印一次
+            if (XbkApiClient._request_fail_count <= 1 or 
+                now - XbkApiClient._last_fail_log_time >= 10 or 
+                XbkApiClient._request_fail_count % 10 == 0):
+                print(f"API请求失败(第{XbkApiClient._request_fail_count}次): {e}")
+                XbkApiClient._last_fail_log_time = now
             return {'code': -1, 'msg': str(e), 'data': None}
+
 
     def get_ticker(self, symbol: str) -> Dict:
         """
