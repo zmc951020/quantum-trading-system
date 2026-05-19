@@ -28,54 +28,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from xbk_simulator import XbkSimulatedTrader, OrderType, OrderSide
 from strategies.final_market_adaptive import FinalMarketAdaptiveGrid
 import pandas as pd
-import numpy as np
-
-# ========== 增益性优化模块导入 ==========
-strategy_performance_tracker = None
-unified_risk_controller = None
-rl_enhancer = None
-data_quality_validator = None
-
-try:
-    from utils.strategy_performance_tracker import get_performance_tracker
-    strategy_performance_tracker = get_performance_tracker()
-    print("[OK] StrategyPerformanceTracker imported in real_time_trading")
-except Exception as e:
-    print(f"[WARNING] StrategyPerformanceTracker import failed: {e}")
-
-try:
-    from utils.unified_risk_controller import get_risk_controller
-    unified_risk_controller = get_risk_controller()
-    print("[OK] UnifiedRiskController imported in real_time_trading")
-except Exception as e:
-    print(f"[WARNING] UnifiedRiskController import failed: {e}")
-
-try:
-    from utils.rl_enhancer import get_rl_enhancer
-    rl_enhancer = get_rl_enhancer()
-    print("[OK] RLEnhancer imported in real_time_trading")
-except Exception as e:
-    print(f"[WARNING] RLEnhancer import failed: {e}")
-
-try:
-    from utils.data_quality_validator import get_data_validator
-    data_quality_validator = get_data_validator()
-    print("[OK] DataQualityValidator imported in real_time_trading")
-except Exception as e:
-    print(f"[WARNING] DataQualityValidator import failed: {e}")
-
-# ========== 数据库维护模块导入 ==========
-db_maintenance_scheduler = None
-try:
-    from utils.db_maintenance import DatabaseMaintenanceScheduler
-    db_maintenance_scheduler = DatabaseMaintenanceScheduler()
-    print("[OK] DatabaseMaintenanceScheduler imported in real_time_trading")
-except Exception as e:
-    print(f"[WARNING] DatabaseMaintenanceScheduler import failed: {e}")
 
 
 class StrategyRunner:
-
     """
     策略运行器
     管理策略的实时运行
@@ -149,9 +104,6 @@ class StrategyRunner:
             )
             logger.info("Final Market Adaptive Grid 策略初始化完成")
             
-            # 初始化RL增强器状态
-            rl_state = None
-            
             while self.running:
                 # 获取市场数据
                 ticker = self.trader.get_ticker(self.symbol)
@@ -166,80 +118,8 @@ class StrategyRunner:
                 # 记录价格
                 logger.info(f"当前价格: {current_price:.4f}")
                 
-                # ===== 增益性优化：数据质量校验 =====
-                if data_quality_validator and data_quality_validator.enabled:
-                    quality_data = {
-                        'prices': self.performance["price_history"][-20:] if len(self.performance["price_history"]) >= 20 else self.performance["price_history"],
-                        'volumes': [],
-                        'timestamps': [datetime.now().isoformat()],
-                    }
-                    quality_report = data_quality_validator.check_data_quality(quality_data)
-                    if quality_report.overall_score < 50.0:
-                        logger.warning(f"数据质量评分过低 ({quality_report.overall_score:.1f})，跳过本轮交易")
-                        time.sleep(self.trading_interval)
-                        continue
-                
-                # ===== 增益性优化：RL增强器状态构建 =====
-                if rl_enhancer and rl_enhancer.enabled:
-                    account = self.trader.get_account_info()
-                    account_data = account.get("data", {}) if account.get("code") == 0 else {}
-                    
-                    market_data = {
-                        'price_change_pct': ((current_price - self.base_price) / self.base_price * 100) if self.base_price else 0,
-                        'volatility': np.std(self.performance["price_history"][-20:]) / np.mean(self.performance["price_history"][-20:]) if len(self.performance["price_history"]) >= 20 else 0.01,
-                        'rsi': 50.0,
-                        'macd': 0.0,
-                        'macd_signal': 0.0,
-                        'adx': 25.0,
-                        'atr': current_price * 0.01,
-                        'close': current_price,
-                        'position_pct': 0.5,
-                        'unrealized_pnl_pct': 0.0,
-                        'market_regime': 'range_bound',
-                        'signal_confidence': 0.5,
-                        'risk_score': 30.0,
-                        'volume_change_pct': 0.0,
-                        'momentum_short': 0.0,
-                        'momentum_long': 0.0,
-                        'bb_position': 0.5,
-                        'rolling_sharpe': 0.0,
-                        'max_drawdown': self.performance.get("max_drawdown", 0.0),
-                        'trade_frequency': self.performance["total_trades"] / max((datetime.now() - self.performance["start_time"]).total_seconds() / 3600, 1),
-                        'time_decay': 0.9,
-                        'regime_alignment': 0.5,
-                    }
-                    rl_state = rl_enhancer.build_state(market_data)
-                    rl_action = rl_enhancer.select_action(rl_state)
-                    logger.info(f"[RL增强] 建议仓位比例: {rl_action:.4f}")
-                
                 # 执行完整策略逻辑
                 self._execute_full_strategy(current_price)
-                
-                # ===== 增益性优化：RL经验存储 =====
-                if rl_enhancer and rl_enhancer.enabled and rl_state is not None:
-                    next_market_data = market_data.copy()
-                    next_market_data['price_change_pct'] = ((current_price - self.base_price) / self.base_price * 100) if self.base_price else 0
-                    next_state = rl_enhancer.build_state(next_market_data)
-                    
-                    # 计算奖励
-                    account_after = self.trader.get_account_info()
-                    account_after_data = account_after.get("data", {}) if account_after.get("code") == 0 else {}
-                    portfolio_return = (account_after_data.get("total_value", 100000.0) - 100000.0) / 100000.0
-                    
-                    reward = rl_enhancer.compute_reward(
-                        portfolio_return=portfolio_return,
-                        sharpe_change=0.0,
-                        drawdown_change=-self.performance.get("max_drawdown", 0.0) / 100.0,
-                        trade_frequency=self.performance["total_trades"] / max((datetime.now() - self.performance["start_time"]).total_seconds() / 3600, 1) / 10.0,
-                        regime_alignment=0.5,
-                    )
-                    rl_enhancer.store_transition(rl_state, rl_action, reward, next_state)
-                    
-                    # 定期更新策略
-                    if self.performance["total_trades"] > 0 and self.performance["total_trades"] % 10 == 0:
-                        update_stats = rl_enhancer.update_policy()
-                        if update_stats.get("policy_loss", 0) > 0:
-                            logger.info(f"[RL增强] 策略已更新: loss={update_stats['policy_loss']:.6f}")
                 
                 # 显示账户信息
                 self._display_account_info()
@@ -268,42 +148,6 @@ class StrategyRunner:
         # 构建价格数据
         price_series = pd.Series(self.performance["price_history"])
         
-        # ===== 增益性优化：统一风控检查 =====
-        risk_override = False
-        if unified_risk_controller and unified_risk_controller.enabled:
-            account = self.trader.get_account_info()
-            account_data = account.get("data", {}) if account.get("code") == 0 else {}
-            
-            risk_context = {
-                'current_price': current_price,
-                'base_price': self.base_price or current_price,
-                'position_value': account_data.get("total_value", 0) - account_data.get("available", 0),
-                'total_value': account_data.get("total_value", 100000.0),
-                'available_cash': account_data.get("available", 100000.0),
-                'daily_pnl': self.performance.get("total_pnl", 0.0),
-                'max_drawdown': self.performance.get("max_drawdown", 0.0),
-                'total_trades': self.performance["total_trades"],
-                'winning_trades': self.performance["winning_trades"],
-                'price_history': self.performance["price_history"],
-                'volatility': np.std(self.performance["price_history"][-20:]) / np.mean(self.performance["price_history"][-20:]) if len(self.performance["price_history"]) >= 20 else 0.01,
-            }
-            
-            risk_decision = unified_risk_controller.evaluate(risk_context)
-            if risk_decision.get("action") == "halt":
-                logger.warning(f"[风控] 交易暂停: {risk_decision.get('reason', '未知原因')}")
-                risk_override = True
-            elif risk_decision.get("action") == "reduce":
-                logger.info(f"[风控] 降低仓位: {risk_decision.get('reason', '未知原因')}")
-                # 降低仓位逻辑
-                position = self._get_position(self.symbol)
-                if position and position.get("quantity", 0) > 0:
-                    reduce_qty = position["quantity"] * risk_decision.get("reduce_factor", 0.5)
-                    self._place_sell_order(reduce_qty, current_price)
-                return
-        
-        if risk_override:
-            return
-        
         # 执行策略
         result = self.strategy.update_price(current_price, price_series)
         
@@ -331,17 +175,6 @@ class StrategyRunner:
                         if buy_result.get("code") == 0:
                             self.performance["total_trades"] += 1
                             logger.info(f"买入成功: {quantity:.6f} @ {price:.4f} - 原因: {result.get('reason')}")
-                            
-                            # ===== 增益性优化：记录交易到性能追踪器 =====
-                            if strategy_performance_tracker and strategy_performance_tracker.enabled:
-                                strategy_performance_tracker.record_trade(
-                                    action='buy',
-                                    price=price,
-                                    quantity=quantity,
-                                    reason=result.get('reason', 'strategy_signal'),
-                                    market_regime='range_bound',
-                                    signal_confidence=0.7,
-                                )
                         else:
                             logger.warning(f"买入失败: {buy_result['message']}")
                     else:
@@ -362,17 +195,6 @@ class StrategyRunner:
                         self.performance["total_trades"] += 1
                         self.performance["winning_trades"] += 1
                         logger.info(f"卖出成功: {quantity:.6f} @ {price:.4f} - 原因: {result.get('reason')}")
-                        
-                        # ===== 增益性优化：记录交易到性能追踪器 =====
-                        if strategy_performance_tracker and strategy_performance_tracker.enabled:
-                            strategy_performance_tracker.record_trade(
-                                action='sell',
-                                price=price,
-                                quantity=quantity,
-                                reason=result.get('reason', 'strategy_signal'),
-                                market_regime='range_bound',
-                                signal_confidence=0.7,
-                            )
                     else:
                         logger.warning(f"卖出失败: {sell_result['message']}")
                 else:
@@ -380,18 +202,6 @@ class StrategyRunner:
             
             elif action == "hold":
                 logger.info("策略决定: 持有")
-        
-        # ===== 增益性优化：更新性能追踪器 =====
-        if strategy_performance_tracker and strategy_performance_tracker.enabled:
-            account = self.trader.get_account_info()
-            account_data = account.get("data", {}) if account.get("code") == 0 else {}
-            total_value = account_data.get("total_value", 100000.0)
-            
-            strategy_performance_tracker.update_metrics(
-                current_price=current_price,
-                total_value=total_value,
-                price_history=self.performance["price_history"],
-            )
     
     def _get_position(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
@@ -550,14 +360,6 @@ def run_real_time_simulation(
         symbol=symbol
     )
     
-    # 启动数据库自动维护
-    if db_maintenance_scheduler:
-        try:
-            db_maintenance_scheduler.start()
-            print("[OK] 数据库自动维护调度器已启动")
-        except Exception as e:
-            print(f"[WARNING] 启动数据库维护调度器失败: {e}")
-    
     # 启动策略
     print(f"\n4. 启动实时交易...")
     print(f"   运行时长: {duration_seconds} 秒")
@@ -576,15 +378,6 @@ def run_real_time_simulation(
     finally:
         # 停止策略
         runner.stop()
-        
-        # 停止数据库自动维护
-        if db_maintenance_scheduler:
-            try:
-                db_maintenance_scheduler.stop()
-                print("[OK] 数据库自动维护调度器已停止")
-            except Exception as e:
-                print(f"[WARNING] 停止数据库维护调度器失败: {e}")
-
         
         # 显示性能报告
         print("\n" + "=" * 70)

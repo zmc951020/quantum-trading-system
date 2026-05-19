@@ -159,61 +159,6 @@ class AutoBacktestSystem:
 
         import numpy as np
 
-        # ===== 增益性优化：集成StrategyPerformanceTracker =====
-        perf_tracker = None
-        try:
-            from utils.strategy_performance_tracker import get_performance_tracker
-            perf_tracker = get_performance_tracker()
-            if perf_tracker and perf_tracker.enabled:
-                print(f"[PerfTracker] 使用性能追踪器监控 {strategy_name}")
-        except Exception as e:
-            print(f"[PerfTracker] 导入失败: {e}")
-            perf_tracker = None
-
-        # ===== 增益性优化：集成UnifiedRiskController =====
-        risk_controller = None
-        try:
-            from utils.unified_risk_controller import get_risk_controller
-            risk_controller = get_risk_controller()
-            if risk_controller and risk_controller.enabled:
-                print(f"[RiskController] 使用统一风险控制器评估 {strategy_name}")
-        except Exception as e:
-            print(f"[RiskController] 导入失败: {e}")
-            risk_controller = None
-
-        # ===== 增益性优化：集成SmartParamOptimizer =====
-        param_optimizer = None
-        try:
-            from utils.smart_param_optimizer import get_param_optimizer
-            param_optimizer = get_param_optimizer()
-            if param_optimizer and param_optimizer.enabled:
-                print(f"[SmartOptimizer] 使用智能参数优化器分析 {strategy_name}")
-        except Exception as e:
-            print(f"[SmartOptimizer] 导入失败: {e}")
-            param_optimizer = None
-
-        # ===== 增益性优化：集成RLEnhancer =====
-        rl_enhancer = None
-        try:
-            from utils.rl_enhancer import get_rl_enhancer
-            rl_enhancer = get_rl_enhancer()
-            if rl_enhancer and rl_enhancer.enabled:
-                print(f"[RLEnhancer] 使用强化学习增强器优化 {strategy_name}")
-        except Exception as e:
-            print(f"[RLEnhancer] 导入失败: {e}")
-            rl_enhancer = None
-
-        # ===== 增益性优化：集成DataQualityValidator =====
-        data_validator = None
-        try:
-            from utils.data_quality_validator import get_data_validator
-            data_validator = get_data_validator()
-            if data_validator and data_validator.enabled:
-                print(f"[DataValidator] 使用数据质量验证器检查 {strategy_name}")
-        except Exception as e:
-            print(f"[DataValidator] 导入失败: {e}")
-            data_validator = None
-
         prices = []
         for i in range(days * 24 * 60):
             price = 50000 + np.random.normal(0, 500)
@@ -240,77 +185,6 @@ class AutoBacktestSystem:
                 'excess_return': total_return - self.benchmark_return
             }
         }
-
-        # ===== 增益性优化：记录性能追踪 =====
-        if perf_tracker and perf_tracker.enabled:
-            perf_tracker.record_backtest(
-                strategy_name=strategy_name,
-                annual_return=total_return,
-                sharpe_ratio=sharpe_ratio,
-                max_drawdown=max_drawdown,
-                win_rate=win_rate,
-                total_trades=total_trades,
-            )
-
-        # ===== 增益性优化：风险控制评估 =====
-        if risk_controller and risk_controller.enabled:
-            risk_context = {
-                'strategy_name': strategy_name,
-                'annual_return': total_return,
-                'sharpe_ratio': sharpe_ratio,
-                'max_drawdown': max_drawdown,
-                'win_rate': win_rate,
-                'total_trades': total_trades,
-                'initial_balance': initial_balance,
-            }
-            risk_decision = risk_controller.evaluate(risk_context)
-            result['risk_decision'] = risk_decision
-            if risk_decision.get('action') == 'halt':
-                print(f"[RiskController] ⚠️ 风险控制建议暂停策略 {strategy_name}")
-            else:
-                print(f"[RiskController] ✅ 风险控制通过 {strategy_name}")
-
-        # ===== 增益性优化：数据质量验证 =====
-        if data_validator and data_validator.enabled:
-            quality_data = {
-                'prices': prices,
-                'returns': [prices[i+1] - prices[i] for i in range(len(prices)-1)],
-                'volumes': [np.random.randint(100, 1000) for _ in range(len(prices))],
-            }
-            quality_report = data_validator.check_data_quality(quality_data)
-            result['data_quality'] = {
-                'overall_score': quality_report.overall_score if hasattr(quality_report, 'overall_score') else 0,
-                'issues': quality_report.issues if hasattr(quality_report, 'issues') else [],
-            }
-            if result['data_quality']['overall_score'] < 50.0:
-                print(f"[DataValidator] ⚠️ 数据质量评分偏低: {result['data_quality']['overall_score']:.1f}")
-            else:
-                print(f"[DataValidator] ✅ 数据质量评分: {result['data_quality']['overall_score']:.1f}")
-
-        # ===== 增益性优化：RL增强器优化建议 =====
-        if rl_enhancer and rl_enhancer.enabled:
-            rl_state = rl_enhancer.build_state({
-                'price': prices[-1] if prices else 50000,
-                'returns': total_return,
-                'sharpe': sharpe_ratio,
-                'drawdown': max_drawdown,
-                'volatility': np.std(prices) / np.mean(prices) if prices else 0,
-            })
-            rl_action = rl_enhancer.select_action(rl_state)
-            result['rl_suggestion'] = {
-                'position_ratio': float(rl_action),
-                'confidence': min(1.0, abs(float(rl_action) - 0.5) * 2),
-            }
-            print(f"[RLEnhancer] 建议仓位比例: {rl_action:.4f}")
-
-        # ===== 增益性优化：智能参数优化建议 =====
-        if param_optimizer and param_optimizer.enabled:
-            param_optimizer.record_optimization(
-                strategy_name=strategy_name,
-                params={'annual_return': total_return, 'sharpe_ratio': sharpe_ratio},
-                performance_score=total_return,
-            )
-            print(f"[SmartOptimizer] 已记录优化历史 {strategy_name}")
 
         self._save_backtest_record(result)
 

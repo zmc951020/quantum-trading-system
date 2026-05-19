@@ -165,8 +165,8 @@ class TradeSecurityValidator:
             return {'allowed': True, 'reason': 'IP白名单未启用'}
         
         # 兼容简单字符串列表和对象列表
-        valid_ips = []
         if isinstance(whitelist, list):
+            valid_ips = []
             for item in whitelist:
                 if isinstance(item, str):
                     valid_ips.append(item)

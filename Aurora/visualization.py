@@ -13,10 +13,9 @@ import sys
 import random
 import hashlib
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, redirect, session as flask_session
+from flask import Flask, render_template, jsonify, request, redirect
 import pandas as pd
 import numpy as np
-from functools import wraps
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,71 +27,24 @@ try:
 except Exception as e:
     print(f"[WARNING] user_manager import failed: {e}")
 
-# ========== 会话认证装饰器 ==========
-def require_session(f):
-    """要求有效会话的装饰器 - 保护交易安全API"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # 检查请求头中的会话ID
-        session_id = request.headers.get('X-Session-ID')
-        if not session_id:
-            return jsonify({
-                'success': False,
-                'message': 'SESSION_REQUIRED: 缺少会话ID',
-                'code': 'SESSION_MISSING'
-            }), 401
-        
-        if not user_manager:
-            return jsonify({
-                'success': False,
-                'message': 'SESSION_REQUIRED: 用户系统不可用',
-                'code': 'USER_MANAGER_UNAVAILABLE'
-            }), 503
-        
-        session = user_manager.validate_session(session_id)
-        if not session:
-            return jsonify({
-                'success': False,
-                'message': 'SESSION_REQUIRED: 会话无效或已过期',
-                'code': 'SESSION_INVALID'
-            }), 401
-        
-        # 将会话信息注入到请求中
-        request.current_session = session
-        request.current_user = session.get('username', 'unknown')
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-# 导入策略注册表（统一策略管理）
+# 再导入策略模块
 try:
-    from strategies.strategy_registry import (
-        STRATEGY_REGISTRY, get_strategy_list_api, create_strategy,
-        get_strategy_info, get_strategies_by_category, get_strategies_by_regime,
-        get_recommended_strategies, StrategyCategory, MarketRegime
-    )
+    from strategies.fourier_rl_strategy import FourierRLStrategy
+    from strategies.final_market_adaptive import FinalMarketAdaptiveGrid
+    from strategies.ml_range_grid import MLRangeGridTrading
+    from strategies.huijin_value_strategy import HuijinValueStrategy
+    from strategies.strategy_base import StrategyManager
+    from strategies.strategy_combiner import StrategyCombiner
+    from signals.dual_market_state import DualDimensionMarketState
+    from models.model_persistence import ModelPersistenceManager
+    from xbk_api_client import XbkApiClient, XbkDataFeed, XbkTrader
+    from technical_analyzer import TechnicalAnalyzer
     STRATEGIES_AVAILABLE = True
-    print(f"[OK] StrategyRegistry loaded: {len(STRATEGY_REGISTRY)} strategies registered")
 except ImportError as e:
-    print(f"[WARNING] StrategyRegistry import failed: {e}")
-    # 回退到直接导入
-    try:
-        from strategies.fourier_rl_strategy import FourierRLStrategy
-        from strategies.final_market_adaptive import FinalMarketAdaptiveGrid
-        from strategies.ml_range_grid import MLRangeGridTrading
-        from strategies.huijin_value_strategy import HuijinValueStrategy
-        from strategies.strategy_base import StrategyManager
-        from strategies.strategy_combiner import StrategyCombiner
-        from signals.dual_market_state import DualDimensionMarketState
-        from models.model_persistence import ModelPersistenceManager
-        from xbk_api_client import XbkApiClient, XbkDataFeed, XbkTrader
-        from technical_analyzer import TechnicalAnalyzer
-        STRATEGIES_AVAILABLE = True
-    except ImportError as e2:
-        print(f"导入策略模块失败: {str(e2)}")
-        print("将以基本模式启动，部分功能可能受限")
-        STRATEGIES_AVAILABLE = False
-        from technical_analyzer import TechnicalAnalyzer
+    print(f"导入策略模块失败: {str(e)}")
+    print("将以基本模式启动，部分功能可能受限")
+    STRATEGIES_AVAILABLE = False
+    from technical_analyzer import TechnicalAnalyzer
 
 # 导入系统健康监控和安全模块
 health_monitor = None
@@ -146,58 +98,6 @@ try:
     print("[OK] trade_validator imported successfully")
 except Exception as e:
     print(f"[WARNING] trade_validator import failed: {e}")
-
-# ========== 增益性优化模块导入 ==========
-strategy_performance_tracker = None
-unified_risk_controller = None
-smart_param_optimizer = None
-rl_enhancer = None
-data_quality_validator = None
-
-# ========== 数据库维护模块 ==========
-db_maintenance_scheduler = None
-
-try:
-    from utils.db_maintenance import DatabaseMaintenanceScheduler
-    db_maintenance_scheduler = DatabaseMaintenanceScheduler()
-    print("[OK] DatabaseMaintenanceScheduler imported successfully")
-except Exception as e:
-    print(f"[WARNING] DatabaseMaintenanceScheduler import failed: {e}")
-
-try:
-    from utils.strategy_performance_tracker import get_performance_tracker
-    strategy_performance_tracker = get_performance_tracker()
-    print("[OK] strategy_performance_tracker imported successfully")
-except Exception as e:
-    print(f"[WARNING] strategy_performance_tracker import failed: {e}")
-
-try:
-    from utils.unified_risk_controller import get_risk_controller
-    unified_risk_controller = get_risk_controller()
-    print("[OK] unified_risk_controller imported successfully")
-except Exception as e:
-    print(f"[WARNING] unified_risk_controller import failed: {e}")
-
-try:
-    from utils.smart_param_optimizer import get_param_optimizer
-    smart_param_optimizer = get_param_optimizer()
-    print("[OK] smart_param_optimizer imported successfully")
-except Exception as e:
-    print(f"[WARNING] smart_param_optimizer import failed: {e}")
-
-try:
-    from utils.rl_enhancer import get_rl_enhancer
-    rl_enhancer = get_rl_enhancer()
-    print("[OK] rl_enhancer imported successfully")
-except Exception as e:
-    print(f"[WARNING] rl_enhancer import failed: {e}")
-
-try:
-    from utils.data_quality_validator import get_data_validator
-    data_quality_validator = get_data_validator()
-    print("[OK] data_quality_validator imported successfully")
-except Exception as e:
-    print(f"[WARNING] data_quality_validator import failed: {e}")
 
 def load_env_config():
     """加载环境变量配置"""
@@ -1409,52 +1309,19 @@ def get_strategy_status():
 
 @app.route('/api/strategy-list')
 def get_strategy_list():
-    """获取策略列表（含分类分组）"""
-    try:
-        from strategies.strategy_registry import get_strategy_list_api
-        api_data = get_strategy_list_api()
-        return jsonify(api_data)
-    except ImportError:
-        # 回退到旧版列表（完整14策略）
-        strategies = [
-            {'name': 'FourierRLStrategy', 'label': '傅里叶强化学习策略', 'description': '傅里叶变换+PPO强化学习'},
-            {'name': 'FinalMarketAdaptiveGrid', 'label': '市场自适应网格策略', 'description': '随机森林市场分类+自适应网格'},
-            {'name': 'MLRangeGridTrading', 'label': '机器学习网格交易策略', 'description': '随机森林优化网格步长'},
-            {'name': 'HuijinValueStrategy', 'label': '汇金价值AI轮动策略', 'description': '价值投资+AI轮动'},
-            {'name': 'AdaptiveMLStrategy', 'label': '自适应机器学习策略', 'description': '在线学习+自适应参数调整'},
-            {'name': 'AdaptiveRangeGridTrading', 'label': '自适应范围网格策略', 'description': '动态范围检测+网格交易'},
-            {'name': 'DownMarketStrategy', 'label': '下跌市场防御策略', 'description': '下跌趋势对冲+仓位控制'},
-            {'name': 'MultiFactorResonanceStrategy', 'label': '多因子共振策略', 'description': '多技术指标共振信号'},
-            {'name': 'MovingAveragesStrategy', 'label': '移动平均线趋势策略', 'description': '双均线交叉+趋势跟踪'},
-            {'name': 'HighReturnGridTrading', 'label': '高收益网格交易策略', 'description': '激进网格+高频率交易'},
-            {'name': 'GridTrading', 'label': '经典网格交易策略', 'description': '经典网格+区间震荡交易'},
-            {'name': 'DCAStrategy', 'label': '定投策略', 'description': '定期定额+成本平均'},
-            {'name': 'PPOTradingAgent', 'label': 'PPO强化学习交易智能体', 'description': '深度强化学习+自主决策'},
-            {'name': 'FinalOptimizedStrategy', 'label': '最终优化综合策略', 'description': '多策略融合+综合优化'},
-        ]
-        return jsonify({'categories': {}, 'total_count': len(strategies), 'active_count': 0, 'beta_count': 0})
-
-
-@app.route('/api/strategy-info')
-def get_strategy_info_api():
-    """获取单个策略的详细信息"""
-    strategy_name = request.args.get('name', '')
-    if not strategy_name:
-        return jsonify({'error': '请指定策略名称'}), 400
-
-    try:
-        from strategies.strategy_registry import get_strategy_info as get_info
-        info = get_info(strategy_name)
-        if info:
-            return jsonify(info)
-        return jsonify({'error': f'策略不存在: {strategy_name}'}), 404
-    except ImportError:
-        return jsonify({'error': '策略注册表不可用'}), 500
+    """获取策略列表"""
+    strategies = [
+        {'name': 'FourierRLStrategy', 'description': '傅里叶强化学习策略'},
+        {'name': 'FinalMarketAdaptiveGrid', 'description': '市场自适应网格策略'},
+        {'name': 'MLRangeGridTrading', 'description': '机器学习网格交易策略'},
+        {'name': 'HuijinValueStrategy', 'description': '汇金价值AI轮动策略'}
+    ]
+    return jsonify(strategies)
 
 
 @app.route('/api/start-strategy', methods=['POST'])
 def start_strategy():
-    """启动策略（使用策略注册表工厂）"""
+    """启动策略"""
     if not STRATEGIES_AVAILABLE:
         return jsonify({'error': '策略模块不可用，请检查依赖安装'}), 500
 
@@ -1468,40 +1335,16 @@ def start_strategy():
         if not account_info:
             return jsonify({'error': '账户不存在'}), 400
 
-        # 使用策略注册表工厂创建策略实例
-        try:
-            from strategies.strategy_registry import create_strategy, get_strategy_info
-            info = get_strategy_info(strategy_name)
-            if info:
-                strategy = create_strategy(strategy_name, initial_balance=initial_balance)
-            else:
-                return jsonify({'error': f'策略不存在: {strategy_name}'}), 400
-        except ImportError:
-            # 回退到旧版硬编码（完整14策略映射）
-            strategy_map = {
-                'FourierRLStrategy': ('strategies.fourier_rl_strategy', 'FourierRLStrategy'),
-                'FinalMarketAdaptiveGrid': ('strategies.final_market_adaptive', 'FinalMarketAdaptiveGrid'),
-                'MLRangeGridTrading': ('strategies.ml_range_grid', 'MLRangeGridTrading'),
-                'HuijinValueStrategy': ('strategies.huijin_value_strategy', 'HuijinValueStrategy'),
-                'AdaptiveMLStrategy': ('strategies.adaptive_ml_strategy', 'AdaptiveMLStrategy'),
-                'AdaptiveRangeGridTrading': ('strategies.adaptive_range_grid', 'AdaptiveRangeGridTrading'),
-                'DownMarketStrategy': ('strategies.downtrend_optimized', 'DownMarketStrategy'),
-                'MultiFactorResonanceStrategy': ('strategies.multi_factor_resonance', 'MultiFactorResonanceStrategy'),
-                'MovingAveragesStrategy': ('strategies.trend_trading', 'MovingAveragesStrategy'),
-                'HighReturnGridTrading': ('strategies.high_return_grid', 'HighReturnGridTrading'),
-                'GridTrading': ('strategies.grid_trading', 'GridTrading'),
-                'DCAStrategy': ('strategies.fund_allocation', 'DCAStrategy'),
-                'PPOTradingAgent': ('strategies.ppo_trading_agent', 'PPOTradingAgent'),
-                'FinalOptimizedStrategy': ('strategies.final_optimized_strategy', 'FinalOptimizedStrategy'),
-            }
-            if strategy_name in strategy_map:
-                module_path, class_name = strategy_map[strategy_name]
-                import importlib
-                module = importlib.import_module(module_path)
-                strategy_class = getattr(module, class_name)
-                strategy = strategy_class(initial_balance=initial_balance)
-            else:
-                return jsonify({'error': '策略不存在'}), 400
+        if strategy_name == 'FourierRLStrategy':
+            strategy = FourierRLStrategy(initial_balance=initial_balance)
+        elif strategy_name == 'FinalMarketAdaptiveGrid':
+            strategy = FinalMarketAdaptiveGrid(initial_balance=initial_balance)
+        elif strategy_name == 'MLRangeGridTrading':
+            strategy = MLRangeGridTrading(initial_balance=initial_balance)
+        elif strategy_name == 'HuijinValueStrategy':
+            strategy = HuijinValueStrategy(initial_balance=initial_balance)
+        else:
+            return jsonify({'error': '策略不存在'}), 400
 
         account_info['strategy'] = strategy
         account_info['balance'] = initial_balance
@@ -1607,52 +1450,26 @@ def ml_grid_optimize():
 
 @app.route('/api/backtest', methods=['POST'])
 def run_backtest():
-    """运行回测（自动保存结果到数据库）"""
+    """运行回测"""
     data = request.json
     strategy_name = data.get('strategy_name', 'FourierRLStrategy')
     initial_balance = data.get('initial_balance', 100000.0)
     days = data.get('days', 30)
     params = data.get('params', {})
-    symbol = data.get('symbol', 'BTCUSDT')
 
     try:
-        # 使用策略注册表工厂创建策略实例
-        try:
-            from strategies.strategy_registry import create_strategy, get_strategy_info
-            info = get_strategy_info(strategy_name)
-            if info:
-                strategy = create_strategy(strategy_name, initial_balance=initial_balance, **params)
-            else:
-                return jsonify({'error': f'策略不存在: {strategy_name}'}), 400
-        except ImportError:
-            # 回退到旧版硬编码（完整14策略映射）
-            strategy_map = {
-                'FourierRLStrategy': ('strategies.fourier_rl_strategy', 'FourierRLStrategy'),
-                'FinalMarketAdaptiveGrid': ('strategies.final_market_adaptive', 'FinalMarketAdaptiveGrid'),
-                'MLRangeGridTrading': ('strategies.ml_range_grid', 'MLRangeGridTrading'),
-                'HuijinValueStrategy': ('strategies.huijin_value_strategy', 'HuijinValueStrategy'),
-                'AdaptiveMLStrategy': ('strategies.adaptive_ml_strategy', 'AdaptiveMLStrategy'),
-                'AdaptiveRangeGridTrading': ('strategies.adaptive_range_grid', 'AdaptiveRangeGridTrading'),
-                'DownMarketStrategy': ('strategies.downtrend_optimized', 'DownMarketStrategy'),
-                'MultiFactorResonanceStrategy': ('strategies.multi_factor_resonance', 'MultiFactorResonanceStrategy'),
-                'MovingAveragesStrategy': ('strategies.trend_trading', 'MovingAveragesStrategy'),
-                'HighReturnGridTrading': ('strategies.high_return_grid', 'HighReturnGridTrading'),
-                'GridTrading': ('strategies.grid_trading', 'GridTrading'),
-                'DCAStrategy': ('strategies.fund_allocation', 'DCAStrategy'),
-                'PPOTradingAgent': ('strategies.ppo_trading_agent', 'PPOTradingAgent'),
-                'FinalOptimizedStrategy': ('strategies.final_optimized_strategy', 'FinalOptimizedStrategy'),
-            }
-            if strategy_name in strategy_map:
-                module_path, class_name = strategy_map[strategy_name]
-                import importlib
-                module = importlib.import_module(module_path)
-                strategy_class = getattr(module, class_name)
-                strategy = strategy_class(initial_balance=initial_balance, **params)
-            else:
-                return jsonify({'error': '策略不存在'}), 400
+        if strategy_name == 'FourierRLStrategy':
+            strategy = FourierRLStrategy(initial_balance=initial_balance, **params)
+        elif strategy_name == 'FinalMarketAdaptiveGrid':
+            strategy = FinalMarketAdaptiveGrid(initial_balance=initial_balance, **params)
+        elif strategy_name == 'MLRangeGridTrading':
+            strategy = MLRangeGridTrading(initial_balance=initial_balance, **params)
+        elif strategy_name == 'HuijinValueStrategy':
+            strategy = HuijinValueStrategy(initial_balance=initial_balance)
+        else:
+            return jsonify({'error': '策略不存在'}), 400
 
         prices = []
-        start_date = datetime.now()
         for i in range(days * 24 * 60):
             price = 50000 + np.random.normal(0, 500)
             prices.append(price)
@@ -1660,158 +1477,28 @@ def run_backtest():
             if i % 1000 == 0:
                 time.sleep(0.01)
 
-        end_date = datetime.now()
         performance = strategy.get_performance()
-
-        # 计算回测指标
-        final_balance = performance.get('balance', initial_balance)
-        total_return = performance.get('total_return', (final_balance - initial_balance) / initial_balance * 100)
-        max_drawdown = performance.get('max_drawdown', 0)
-        sharpe_ratio = performance.get('sharpe_ratio', 0)
-        total_trades = performance.get('total_trades', 0)
-        winning_trades = performance.get('winning_trades', 0)
-        losing_trades = performance.get('losing_trades', 0)
-        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-
-        # 保存回测结果到数据库
-        if database_manager:
-            result_dict = {
-                'strategy_name': strategy_name,
-                'symbol': symbol,
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
-                'initial_balance': initial_balance,
-                'final_balance': final_balance,
-                'total_return': total_return,
-                'annualized_return': total_return / (days / 365) if days > 0 else 0,
-                'max_drawdown': max_drawdown,
-                'sharpe_ratio': sharpe_ratio,
-                'win_rate': win_rate,
-                'total_trades': total_trades,
-                'winning_trades': winning_trades,
-                'losing_trades': losing_trades,
-                'profit_factor': performance.get('profit_factor', 0),
-                'config': params
-            }
-            db_success = database_manager.save_backtest_result(result_dict)
-        else:
-            db_success = False
 
         return jsonify({
             'success': True,
             'performance': performance,
             'total_days': days,
             'data_points': len(prices),
-            'params': params,
-            'db_saved': db_success,
-            'message': '回测完成，结果已保存到数据库' if db_success else '回测完成，但数据库不可用'
+            'params': params
         })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/backtest/history')
-def get_backtest_history():
-    """获取回测历史记录"""
-    strategy_name = request.args.get('strategy_name', None)
-    limit = int(request.args.get('limit', 20))
-    sort_by = request.args.get('sort_by', 'created_at')
-
-    if not database_manager:
-        return jsonify({
-            'success': False,
-            'message': '数据库管理器不可用',
-            'results': []
-        })
-
-    results = database_manager.get_backtest_results(
-        strategy_name=strategy_name if strategy_name else None,
-        limit=limit,
-        sort_by=sort_by
-    )
-
-    return jsonify({
-        'success': True,
-        'results': results,
-        'total': len(results)
-    })
-
-
-@app.route('/api/backtest/best')
-def get_best_backtest():
-    """获取最佳回测结果"""
-    strategy_name = request.args.get('strategy_name', '')
-    metric = request.args.get('metric', 'total_return')
-
-    if not strategy_name:
-        return jsonify({'success': False, 'message': '请指定策略名称'}), 400
-
-    if not database_manager:
-        return jsonify({'success': False, 'message': '数据库管理器不可用'})
-
-    result = database_manager.get_best_backtest_result(strategy_name, metric)
-    return jsonify({
-        'success': True,
-        'result': result
-    })
-
-
-@app.route('/api/backtest/delete', methods=['POST'])
-def delete_backtest_results():
-    """删除回测结果"""
-    if not database_manager:
-        return jsonify({'success': False, 'message': '数据库管理器不可用'})
-
-    data = request.json
-    strategy_name = data.get('strategy_name', None)
-    before_date = data.get('before_date', None)
-
-    deleted = database_manager.delete_backtest_results(
-        strategy_name=strategy_name,
-        before_date=before_date
-    )
-
-    return jsonify({
-        'success': True,
-        'deleted': deleted,
-        'message': f'已删除 {deleted} 条回测记录'
-    })
-
-
 @app.route('/api/strategy-params')
 def get_strategy_params():
-    """获取策略参数（从注册表动态获取）"""
+    """获取策略参数"""
     strategy_name = request.args.get('strategy_name', 'FourierRLStrategy')
 
-    try:
-        from strategies.strategy_registry import get_strategy_info
-        info = get_strategy_info(strategy_name)
-        if info:
-            params = {}
-            for pname, pinfo in info["params"].items():
-                params[pname] = {
-                    "default": pinfo["default"],
-                    "type": pinfo["type"],
-                    "desc": pinfo["desc"]
-                }
-            return jsonify({
-                'strategy_name': strategy_name,
-                'params': params,
-                'label': info['label'],
-                'description': info['description'],
-                'regime': info['regime'].value,
-                'tags': info['tags'],
-                'strengths': info['strengths'],
-                'performance_rating': info['performance_rating']
-            })
-    except ImportError:
-        pass
-
-    # 回退到旧版硬编码（完整14策略参数映射）
     params = {}
-    strategy_params_map = {
-        'FourierRLStrategy': {
+    if strategy_name == 'FourierRLStrategy':
+        params = {
             'lookback_period': 60,
             'max_position_size': 0.5,
             'stop_loss_pct': 0.02,
@@ -1821,98 +1508,28 @@ def get_strategy_params():
             'learning_rate': 0.0003,
             'gamma': 0.99,
             'gae_lambda': 0.95
-        },
-        'FinalMarketAdaptiveGrid': {
+        }
+    elif strategy_name == 'FinalMarketAdaptiveGrid':
+        params = {
             'grid_levels': 5,
             'base_order_size': 0.1,
             'profit_taking_pct': 0.01,
             'stop_loss_pct': 0.03,
             'adaptation_factor': 0.1
-        },
-        'MLRangeGridTrading': {
+        }
+    elif strategy_name == 'MLRangeGridTrading':
+        params = {
             'window_size': 20,
             'num_std': 2.0,
             'grid_spacing': 0.005,
             'max_positions': 10,
             'profit_target': 0.015
-        },
-        'HuijinValueStrategy': {
+        }
+    elif strategy_name == 'HuijinValueStrategy':
+        params = {
             'initial_balance': 100000.0,
             'config_path': r"D:\Gupiao\量化交易测试设备方案\攒机\量化交易\汇金价值AI轮动策略\strategy_config.json"
-        },
-        'AdaptiveMLStrategy': {
-            'lookback': 30,
-            'max_position': 0.4,
-            'stop_loss': 0.025,
-            'take_profit': 0.04,
-            'learning_rate': 0.001,
-            'hidden_size': 64
-        },
-        'AdaptiveRangeGridTrading': {
-            'grid_levels': 8,
-            'base_size': 0.05,
-            'profit_pct': 0.012,
-            'stop_pct': 0.025,
-            'range_buffer': 0.02
-        },
-        'DownMarketStrategy': {
-            'max_position': 0.2,
-            'stop_loss': 0.015,
-            'reentry_threshold': 0.03,
-            'hedge_ratio': 0.5
-        },
-        'MultiFactorResonanceStrategy': {
-            'rsi_period': 14,
-            'macd_fast': 12,
-            'macd_slow': 26,
-            'volume_ratio': 1.5,
-            'score_threshold': 0.7
-        },
-        'MovingAveragesStrategy': {
-            'fast_ma': 5,
-            'slow_ma': 20,
-            'signal_ma': 9,
-            'stop_loss': 0.02
-        },
-        'HighReturnGridTrading': {
-            'grid_levels': 12,
-            'base_size': 0.08,
-            'profit_pct': 0.02,
-            'stop_pct': 0.04,
-            'max_position': 0.6
-        },
-        'GridTrading': {
-            'grid_levels': 10,
-            'base_size': 0.1,
-            'profit_pct': 0.01,
-            'stop_pct': 0.03,
-            'price_min': 45000,
-            'price_max': 55000
-        },
-        'DCAStrategy': {
-            'investment_amount': 1000,
-            'interval_days': 7,
-            'max_position': 0.3,
-            'stop_loss': 0.1
-        },
-        'PPOTradingAgent': {
-            'learning_rate': 0.0003,
-            'gamma': 0.99,
-            'clip_epsilon': 0.2,
-            'hidden_size': 128,
-            'max_position': 0.5
-        },
-        'FinalOptimizedStrategy': {
-            'lookback': 40,
-            'max_position': 0.35,
-            'stop_loss': 0.02,
-            'take_profit': 0.06,
-            'rsi_oversold': 30,
-            'rsi_overbought': 70
-        },
-    }
-    if strategy_name in strategy_params_map:
-        params = strategy_params_map[strategy_name]
+        }
 
     return jsonify({
         'strategy_name': strategy_name,
@@ -2204,7 +1821,6 @@ def test_location():
 # ========== 交易安全验证API ==========
 
 @app.route('/api/trade/validate', methods=['POST'])
-@require_session
 def validate_trade():
     """
     极致安全的订单验证
@@ -2237,7 +1853,6 @@ def validate_trade():
 
 
 @app.route('/api/trade/security/config', methods=['GET'])
-@require_session
 def get_trade_security_config():
     """获取交易安全配置"""
     if not trade_validator:
@@ -2250,7 +1865,6 @@ def get_trade_security_config():
 
 
 @app.route('/api/trade/security/add-ip', methods=['POST'])
-@require_session
 def add_trusted_ip():
     """添加受信任的交易IP"""
     if not trade_validator:
@@ -2265,7 +1879,6 @@ def add_trusted_ip():
 
 
 @app.route('/api/trade/security/add-api-key', methods=['POST'])
-@require_session
 def add_valid_api_key():
     """添加有效API Key"""
     if not trade_validator:
@@ -2280,7 +1893,6 @@ def add_valid_api_key():
 
 
 @app.route('/api/trade/critical/validate', methods=['POST'])
-@require_session
 def validate_critical_path():
     """
     毫秒级关键路径验证 - 订单执行前的绝对卡死
@@ -2309,7 +1921,6 @@ def validate_critical_path():
 
 
 @app.route('/api/trade/critical/refresh', methods=['POST'])
-@require_session
 def refresh_critical_config():
     """刷新关键路径配置（非关键路径调用）"""
     if not critical_path_validator:
@@ -2322,7 +1933,6 @@ def refresh_critical_config():
 # ========== 资金安全验证API ==========
 
 @app.route('/api/fund/validate', methods=['POST'])
-@require_session
 def validate_fund_withdrawal():
     """
     资金提现验证 - 极致卡死模式
@@ -2349,7 +1959,6 @@ def validate_fund_withdrawal():
 
 
 @app.route('/api/fund/block-all', methods=['POST'])
-@require_session
 def block_all_withdrawals():
     """完全卡死所有资金提现"""
     if not fund_security_validator:
@@ -2360,7 +1969,6 @@ def block_all_withdrawals():
 
 
 @app.route('/api/fund/blacklist/add', methods=['POST'])
-@require_session
 def add_to_withdrawal_blacklist():
     """添加账户到提现黑名单"""
     if not fund_security_validator:
@@ -2373,7 +1981,6 @@ def add_to_withdrawal_blacklist():
 
 
 @app.route('/api/fund/mode/only-trading', methods=['POST'])
-@require_session
 def set_only_trading_mode():
     """设置仅交易模式（禁止任何资金提取）"""
     if not fund_security_validator:
@@ -2386,7 +1993,6 @@ def set_only_trading_mode():
 
 
 @app.route('/api/fund/config', methods=['GET'])
-@require_session
 def get_fund_security_config():
     """获取资金安全配置"""
     if not fund_security_validator:
@@ -2401,7 +2007,6 @@ def get_fund_security_config():
 # ========== 完整交易执行API ==========
 
 @app.route('/api/trade/execute', methods=['POST'])
-@require_session
 def execute_full_trade():
     """
     完整的交易执行流程
@@ -2447,7 +2052,6 @@ def execute_full_trade():
 
 
 @app.route('/api/trade/report', methods=['GET'])
-@require_session
 def get_trade_report():
     """获取交易执行报告"""
     if not trade_execution_engine:
@@ -2788,475 +2392,6 @@ def admin_reset_password(username):
     return jsonify(result)
 
 
-# ========== 增益性优化模块API端点 ==========
-
-# ---- 1. StrategyPerformanceTracker API ----
-
-@app.route('/api/gain/performance/metrics')
-def api_gain_performance_metrics():
-    """获取策略性能指标"""
-    if not strategy_performance_tracker:
-        return jsonify({'success': False, 'message': '性能追踪器不可用'}), 503
-    
-    strategy_name = request.args.get('strategy_name', '')
-    window = int(request.args.get('window', 20))
-    
-    if not strategy_name:
-        # 返回所有策略指标
-        all_metrics = strategy_performance_tracker.get_all_strategy_metrics(window=window)
-        result = {}
-        for sname, metrics in all_metrics.items():
-            result[sname] = {
-                'total_trades': metrics.total_trades,
-                'total_profit': round(metrics.total_profit, 2),
-                'win_rate': round(metrics.win_rate * 100, 2),
-                'profit_loss_ratio': round(metrics.profit_loss_ratio, 2),
-                'sharpe_ratio': round(metrics.sharpe_ratio, 2),
-                'sortino_ratio': round(metrics.sortino_ratio, 2),
-                'calmar_ratio': round(metrics.calmar_ratio, 2),
-                'max_drawdown': round(metrics.max_drawdown * 100, 2),
-            }
-        return jsonify({'success': True, 'data': result})
-    
-    metrics = strategy_performance_tracker.get_rolling_metrics(strategy_name, window=window)
-    summary = strategy_performance_tracker.get_performance_summary(strategy_name)
-    by_regime = strategy_performance_tracker.get_trades_by_regime(strategy_name)
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'rolling_metrics': {
-                'total_trades': metrics.total_trades,
-                'total_profit': round(metrics.total_profit, 2),
-                'win_rate': round(metrics.win_rate * 100, 2),
-                'profit_loss_ratio': round(metrics.profit_loss_ratio, 2),
-                'sharpe_ratio': round(metrics.sharpe_ratio, 2),
-                'sortino_ratio': round(metrics.sortino_ratio, 2),
-                'calmar_ratio': round(metrics.calmar_ratio, 2),
-                'max_drawdown': round(metrics.max_drawdown * 100, 2),
-            },
-            'summary': summary,
-            'by_regime': {k: len(v) for k, v in by_regime.items()},
-        }
-    })
-
-
-@app.route('/api/gain/performance/enable', methods=['POST'])
-def api_gain_performance_enable():
-    """启用/禁用性能追踪器"""
-    if not strategy_performance_tracker:
-        return jsonify({'success': False, 'message': '性能追踪器不可用'}), 503
-    
-    data = request.json
-    enabled = data.get('enabled', True)
-    strategy_performance_tracker.enabled = enabled
-    
-    return jsonify({
-        'success': True,
-        'enabled': enabled,
-        'message': f'性能追踪器已{"启用" if enabled else "禁用"}'
-    })
-
-
-@app.route('/api/gain/performance/reset', methods=['POST'])
-def api_gain_performance_reset():
-    """重置性能追踪器"""
-    if not strategy_performance_tracker:
-        return jsonify({'success': False, 'message': '性能追踪器不可用'}), 503
-    
-    strategy_performance_tracker.reset()
-    return jsonify({'success': True, 'message': '性能追踪器已重置'})
-
-
-# ---- 2. UnifiedRiskController API ----
-
-@app.route('/api/gain/risk/status')
-def api_gain_risk_status():
-    """获取统一风险控制状态"""
-    if not unified_risk_controller:
-        return jsonify({'success': False, 'message': '风险控制器不可用'}), 503
-    
-    global_report = unified_risk_controller.get_global_risk_report()
-    budget = unified_risk_controller.get_risk_budget()
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'enabled': unified_risk_controller.enabled,
-            'global_report': global_report,
-            'budget': {
-                'total_budget': round(budget.total_budget, 2),
-                'used_budget': round(budget.used_budget, 2),
-                'remaining_budget': round(budget.remaining_budget, 2),
-                'strategy_allocations': budget.strategy_allocations,
-            }
-        }
-    })
-
-
-@app.route('/api/gain/risk/enable', methods=['POST'])
-def api_gain_risk_enable():
-    """启用/禁用风险控制器"""
-    if not unified_risk_controller:
-        return jsonify({'success': False, 'message': '风险控制器不可用'}), 503
-    
-    data = request.json
-    enabled = data.get('enabled', True)
-    unified_risk_controller.enabled = enabled
-    
-    return jsonify({
-        'success': True,
-        'enabled': enabled,
-        'message': f'风险控制器已{"启用" if enabled else "禁用"}'
-    })
-
-
-@app.route('/api/gain/risk/strategy-report')
-def api_gain_risk_strategy_report():
-    """获取指定策略的风险报告"""
-    if not unified_risk_controller:
-        return jsonify({'success': False, 'message': '风险控制器不可用'}), 503
-    
-    strategy_name = request.args.get('strategy_name', '')
-    if not strategy_name:
-        return jsonify({'success': False, 'message': '请指定策略名称'}), 400
-    
-    report = unified_risk_controller.get_strategy_risk_report(strategy_name)
-    return jsonify({'success': True, 'data': report})
-
-
-# ---- 3. SmartParamOptimizer API ----
-
-@app.route('/api/gain/optimizer/status')
-def api_gain_optimizer_status():
-    """获取参数优化器状态"""
-    if not smart_param_optimizer:
-        return jsonify({'success': False, 'message': '参数优化器不可用'}), 503
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'enabled': smart_param_optimizer.enabled,
-            'total_optimizations': smart_param_optimizer._total_optimizations,
-            'total_early_stops': smart_param_optimizer._total_early_stops,
-            'config': smart_param_optimizer.config,
-        }
-    })
-
-
-@app.route('/api/gain/optimizer/enable', methods=['POST'])
-def api_gain_optimizer_enable():
-    """启用/禁用参数优化器"""
-    if not smart_param_optimizer:
-        return jsonify({'success': False, 'message': '参数优化器不可用'}), 503
-    
-    data = request.json
-    enabled = data.get('enabled', True)
-    smart_param_optimizer.enabled = enabled
-    
-    return jsonify({
-        'success': True,
-        'enabled': enabled,
-        'message': f'参数优化器已{"启用" if enabled else "禁用"}'
-    })
-
-
-@app.route('/api/gain/optimizer/history')
-def api_gain_optimizer_history():
-    """获取优化历史"""
-    if not smart_param_optimizer:
-        return jsonify({'success': False, 'message': '参数优化器不可用'}), 503
-    
-    strategy_name = request.args.get('strategy_name', '')
-    if not strategy_name:
-        return jsonify({'success': False, 'message': '请指定策略名称'}), 400
-    
-    history = smart_param_optimizer._optimization_history.get(strategy_name, [])
-    return jsonify({
-        'success': True,
-        'data': history[-20:]  # 返回最近20条
-    })
-
-
-# ---- 4. RLEnhancer API ----
-
-@app.route('/api/gain/rl/status')
-def api_gain_rl_status():
-    """获取RL增强器状态"""
-    if not rl_enhancer:
-        return jsonify({'success': False, 'message': 'RL增强器不可用'}), 503
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'enabled': rl_enhancer.enabled,
-            'total_steps': rl_enhancer._total_steps,
-            'total_updates': rl_enhancer._total_updates,
-            'buffer_size': len(rl_enhancer._replay_buffer),
-            'config': rl_enhancer.config,
-        }
-    })
-
-
-@app.route('/api/gain/rl/enable', methods=['POST'])
-def api_gain_rl_enable():
-    """启用/禁用RL增强器"""
-    if not rl_enhancer:
-        return jsonify({'success': False, 'message': 'RL增强器不可用'}), 503
-    
-    data = request.json
-    enabled = data.get('enabled', True)
-    rl_enhancer.enabled = enabled
-    
-    return jsonify({
-        'success': True,
-        'enabled': enabled,
-        'message': f'RL增强器已{"启用" if enabled else "禁用"}'
-    })
-
-
-@app.route('/api/gain/rl/reset', methods=['POST'])
-def api_gain_rl_reset():
-    """重置RL增强器"""
-    if not rl_enhancer:
-        return jsonify({'success': False, 'message': 'RL增强器不可用'}), 503
-    
-    rl_enhancer.reset()
-    return jsonify({'success': True, 'message': 'RL增强器已重置'})
-
-
-# ---- 5. DataQualityValidator API ----
-
-@app.route('/api/gain/quality/status')
-def api_gain_quality_status():
-    """获取数据质量验证器状态"""
-    if not data_quality_validator:
-        return jsonify({'success': False, 'message': '数据质量验证器不可用'}), 503
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'enabled': data_quality_validator.enabled,
-            'total_checks': data_quality_validator._total_checks,
-            'total_issues': data_quality_validator._total_issues,
-            'config': data_quality_validator.config,
-        }
-    })
-
-
-@app.route('/api/gain/quality/enable', methods=['POST'])
-def api_gain_quality_enable():
-    """启用/禁用数据质量验证器"""
-    if not data_quality_validator:
-        return jsonify({'success': False, 'message': '数据质量验证器不可用'}), 503
-    
-    data = request.json
-    enabled = data.get('enabled', True)
-    data_quality_validator.enabled = enabled
-    
-    return jsonify({
-        'success': True,
-        'enabled': enabled,
-        'message': f'数据质量验证器已{"启用" if enabled else "禁用"}'
-    })
-
-
-@app.route('/api/gain/quality/check', methods=['POST'])
-def api_gain_quality_check():
-    """执行数据质量检查"""
-    if not data_quality_validator:
-        return jsonify({'success': False, 'message': '数据质量验证器不可用'}), 503
-    
-    data = request.json
-    report = data_quality_validator.check_data_quality(data)
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'overall_score': report.overall_score,
-            'missing_rate': report.missing_rate,
-            'anomaly_rate': report.anomaly_rate,
-            'duplicate_rate': report.duplicate_rate,
-            'staleness_seconds': report.staleness_seconds,
-            'cross_validation_score': report.cross_validation_score,
-            'issues': report.issues[:10],  # 最多返回10条
-            'warnings': report.warnings[:10],
-        }
-    })
-
-
-# ---- 6. 增益模块全局状态 ----
-
-@app.route('/api/gain/status')
-def api_gain_all_status():
-    """获取所有增益模块的状态"""
-    result = {}
-    
-    # 性能追踪器
-    if strategy_performance_tracker:
-        result['performance_tracker'] = {
-            'enabled': strategy_performance_tracker.enabled,
-            'strategies': list(strategy_performance_tracker._trade_history.keys()),
-        }
-    else:
-        result['performance_tracker'] = {'enabled': False, 'available': False}
-    
-    # 风险控制器
-    if unified_risk_controller:
-        result['risk_controller'] = {
-            'enabled': unified_risk_controller.enabled,
-            'capital': unified_risk_controller._total_capital,
-            'strategies': list(unified_risk_controller._strategy_risk.keys()),
-        }
-    else:
-        result['risk_controller'] = {'enabled': False, 'available': False}
-    
-    # 参数优化器
-    if smart_param_optimizer:
-        result['param_optimizer'] = {
-            'enabled': smart_param_optimizer.enabled,
-            'total_optimizations': smart_param_optimizer._total_optimizations,
-        }
-    else:
-        result['param_optimizer'] = {'enabled': False, 'available': False}
-    
-    # RL增强器
-    if rl_enhancer:
-        result['rl_enhancer'] = {
-            'enabled': rl_enhancer.enabled,
-            'total_steps': rl_enhancer._total_steps,
-            'buffer_size': len(rl_enhancer._replay_buffer),
-        }
-    else:
-        result['rl_enhancer'] = {'enabled': False, 'available': False}
-    
-    # 数据质量验证器
-    if data_quality_validator:
-        result['data_validator'] = {
-            'enabled': data_quality_validator.enabled,
-            'total_checks': data_quality_validator._total_checks,
-        }
-    else:
-        result['data_validator'] = {'enabled': False, 'available': False}
-    
-    return jsonify({'success': True, 'data': result})
-
-
-# ---- 7. 数据库维护模块 API ----
-
-@app.route('/api/maintenance/status')
-def api_maintenance_status():
-    """获取数据库维护状态"""
-    if not db_maintenance_scheduler:
-        return jsonify({'success': False, 'message': '数据库维护模块不可用'}), 503
-    
-    status = db_maintenance_scheduler.get_maintenance_status()
-    return jsonify({
-        'success': True,
-        'data': status
-    })
-
-
-@app.route('/api/maintenance/backup', methods=['POST'])
-def api_maintenance_backup():
-    """执行数据库备份"""
-    if not db_maintenance_scheduler:
-        return jsonify({'success': False, 'message': '数据库维护模块不可用'}), 503
-    
-    result = db_maintenance_scheduler.perform_backup()
-    if result:
-        return jsonify({
-            'success': True,
-            'data': {'backup_path': result},
-            'message': '数据库备份完成'
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': '数据库备份失败'
-        }), 500
-
-
-@app.route('/api/maintenance/archive', methods=['POST'])
-def api_maintenance_archive():
-    """执行数据归档"""
-    if not db_maintenance_scheduler:
-        return jsonify({'success': False, 'message': '数据库维护模块不可用'}), 503
-    
-    results = db_maintenance_scheduler.perform_archive()
-    total = sum(results.values())
-    return jsonify({
-        'success': True,
-        'data': {
-            'results': results,
-            'total_deleted': total
-        },
-        'message': f'归档完成，共删除{total}条记录'
-    })
-
-
-@app.route('/api/maintenance/vacuum', methods=['POST'])
-def api_maintenance_vacuum():
-    """执行数据库压缩"""
-    if not db_maintenance_scheduler:
-        return jsonify({'success': False, 'message': '数据库维护模块不可用'}), 503
-    
-    success = db_maintenance_scheduler.perform_vacuum()
-    if success:
-        return jsonify({
-            'success': True,
-            'message': '数据库压缩完成'
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': '数据库压缩失败'
-        }), 500
-
-
-@app.route('/api/maintenance/auto', methods=['POST'])
-def api_maintenance_auto():
-    """启动/停止自动维护"""
-    if not db_maintenance_scheduler:
-        return jsonify({'success': False, 'message': '数据库维护模块不可用'}), 503
-    
-    data = request.json
-    enabled = data.get('enabled', True)
-    
-    if enabled:
-        db_maintenance_scheduler.start_auto_maintenance(interval_minutes=60)
-        return jsonify({
-            'success': True,
-            'enabled': True,
-            'message': '自动维护已启动（检查间隔：60分钟）'
-        })
-    else:
-        db_maintenance_scheduler.stop_auto_maintenance()
-        return jsonify({
-            'success': True,
-            'enabled': False,
-            'message': '自动维护已停止'
-        })
-
-
-@app.route('/api/maintenance/check', methods=['POST'])
-def api_maintenance_check():
-    """执行维护检查（按需执行所有需要的维护操作）"""
-    if not db_maintenance_scheduler:
-        return jsonify({'success': False, 'message': '数据库维护模块不可用'}), 503
-    
-    results = db_maintenance_scheduler.check_and_maintain()
-    return jsonify({
-        'success': True,
-        'data': {
-            'backup': results.get('backup') is not None,
-            'archive': results.get('archive') is not None,
-            'vacuum': results.get('vacuum') is not None,
-        },
-        'message': '维护检查完成'
-    })
-
-
 def create_templates():
     """创建模板文件"""
     templates_dir = 'templates'
@@ -3266,25 +2401,6 @@ def create_templates():
 
 if __name__ == '__main__':
     create_templates()
-    
-    # 启动数据库自动维护调度器
-    if db_maintenance_scheduler:
-        try:
-            db_maintenance_scheduler.start()
-            print("[OK] 数据库自动维护调度器已启动")
-        except Exception as e:
-            print(f"[WARNING] 启动数据库维护调度器失败: {e}")
-    
     print("启动Aurora量化交易系统可视化界面...")
     print("访问地址: http://localhost:5000")
-    # 生产环境：使用 debug=False 避免暴露敏感信息
-    # 如需远程访问，可改为 host='0.0.0.0'，但需确保防火墙和认证已配置
-    app.run(host='127.0.0.1', port=5000, debug=False)
-    
-    # 应用退出时停止数据库维护调度器
-    if db_maintenance_scheduler:
-        try:
-            db_maintenance_scheduler.stop()
-            print("[OK] 数据库自动维护调度器已停止")
-        except Exception as e:
-            print(f"[WARNING] 停止数据库维护调度器失败: {e}")
+    app.run(host='0.0.0.0', port=5000, debug=True)

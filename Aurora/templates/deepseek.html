@@ -276,27 +276,10 @@
                     <div class="col-md-4">
                         <label>选择策略：</label>
                         <select id="strategy-select" class="form-select">
-                            <option value="">-- 请选择策略 --</option>
-                            <optgroup label="⭐ 通用型核心策略">
-                                <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                                <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                                <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                                <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
-                            </optgroup>
-                            <optgroup label="📊 市场类型策略">
-                                <option value="AdaptiveMLStrategy">机构终极自适应ML策略</option>
-                                <option value="AdaptiveRangeGridTrading">自适应横盘网格策略</option>
-                                <option value="DownMarketStrategy">下跌市场优化策略</option>
-                                <option value="MultiFactorResonanceStrategy">多因子共振趋势策略</option>
-                                <option value="MovingAveragesStrategy">移动平均线趋势策略</option>
-                            </optgroup>
-                            <optgroup label="🔧 专项策略">
-                                <option value="HighReturnGridTrading">高收益网格交易策略</option>
-                                <option value="GridTrading">经典网格交易策略</option>
-                                <option value="DCAStrategy">定投(DCA)资金配置策略</option>
-                                <option value="PPOTradingAgent">PPO深度强化学习策略</option>
-                                <option value="FinalOptimizedStrategy">最终优化综合策略</option>
-                            </optgroup>
+                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
+                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
+                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
+                            <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -315,30 +298,6 @@
                 <div class="mt-3" id="strategy-status">
                     <span class="status-indicator status-stopped"></span>
                     <span>策略状态：已停止</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 策略信息面板 -->
-        <div class="card" id="strategy-info-card" style="display:none;">
-            <div class="card-header"><h3>策略详情</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="market-state"><strong>策略名称：</strong><span id="info-name">--</span></div>
-                        <div class="market-state"><strong>策略类型：</strong><span id="info-type">--</span></div>
-                        <div class="market-state"><strong>风险等级：</strong><span id="info-risk">--</span></div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="market-state"><strong>适用市场：</strong><span id="info-market">--</span></div>
-                        <div class="market-state"><strong>交易频率：</strong><span id="info-frequency">--</span></div>
-                        <div class="market-state"><strong>策略版本：</strong><span id="info-version">--</span></div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="market-state"><strong>策略描述：</strong><span id="info-description">--</span></div>
-                        <div class="market-state"><strong>核心算法：</strong><span id="info-algorithm">--</span></div>
-                        <div class="market-state"><strong>状态：</strong><span id="info-status">--</span></div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -1106,27 +1065,10 @@
                     <div class="col-md-4">
                         <label>添加策略：</label>
                         <select id="add-strategy-select" class="form-select">
-                            <option value="">-- 请选择策略 --</option>
-                            <optgroup label="⭐ 通用型核心策略">
-                                <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                                <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                                <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                                <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
-                            </optgroup>
-                            <optgroup label="📊 市场类型策略">
-                                <option value="AdaptiveMLStrategy">机构终极自适应ML策略</option>
-                                <option value="AdaptiveRangeGridTrading">自适应横盘网格策略</option>
-                                <option value="DownMarketStrategy">下跌市场优化策略</option>
-                                <option value="MultiFactorResonanceStrategy">多因子共振趋势策略</option>
-                                <option value="MovingAveragesStrategy">移动平均线趋势策略</option>
-                            </optgroup>
-                            <optgroup label="🔧 专项策略">
-                                <option value="HighReturnGridTrading">高收益网格交易策略</option>
-                                <option value="GridTrading">经典网格交易策略</option>
-                                <option value="DCAStrategy">定投(DCA)资金配置策略</option>
-                                <option value="PPOTradingAgent">PPO深度强化学习策略</option>
-                                <option value="FinalOptimizedStrategy">最终优化综合策略</option>
-                            </optgroup>
+                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
+                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
+                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
+                            <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -2085,37 +2027,6 @@
             });
         });
 
-        // 策略选择变更 - 加载策略详情
-        document.getElementById('strategy-select').addEventListener('change', function() {
-            const strategyName = this.value;
-            const infoCard = document.getElementById('strategy-info-card');
-            if (!strategyName) {
-                infoCard.style.display = 'none';
-                return;
-            }
-            fetch('/api/strategy-info?name=' + encodeURIComponent(strategyName))
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        infoCard.style.display = 'none';
-                        return;
-                    }
-                    document.getElementById('info-name').textContent = data.label || strategyName;
-                    document.getElementById('info-type').textContent = data.type || '--';
-                    document.getElementById('info-risk').textContent = data.risk_level || '--';
-                    document.getElementById('info-market').textContent = data.market_condition || '--';
-                    document.getElementById('info-frequency').textContent = data.trading_frequency || '--';
-                    document.getElementById('info-version').textContent = data.version || '--';
-                    document.getElementById('info-description').textContent = data.description || '--';
-                    document.getElementById('info-algorithm').textContent = data.algorithm || '--';
-                    document.getElementById('info-status').textContent = data.status || '--';
-                    infoCard.style.display = 'block';
-                })
-                .catch(() => {
-                    infoCard.style.display = 'none';
-                });
-        });
-
         // 事件绑定
         document.getElementById('start-btn').addEventListener('click', function() {
             const strategy = document.getElementById('strategy-select').value;
@@ -2214,83 +2125,28 @@
             }
         });
 
-        // 更新多策略对比（从注册表动态加载策略列表）
+        // 更新多策略对比
         function updateStrategyComparison() {
-            // 从策略列表API获取真实策略数据
-            fetch('/api/strategy-list')
-                .then(response => response.json())
-                .then(listData => {
-                    const categories = listData.categories || {};
-                    // 从各类别中收集策略
-                    const allStrategies = [];
-                    Object.keys(categories).forEach(catKey => {
-                        const cat = categories[catKey];
-                        if (cat.strategies) {
-                            cat.strategies.forEach(s => {
-                                allStrategies.push({
-                                    name: s.name,
-                                    label: s.label || s.name,
-                                    category: catKey
-                                });
-                            });
-                        }
-                    });
-
-                    // 取前5个策略用于对比展示
-                    const displayStrategies = allStrategies.slice(0, 5);
-                    const now = new Date();
-                    const data = [];
-                    for (let i = 7; i >= 0; i--) {
-                        const date = new Date(now);
-                        date.setDate(date.getDate() - i);
-                        const point = { timestamp: date.getTime() };
-                        displayStrategies.forEach((s, idx) => {
-                            // 使用策略索引作为随机种子偏移，使各策略曲线不同
-                            const base = (idx + 1) * 2.5;
-                            point[s.name] = Math.random() * base * 2 - base * 0.3;
-                        });
-                        data.push(point);
-                    }
-
-                    // 动态生成系列
-                    const series = displayStrategies.map(s => ({
-                        name: s.label,
-                        type: 'line',
-                        smooth: true,
-                        symbol: 'none',
-                        data: data.map(item => [item.timestamp, item[s.name] || 0])
-                    }));
-
-                    strategyComparisonChart.setOption({
-                        legend: {
-                            data: displayStrategies.map(s => s.label),
-                            textStyle: { color: '#94a3b8' }
-                        },
-                        series: series
-                    });
-                })
-                .catch(() => {
-                    // 回退：使用模拟数据
-                    const now = new Date();
-                    const data = [];
-                    for (let i = 7; i >= 0; i--) {
-                        const date = new Date(now);
-                        date.setDate(date.getDate() - i);
-                        data.push({
-                            timestamp: date.getTime(),
-                            fourier: Math.random() * 10 - 2,
-                            market: Math.random() * 8 - 1,
-                            ml: Math.random() * 12 - 3
-                        });
-                    }
-                    strategyComparisonChart.setOption({
-                        series: [
-                            { name: '傅里叶RL', data: data.map(item => [item.timestamp, item.fourier]) },
-                            { name: '市场自适应', data: data.map(item => [item.timestamp, item.market]) },
-                            { name: 'ML网格', data: data.map(item => [item.timestamp, item.ml]) }
-                        ]
-                    });
+            const now = new Date();
+            const data = [];
+            for (let i = 7; i >= 0; i--) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                data.push({
+                    timestamp: date.getTime(),
+                    fourier: Math.random() * 10 - 2,
+                    market: Math.random() * 8 - 1,
+                    ml: Math.random() * 12 - 3
                 });
+            }
+
+            strategyComparisonChart.setOption({
+                series: [
+                    { data: data.map(item => [item.timestamp, item.fourier]) },
+                    { data: data.map(item => [item.timestamp, item.market]) },
+                    { data: data.map(item => [item.timestamp, item.ml]) }
+                ]
+            });
         }
 
         // 系统健康监控功能

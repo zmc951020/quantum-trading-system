@@ -88,17 +88,6 @@ class StrategyOptimizer:
         Returns:
             优化后的参数
         """
-        # ===== 增益性优化：尝试使用SmartParamOptimizer =====
-        smart_optimizer = None
-        try:
-            from utils.smart_param_optimizer import get_param_optimizer
-            smart_optimizer = get_param_optimizer()
-            if smart_optimizer and smart_optimizer.enabled:
-                print(f"[SmartOptimizer] 使用智能参数优化器优化 {strategy_name}")
-        except Exception as e:
-            print(f"[SmartOptimizer] 导入失败: {e}")
-            smart_optimizer = None
-
         optimization_configs = {
             'MLRangeGridTrading': {
                 'description': '机器学习网格交易策略',
@@ -138,21 +127,6 @@ class StrategyOptimizer:
             param_range = param_info['range']
             step = param_info['step']
 
-            # ===== 增益性优化：使用SmartParamOptimizer进行智能参数优化 =====
-            if smart_optimizer and smart_optimizer.enabled:
-                smart_result = smart_optimizer.optimize_param(
-                    param_name=param_name,
-                    current_value=current,
-                    param_range=param_range,
-                    step=step,
-                    strategy_name=strategy_name,
-                )
-                if smart_result is not None:
-                    optimized_params[param_name] = round(smart_result, 6)
-                    print(f"[SmartOptimizer] {param_name}: {current} -> {smart_result:.6f}")
-                    continue
-
-            # 回退到随机搜索
             num_trials = 10
             best_value = current
             best_score = -float('inf')
@@ -168,14 +142,6 @@ class StrategyOptimizer:
                     best_value = trial_value
 
             optimized_params[param_name] = round(best_value, 6)
-
-        # ===== 增益性优化：记录优化历史 =====
-        if smart_optimizer and smart_optimizer.enabled:
-            smart_optimizer.record_optimization(
-                strategy_name=strategy_name,
-                params=optimized_params,
-                performance_score=0.0,  # 将在回测后更新
-            )
 
         return optimized_params
 
