@@ -50,6 +50,8 @@ health_monitor = None
 monitoring_scheduler = None
 database_manager = None
 security_control = None
+db_maintenance_scheduler = None
+
 
 try:
     from monitor.system_health import get_system_health_monitor
@@ -80,7 +82,15 @@ try:
 except Exception as e:
     logger.warning(f"[WARNING] security_control import failed: {e}")
 
+try:
+    from utils.db_maintenance import DatabaseMaintenanceScheduler
+    db_maintenance_scheduler = DatabaseMaintenanceScheduler()
+    logger.info("[OK] DatabaseMaintenanceScheduler imported successfully")
+except Exception as e:
+    logger.warning(f"[WARNING] DatabaseMaintenanceScheduler import failed: {e}")
+
 class AuroraSystem:
+
     """
     Aurora 量化交易系统
     """
@@ -105,8 +115,18 @@ class AuroraSystem:
         self.monitoring_scheduler = monitoring_scheduler
         self.database_manager = database_manager
         self.security_control = security_control
+        self.db_maintenance_scheduler = db_maintenance_scheduler
+        
+        # 启动数据库自动维护
+        if self.db_maintenance_scheduler:
+            try:
+                self.db_maintenance_scheduler.start_auto_maintenance(interval_minutes=60)
+                logger.info("数据库自动维护调度器已启动 (检查间隔: 60分钟)")
+            except Exception as e:
+                logger.warning(f"启动数据库维护调度器失败: {e}")
         
         # 记录系统启动日志
+
         if self.database_manager:
             try:
                 self.database_manager.insert_system_log(
@@ -435,6 +455,39 @@ class AuroraSystem:
         
         logger.info("策略参数优化完成")
 
+    def stop(self):
+        """
+        停止系统，清理资源
+        """
+        logger.info("正在停止 Aurora 量化交易系统...")
+
+        # 停止数据库自动维护
+        if self.db_maintenance_scheduler:
+            try:
+                self.db_maintenance_scheduler.stop_auto_maintenance()
+                logger.info("数据库自动维护调度器已停止")
+            except Exception as e:
+                logger.warning(f"停止数据库维护调度器失败: {e}")
+
+        # 停止监控调度器
+        if self.monitoring_scheduler:
+            try:
+                self.monitoring_scheduler.stop()
+                logger.info("监控调度器已停止")
+            except Exception as e:
+                logger.warning(f"停止监控调度器失败: {e}")
+
+        # 记录系统停止日志
+        if self.database_manager:
+            try:
+                self.database_manager.insert_system_log(
+                    'INFO', 'AuroraSystem', '系统停止', 'Aurora 量化交易系统已停止'
+                )
+            except Exception as e:
+                logger.warning(f"记录系统日志失败: {e}")
+
+        logger.info("Aurora 量化交易系统已停止")
+
 @click.group()
 def cli():
     """Aurora 量化交易系统"""
@@ -448,7 +501,10 @@ def start():
         return
     
     system = AuroraSystem()
-    system.start_trading()
+    try:
+        system.start_trading()
+    finally:
+        system.stop()
 
 @cli.command()
 def backtest():
@@ -458,7 +514,10 @@ def backtest():
         return
     
     system = AuroraSystem()
-    system.run_backtest()
+    try:
+        system.run_backtest()
+    finally:
+        system.stop()
 
 @cli.command()
 def train():
@@ -468,7 +527,10 @@ def train():
         return
     
     system = AuroraSystem()
-    system.train_models()
+    try:
+        system.train_models()
+    finally:
+        system.stop()
 
 @cli.command()
 def optimize():
@@ -478,7 +540,10 @@ def optimize():
         return
     
     system = AuroraSystem()
-    system.optimize_strategies()
+    try:
+        system.optimize_strategies()
+    finally:
+        system.stop()
 
 @cli.command()
 def list_strategies():
@@ -488,10 +553,13 @@ def list_strategies():
         return
     
     system = AuroraSystem()
-    strategies = system.strategy_manager.list_strategies()
-    logger.info("可用策略:")
-    for i, strategy in enumerate(strategies):
-        logger.info(f"{i+1}. {strategy}")
+    try:
+        strategies = system.strategy_manager.list_strategies()
+        logger.info("可用策略:")
+        for i, strategy in enumerate(strategies):
+            logger.info(f"{i+1}. {strategy}")
+    finally:
+        system.stop()
 
 @cli.command()
 def select_strategy(strategy_name):
@@ -501,11 +569,14 @@ def select_strategy(strategy_name):
         return
     
     system = AuroraSystem()
-    success = system.strategy_manager.select_strategy(strategy_name)
-    if success:
-        logger.info(f"成功选择策略: {strategy_name}")
-    else:
-        logger.error(f"策略 {strategy_name} 不存在")
+    try:
+        success = system.strategy_manager.select_strategy(strategy_name)
+        if success:
+            logger.info(f"成功选择策略: {strategy_name}")
+        else:
+            logger.error(f"策略 {strategy_name} 不存在")
+    finally:
+        system.stop()
 
 @cli.command()
 def web():
