@@ -18,7 +18,7 @@ from typing import Dict, Optional, Callable
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.database_manager import get_database_manager
+from utils.database_manager import get_db_manager as get_database_manager
 
 logger = logging.getLogger(__name__)
 

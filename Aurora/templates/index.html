@@ -1511,55 +1511,56 @@ async function loadGainStatus() {
 
 // 更新增益模块UI
 function updateGainUI(data) {
-    const modules = data.modules || {};
+    // 后端 /api/gain/status 返回 {success: true, data: {performance_tracker: {...}, risk_controller: {...}, ...}}
+    const modules = data.data || {};
 
     // 性能追踪器
-    const perf = modules.performance || {};
+    const perf = modules.performance_tracker || {};
     updateGainCard('perf', perf, {
-        status: perf.enabled ? '<span class="badge-enabled">已启用</span>' : '<span class="badge-disabled">已禁用</span>',
+        status: perf.enabled ? '<span class="badge-enabled">已启用</span>' : (perf.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
         sharpe: perf.sharpe_ratio != null ? perf.sharpe_ratio.toFixed(2) : '--',
-        trades: perf.total_trades != null ? perf.total_trades : '--',
+        trades: perf.total_trades != null ? perf.total_trades : (perf.strategies ? perf.strategies.length : '--'),
         winrate: perf.win_rate != null ? (perf.win_rate * 100).toFixed(1) + '%' : '--'
     });
     document.getElementById('toggle-performance').checked = perf.enabled || false;
 
     // 风险控制器
-    const risk = modules.risk || {};
+    const risk = modules.risk_controller || {};
     updateGainCard('risk', risk, {
-        status: risk.enabled ? '<span class="badge-enabled">已启用</span>' : '<span class="badge-disabled">已禁用</span>',
-        budget: risk.total_budget != null ? risk.total_budget.toFixed(2) : '--',
+        status: risk.enabled ? '<span class="badge-enabled">已启用</span>' : (risk.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        budget: risk.capital != null ? risk.capital.toFixed(2) : '--',
         used: risk.used_budget != null ? risk.used_budget.toFixed(2) : '--',
-        strategies: risk.strategy_count != null ? risk.strategy_count : '--'
+        strategies: risk.strategies ? risk.strategies.length : '--'
     });
     document.getElementById('toggle-risk').checked = risk.enabled || false;
 
     // 参数优化器
-    const opt = modules.optimizer || {};
+    const opt = modules.param_optimizer || {};
     updateGainCard('opt', opt, {
-        status: opt.enabled ? '<span class="badge-enabled">已启用</span>' : '<span class="badge-disabled">已禁用</span>',
-        count: opt.optimization_count != null ? opt.optimization_count : '--',
+        status: opt.enabled ? '<span class="badge-enabled">已启用</span>' : (opt.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        count: opt.total_optimizations != null ? opt.total_optimizations : '--',
         best: opt.best_return != null ? opt.best_return.toFixed(2) + '%' : '--',
         space: opt.search_space_size != null ? opt.search_space_size : '--'
     });
     document.getElementById('toggle-optimizer').checked = opt.enabled || false;
 
     // RL增强器
-    const rl = modules.rl || {};
+    const rl = modules.rl_enhancer || {};
     updateGainCard('rl', rl, {
-        status: rl.enabled ? '<span class="badge-enabled">已启用</span>' : '<span class="badge-disabled">已禁用</span>',
-        steps: rl.training_steps != null ? rl.training_steps : '--',
+        status: rl.enabled ? '<span class="badge-enabled">已启用</span>' : (rl.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        steps: rl.total_steps != null ? rl.total_steps : '--',
         loss: rl.policy_loss != null ? rl.policy_loss.toFixed(4) : '--',
-        experience: rl.experience_count != null ? rl.experience_count : '--'
+        experience: rl.buffer_size != null ? rl.buffer_size : '--'
     });
     document.getElementById('toggle-rl').checked = rl.enabled || false;
 
     // 数据质量验证器
-    const qual = modules.quality || {};
+    const qual = modules.data_validator || {};
     updateGainCard('qual', qual, {
-        status: qual.enabled ? '<span class="badge-enabled">已启用</span>' : '<span class="badge-disabled">已禁用</span>',
+        status: qual.enabled ? '<span class="badge-enabled">已启用</span>' : (qual.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
         score: qual.overall_score != null ? qual.overall_score.toFixed(1) : '--',
-        anomalies: qual.anomaly_count != null ? qual.anomaly_count : '--',
-        sources: qual.data_source_count != null ? qual.data_source_count : '--'
+        anomalies: qual.total_issues != null ? qual.total_issues : '--',
+        sources: qual.total_checks != null ? qual.total_checks : '--'
     });
     document.getElementById('toggle-quality').checked = qual.enabled || false;
 }
