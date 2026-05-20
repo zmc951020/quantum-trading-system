@@ -1,529 +1,680 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-策略注册表 - 策略分类、属性界定与统一管理
-============================================
-提供所有策略的元数据注册、分类查询和实例化工厂。
+策略注册表 (Strategy Registry)
+================================
+Aurora 量化交易系统的策略注册、发现与管理模块。
 
-策略分类体系：
-  1. 通用型核心策略 (Core) - 全能型主力策略，适用于多种市场环境
-  2. 市场类型策略 (MarketRegime) - 针对特定市场状态优化
-  3. 专项策略 (Specialized) - 特定交易逻辑或资金管理
+功能：
+  1. 自动扫描 strategies/ 目录下的策略模块
+  2. 维护策略元数据：名称、类型、状态、评分、文件路径
+  3. 提供策略的启用/禁用切换
+  4. 与数据库 strategy_registry 表同步
+  5. 支持策略性能追踪与排名
 
-市场状态适配：
-  - BULL: 上涨趋势市场
-  - RANGE: 横盘震荡市场
-  - BEAR: 下跌趋势市场
-  - ADAPTIVE: 自适应全市场
+使用方式：
+  from strategies.strategy_registry import STRATEGY_REGISTRY, get_strategy_registry
+
+  registry = get_strategy_registry()
+  strategies = registry.list_enabled()
+  strategy = registry.get("fourier_rl_strategy")
 """
 
-from typing import Dict, List, Optional, Any, Type
-from enum import Enum
+from __future__ import annotations
+
+import importlib
+import inspect
+import logging
+import os
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type
+
+logger = logging.getLogger(__name__)
 
 
-class StrategyCategory(str, Enum):
-    """策略大类"""
-    CORE = "core"              # 通用型核心策略
-    MARKET_REGIME = "regime"   # 市场类型策略
-    SPECIALIZED = "specialized" # 专项策略
+# ==================== 数据模型 ====================
 
+@dataclass
+class StrategyMeta:
+    """策略元数据"""
+    name: str                              # 策略名称（唯一标识）
+    display_name: str = ""                 # 显示名称
+    file_path: str = ""                    # 策略文件路径
+    module_path: str = ""                  # Python 模块路径
+    strategy_type: str = "general"         # 策略类型：trend/grid/ml/rl/fourier/composite
+    description: str = ""                  # 策略描述
+    version: str = "1.0.0"                # 版本号
+    author: str = ""                       # 作者
+    enabled: bool = True                   # 是否启用
+    status: str = "untested"               # 状态：untested/testing/production/deprecated
+    tags: List[str] = field(default_factory=list)
 
-class MarketRegime(str, Enum):
-    """市场状态适配"""
-    BULL = "bull"              # 上涨趋势
-    RANGE = "range"            # 横盘震荡
-    BEAR = "bear"              # 下跌趋势
-    ADAPTIVE = "adaptive"      # 自适应全市场
+    # 性能指标
+    performance_score: float = 0.0         # 综合评分（0-100）
+    sharpe_ratio: float = 0.0             # 夏普比率
+    annual_return: float = 0.0            # 年化收益率（%）
+    max_drawdown: float = 0.0             # 最大回撤（%）
+    win_rate: float = 0.0                 # 胜率（%）
+    total_trades: int = 0                  # 总交易次数
+    avg_profit_per_trade: float = 0.0     # 每笔平均收益
 
+    # 元数据
+    created_at: str = ""                   # 创建时间
+    updated_at: str = ""                   # 更新时间
+    last_backtest: str = ""               # 最后回测时间
+    parameters: Dict[str, Any] = field(default_factory=dict)  # 策略参数
 
-class TradingLogic(str, Enum):
-    """交易逻辑类型"""
-    GRID = "grid"              # 网格交易
-    TREND = "trend"            # 趋势跟踪
-    RL = "reinforcement"       # 强化学习
-    ML = "machine_learning"    # 机器学习
-    VALUE = "value"            # 价值投资
-    DCA = "dca"                # 定投策略
-    MOMENTUM = "momentum"      # 动量策略
-    RESONANCE = "resonance"    # 多因子共振
-    HYBRID = "hybrid"          # 混合策略
+    # 运行时
+    _class_ref: Any = None                # 策略类引用（内部使用）
 
-
-# ============================================================
-# 策略注册记录
-# ============================================================
-STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
-    # ==================== 通用型核心策略 (Core) ====================
-    "FourierRLStrategy": {
-        "name": "FourierRLStrategy",
-        "label": "傅里叶强化学习策略",
-        "category": StrategyCategory.CORE,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.RL,
-        "module": "strategies.fourier_rl_strategy",
-        "class_name": "FourierRLStrategy",
-        "description": "傅里叶变换+PPO强化学习，全市场自适应，高夏普比率",
-        "params": {
-            "base_price": {"type": "float", "default": 100.0, "desc": "基准价格"},
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "active",  # active | beta | archived
-        "priority": 1,       # 优先级，数字越小越优先
-        "tags": ["RL", "傅里叶", "自适应", "高频"],
-        "strengths": ["全市场自适应", "高夏普比率", "强化学习持续优化"],
-        "weaknesses": ["计算资源消耗大", "需要较长历史数据训练"],
-        "recommended_regime": ["bull", "range", "bear"],
-        "performance_rating": 4.5
-    },
-    "FinalMarketAdaptiveGrid": {
-        "name": "FinalMarketAdaptiveGrid",
-        "label": "市场自适应网格策略",
-        "category": StrategyCategory.CORE,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.HYBRID,
-        "module": "strategies.final_market_adaptive",
-        "class_name": "FinalMarketAdaptiveGrid",
-        "description": "随机森林市场分类+自适应网格，全市场覆盖，稳健收益",
-        "params": {
-            "base_price": {"type": "float", "default": 100.0, "desc": "基准价格"},
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "active",
-        "priority": 2,
-        "tags": ["网格", "随机森林", "自适应", "稳健"],
-        "strengths": ["全市场覆盖", "机器学习市场分类", "网格稳健收益"],
-        "weaknesses": ["横盘表现最优", "单边趋势可能滞后"],
-        "recommended_regime": ["bull", "range", "bear"],
-        "performance_rating": 4.3
-    },
-    "MLRangeGridTrading": {
-        "name": "MLRangeGridTrading",
-        "label": "机器学习网格交易策略",
-        "category": StrategyCategory.CORE,
-        "regime": MarketRegime.RANGE,
-        "logic": TradingLogic.ML,
-        "module": "strategies.ml_range_grid",
-        "class_name": "MLRangeGridTrading",
-        "description": "随机森林优化网格步长，横盘市场高胜率",
-        "params": {
-            "base_price": {"type": "float", "default": 100.0, "desc": "基准价格"},
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "active",
-        "priority": 3,
-        "tags": ["网格", "机器学习", "横盘", "高频"],
-        "strengths": ["横盘市场高胜率", "ML自动优化网格", "交易频率高"],
-        "weaknesses": ["单边趋势表现差", "网格参数敏感"],
-        "recommended_regime": ["range"],
-        "performance_rating": 4.0
-    },
-    "HuijinValueStrategy": {
-        "name": "HuijinValueStrategy",
-        "label": "汇金价值AI轮动策略",
-        "category": StrategyCategory.CORE,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.VALUE,
-        "module": "strategies.huijin_value_strategy",
-        "class_name": "HuijinValueStrategy",
-        "description": "价值投资+AI轮动，基本面驱动，长期稳健",
-        "params": {
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "active",
-        "priority": 4,
-        "tags": ["价值投资", "AI轮动", "基本面", "长期"],
-        "strengths": ["基本面驱动", "长期稳健", "AI轮动选股"],
-        "weaknesses": ["依赖外部数据源", "短期波动较大"],
-        "recommended_regime": ["bull", "range"],
-        "performance_rating": 4.2
-    },
-
-    # ==================== 市场类型策略 (Market Regime) ====================
-    "AdaptiveMLStrategy": {
-        "name": "AdaptiveMLStrategy",
-        "label": "机构终极自适应ML策略",
-        "category": StrategyCategory.MARKET_REGIME,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.HYBRID,
-        "module": "strategies.adaptive_ml_strategy",
-        "class_name": "AdaptiveMLStrategy",
-        "description": "横盘赚大钱|上涨赚趋势|下跌防御反转，永不丢失学习成果",
-        "params": {
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "beta",
-        "priority": 5,
-        "tags": ["自适应", "ML", "机构级", "全市场"],
-        "strengths": ["三种市场自动切换", "ML永久记忆", "目标收益明确"],
-        "weaknesses": ["复杂度高", "需要大量历史数据"],
-        "recommended_regime": ["bull", "range", "bear"],
-        "performance_rating": 4.6
-    },
-    "AdaptiveRangeGridTrading": {
-        "name": "AdaptiveRangeGridTrading",
-        "label": "自适应横盘网格策略",
-        "category": StrategyCategory.MARKET_REGIME,
-        "regime": MarketRegime.RANGE,
-        "logic": TradingLogic.GRID,
-        "module": "strategies.adaptive_range_grid",
-        "class_name": "AdaptiveRangeGridTrading",
-        "description": "专门针对横盘市场优化，ML动态网格调整",
-        "params": {
-            "base_price": {"type": "float", "default": 100.0, "desc": "基准价格"},
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "beta",
-        "priority": 6,
-        "tags": ["网格", "横盘", "自适应", "ML"],
-        "strengths": ["横盘市场优化", "动态网格调整", "50层网格"],
-        "weaknesses": ["仅适用于横盘", "趋势市场表现差"],
-        "recommended_regime": ["range"],
-        "performance_rating": 3.8
-    },
-    "DownMarketStrategy": {
-        "name": "DownMarketStrategy",
-        "label": "下跌市场优化策略",
-        "category": StrategyCategory.MARKET_REGIME,
-        "regime": MarketRegime.BEAR,
-        "logic": TradingLogic.MOMENTUM,
-        "module": "strategies.downtrend_optimized",
-        "class_name": "DownMarketStrategy",
-        "description": "超跌反弹+支撑位承接+金字塔仓位控制，五层风控",
-        "params": {
-            "initial_capital": {"type": "float", "default": 100000, "desc": "初始资金"},
-            "max_position_pct": {"type": "float", "default": 0.3, "desc": "最大仓位比例"}
-        },
-        "status": "beta",
-        "priority": 7,
-        "tags": ["下跌", "防御", "超跌反弹", "风控"],
-        "strengths": ["下跌市场防御", "五层风控", "金字塔加仓"],
-        "weaknesses": ["仅适用于下跌", "上涨市场踏空"],
-        "recommended_regime": ["bear"],
-        "performance_rating": 3.5
-    },
-    "MultiFactorResonanceStrategy": {
-        "name": "MultiFactorResonanceStrategy",
-        "label": "多因子共振趋势策略",
-        "category": StrategyCategory.MARKET_REGIME,
-        "regime": MarketRegime.BULL,
-        "logic": TradingLogic.RESONANCE,
-        "module": "strategies.multi_factor_resonance",
-        "class_name": "MultiFactorResonanceStrategy",
-        "description": "趋势跟踪+动量择时+波动率风控+资金管理",
-        "params": {
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"},
-            "risk_per_trade": {"type": "float", "default": 0.02, "desc": "单笔风险比例"}
-        },
-        "status": "beta",
-        "priority": 8,
-        "tags": ["趋势", "动量", "多因子", "共振"],
-        "strengths": ["趋势跟踪强", "多因子确认", "资金管理完善"],
-        "weaknesses": ["横盘市场频繁假信号", "参数较多"],
-        "recommended_regime": ["bull"],
-        "performance_rating": 3.7
-    },
-    "MovingAveragesStrategy": {
-        "name": "MovingAveragesStrategy",
-        "label": "移动平均线趋势策略",
-        "category": StrategyCategory.MARKET_REGIME,
-        "regime": MarketRegime.BULL,
-        "logic": TradingLogic.TREND,
-        "module": "strategies.trend_trading",
-        "class_name": "MovingAveragesStrategy",
-        "description": "多周期均线交叉，趋势跟踪，经典稳健",
-        "params": {
-            "short_window": {"type": "int", "default": 10, "desc": "短期均线窗口"},
-            "medium_window": {"type": "int", "default": 20, "desc": "中期均线窗口"},
-            "long_window": {"type": "int", "default": 30, "desc": "长期均线窗口"}
-        },
-        "status": "beta",
-        "priority": 9,
-        "tags": ["均线", "趋势", "经典", "稳健"],
-        "strengths": ["简单可靠", "趋势跟踪有效", "参数少"],
-        "weaknesses": ["滞后性", "横盘市场表现差"],
-        "recommended_regime": ["bull"],
-        "performance_rating": 3.3
-    },
-
-    # ==================== 专项策略 (Specialized) ====================
-    "HighReturnGridTrading": {
-        "name": "HighReturnGridTrading",
-        "label": "高收益网格交易策略",
-        "category": StrategyCategory.SPECIALIZED,
-        "regime": MarketRegime.RANGE,
-        "logic": TradingLogic.GRID,
-        "module": "strategies.high_return_grid",
-        "class_name": "HighReturnGridTrading",
-        "description": "目标8%收益率+2.0-3.0夏普，分钟级高频交易",
-        "params": {
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"},
-            "base_price": {"type": "float", "default": 100.0, "desc": "基准价格"}
-        },
-        "status": "beta",
-        "priority": 10,
-        "tags": ["网格", "高频", "高收益", "分钟级"],
-        "strengths": ["高频交易", "目标收益明确", "网格精细"],
-        "weaknesses": ["手续费敏感", "极端行情风险大"],
-        "recommended_regime": ["range"],
-        "performance_rating": 3.6
-    },
-    "GridTrading": {
-        "name": "GridTrading",
-        "label": "经典网格交易策略",
-        "category": StrategyCategory.SPECIALIZED,
-        "regime": MarketRegime.RANGE,
-        "logic": TradingLogic.GRID,
-        "module": "strategies.grid_trading",
-        "class_name": "GridTrading",
-        "description": "经典网格化交易，可配置间距和层数，适合震荡市",
-        "params": {
-            "base_price": {"type": "float", "default": 100.0, "desc": "基准价格"},
-            "grid_spacing": {"type": "float", "default": 0.005, "desc": "网格间距"},
-            "grid_levels": {"type": "int", "default": 10, "desc": "网格层数"},
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "beta",
-        "priority": 11,
-        "tags": ["网格", "经典", "可配置", "震荡"],
-        "strengths": ["简单易懂", "参数可配置", "震荡市有效"],
-        "weaknesses": ["趋势市场亏损", "参数需手动优化"],
-        "recommended_regime": ["range"],
-        "performance_rating": 3.2
-    },
-    "DCAStrategy": {
-        "name": "DCAStrategy",
-        "label": "定投(DCA)资金配置策略",
-        "category": StrategyCategory.SPECIALIZED,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.DCA,
-        "module": "strategies.fund_allocation",
-        "class_name": "DCAStrategy",
-        "description": "美元成本平均法，定期定额投资，长期稳健增值",
-        "params": {
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"},
-            "fixed_amount": {"type": "float", "default": 1000, "desc": "固定投资金额"},
-            "interval": {"type": "int", "default": 1, "desc": "投资间隔(天)"},
-            "adaptive": {"type": "bool", "default": True, "desc": "自适应投资金额"}
-        },
-        "status": "beta",
-        "priority": 12,
-        "tags": ["定投", "DCA", "长期", "稳健"],
-        "strengths": ["长期稳健", "无需择时", "风险分散"],
-        "weaknesses": ["短期收益低", "牛市收益不如其他策略"],
-        "recommended_regime": ["bull", "range", "bear"],
-        "performance_rating": 3.0
-    },
-    "PPOTradingAgent": {
-        "name": "PPOTradingAgent",
-        "label": "PPO深度强化学习策略",
-        "category": StrategyCategory.SPECIALIZED,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.RL,
-        "module": "strategies.ppo_trading_agent",
-        "class_name": "PPOTradingAgent",
-        "description": "PPO算法+连续状态空间，20维特征向量，深度学习驱动",
-        "params": {
-            "initial_capital": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "beta",
-        "priority": 13,
-        "tags": ["PPO", "强化学习", "深度学习", "连续动作"],
-        "strengths": ["连续状态空间", "深度学习", "自适应优化"],
-        "weaknesses": ["训练时间长", "计算资源需求高"],
-        "recommended_regime": ["bull", "range", "bear"],
-        "performance_rating": 3.8
-    },
-    "FinalOptimizedStrategy": {
-        "name": "FinalOptimizedStrategy",
-        "label": "最终优化综合策略",
-        "category": StrategyCategory.SPECIALIZED,
-        "regime": MarketRegime.ADAPTIVE,
-        "logic": TradingLogic.HYBRID,
-        "module": "strategies.final_optimized_strategy",
-        "class_name": "FinalOptimizedStrategy",
-        "description": "市场分类器+多策略切换，综合优化版",
-        "params": {
-            "initial_balance": {"type": "float", "default": 100000, "desc": "初始资金"}
-        },
-        "status": "beta",
-        "priority": 14,
-        "tags": ["综合", "市场分类", "多策略", "优化"],
-        "strengths": ["市场分类准确", "多策略切换", "综合优化"],
-        "weaknesses": ["复杂度高", "依赖分类器准确性"],
-        "recommended_regime": ["bull", "range", "bear"],
-        "performance_rating": 4.0
-    },
-}
-
-
-# ============================================================
-# 分类索引
-# ============================================================
-def get_strategies_by_category(category: StrategyCategory) -> List[Dict]:
-    """按大类获取策略列表"""
-    return [info for info in STRATEGY_REGISTRY.values()
-            if info["category"] == category and info["status"] != "archived"]
-
-
-def get_strategies_by_regime(regime: MarketRegime) -> List[Dict]:
-    """按市场状态获取推荐策略"""
-    return [info for info in STRATEGY_REGISTRY.values()
-            if regime in info["recommended_regime"] and info["status"] != "archived"]
-
-
-def get_strategies_by_logic(logic: TradingLogic) -> List[Dict]:
-    """按交易逻辑获取策略列表"""
-    return [info for info in STRATEGY_REGISTRY.values()
-            if info["logic"] == logic and info["status"] != "archived"]
-
-
-def get_active_strategies() -> List[Dict]:
-    """获取所有活跃策略"""
-    return [info for info in STRATEGY_REGISTRY.values()
-            if info["status"] == "active"]
-
-
-def get_beta_strategies() -> List[Dict]:
-    """获取所有Beta策略"""
-    return [info for info in STRATEGY_REGISTRY.values()
-            if info["status"] == "beta"]
-
-
-def get_all_strategies() -> List[Dict]:
-    """获取所有策略（含beta）"""
-    return [info for info in STRATEGY_REGISTRY.values()
-            if info["status"] != "archived"]
-
-
-def get_strategy_info(name: str) -> Optional[Dict]:
-    """获取单个策略信息"""
-    return STRATEGY_REGISTRY.get(name)
-
-
-def get_strategy_class(name: str):
-    """动态导入并返回策略类"""
-    info = STRATEGY_REGISTRY.get(name)
-    if not info:
-        raise ValueError(f"未知策略: {name}")
-
-    import importlib
-    module = importlib.import_module(info["module"])
-    return getattr(module, info["class_name"])
-
-
-def create_strategy(name: str, **kwargs):
-    """工厂方法：创建策略实例"""
-    cls = get_strategy_class(name)
-    info = STRATEGY_REGISTRY.get(name)
-
-    # 填充默认参数
-    for param_name, param_info in info["params"].items():
-        if param_name not in kwargs:
-            kwargs[param_name] = param_info["default"]
-
-    return cls(**kwargs)
-
-
-def get_strategy_list_api() -> List[Dict]:
-    """获取前端API所需的策略列表（含分类分组）"""
-    categories = {
-        "core": {
-            "label": "⭐ 通用型核心策略",
-            "description": "全能型主力策略，适用于多种市场环境",
-            "strategies": []
-        },
-        "regime": {
-            "label": "📊 市场类型策略",
-            "description": "针对特定市场状态（上涨/横盘/下跌）优化",
-            "strategies": []
-        },
-        "specialized": {
-            "label": "🔧 专项策略",
-            "description": "特定交易逻辑或资金管理策略",
-            "strategies": []
+    def to_dict(self) -> Dict[str, Any]:
+        """导出为字典"""
+        return {
+            "name": self.name,
+            "display_name": self.display_name or self.name,
+            "file_path": self.file_path,
+            "module_path": self.module_path,
+            "strategy_type": self.strategy_type,
+            "description": self.description,
+            "version": self.version,
+            "author": self.author,
+            "enabled": self.enabled,
+            "status": self.status,
+            "tags": self.tags,
+            "performance_score": self.performance_score,
+            "sharpe_ratio": self.sharpe_ratio,
+            "annual_return": self.annual_return,
+            "max_drawdown": self.max_drawdown,
+            "win_rate": self.win_rate,
+            "total_trades": self.total_trades,
+            "avg_profit_per_trade": self.avg_profit_per_trade,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "last_backtest": self.last_backtest,
+            "parameters": self.parameters,
         }
-    }
-
-    for info in get_all_strategies():
-        cat = info["category"].value
-        categories[cat]["strategies"].append({
-            "name": info["name"],
-            "label": info["label"],
-            "description": info["description"],
-            "regime": info["regime"].value,
-            "logic": info["logic"].value,
-            "status": info["status"],
-            "tags": info["tags"],
-            "strengths": info["strengths"],
-            "recommended_regime": info["recommended_regime"],
-            "performance_rating": info["performance_rating"]
-        })
-
-    return {
-        "categories": categories,
-        "total_count": len(get_all_strategies()),
-        "active_count": len(get_active_strategies()),
-        "beta_count": len(get_beta_strategies())
-    }
 
 
-# ============================================================
-# 市场状态推荐策略
-# ============================================================
-REGIME_RECOMMENDATIONS = {
-    MarketRegime.BULL: {
-        "primary": ["MultiFactorResonanceStrategy", "MovingAveragesStrategy"],
-        "secondary": ["FourierRLStrategy", "FinalMarketAdaptiveGrid", "HuijinValueStrategy"],
-        "avoid": ["DownMarketStrategy", "AdaptiveRangeGridTrading"]
-    },
-    MarketRegime.RANGE: {
-        "primary": ["MLRangeGridTrading", "AdaptiveRangeGridTrading", "HighReturnGridTrading"],
-        "secondary": ["GridTrading", "FourierRLStrategy", "FinalMarketAdaptiveGrid"],
-        "avoid": ["MovingAveragesStrategy", "MultiFactorResonanceStrategy"]
-    },
-    MarketRegime.BEAR: {
-        "primary": ["DownMarketStrategy"],
-        "secondary": ["FourierRLStrategy", "FinalMarketAdaptiveGrid", "DCAStrategy"],
-        "avoid": ["HighReturnGridTrading", "MultiFactorResonanceStrategy"]
-    },
-    MarketRegime.ADAPTIVE: {
-        "primary": ["FourierRLStrategy", "FinalMarketAdaptiveGrid", "AdaptiveMLStrategy"],
-        "secondary": ["HuijinValueStrategy", "FinalOptimizedStrategy", "PPOTradingAgent"],
-        "avoid": []
-    }
-}
+# ==================== 策略注册表 ====================
+
+class StrategyRegistry:
+    """
+    策略注册表 — Aurora 系统的策略管理中心
+
+    特性：
+    - 自动扫描策略目录
+    - 懒加载策略模块
+    - 数据库双向同步
+    - 启用/禁用热切换
+    - 性能排名与筛选
+    """
+
+    def __init__(
+        self,
+        strategies_dir: Optional[str] = None,
+        db_path: Optional[str] = None,
+        auto_scan: bool = True,
+    ):
+        self._strategies: Dict[str, StrategyMeta] = {}
+        self._loaded_modules: Dict[str, Any] = {}
+        self._db_path = db_path
+
+        # 策略目录
+        if strategies_dir is None:
+            strategies_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+            )
+        self._strategies_dir = Path(strategies_dir)
+
+        # 自动扫描
+        if auto_scan:
+            self.scan_strategies()
+
+        logger.info(
+            f"[StrategyRegistry] 初始化完成 | "
+            f"目录={self._strategies_dir} | "
+            f"已发现策略={len(self._strategies)}"
+        )
+
+    # ==================== 策略发现 ====================
+
+    def scan_strategies(self, directory: Optional[str] = None) -> int:
+        """
+        扫描策略目录，自动注册所有策略模块
+
+        Args:
+            directory: 策略目录路径，默认使用初始化时的路径
+
+        Returns:
+            int: 新发现的策略数量
+        """
+        scan_dir = Path(directory) if directory else self._strategies_dir
+        new_count = 0
+
+        for py_file in scan_dir.glob("*.py"):
+            # 跳过私有文件和非策略文件
+            if py_file.name.startswith("_") or py_file.name.startswith("test_"):
+                continue
+            if py_file.name in ("strategy_registry.py", "strategy_base.py",
+                               "strategy_combiner.py", "__init__.py"):
+                continue
+            if "request" in py_file.name.lower() or "submit" in py_file.name.lower():
+                continue
+            # 跳过报告文件
+            if "_report_" in py_file.name or py_file.stem.endswith("_report"):
+                continue
+
+            module_name = py_file.stem
+
+            # 已存在则跳过
+            if module_name in self._strategies:
+                continue
+
+            # 尝试推断策略元数据
+            try:
+                meta = self._infer_strategy_meta(py_file, module_name)
+                self._strategies[module_name] = meta
+                new_count += 1
+                logger.debug(f"[StrategyRegistry] 发现策略: {module_name} ({meta.strategy_type})")
+            except Exception as e:
+                logger.warning(f"[StrategyRegistry] 扫描 {module_name} 失败: {e}")
+
+        # 从数据库同步
+        if self._db_path:
+            try:
+                self._sync_from_db()
+            except Exception as e:
+                logger.debug(f"[StrategyRegistry] 数据库同步跳过: {e}")
+
+        logger.info(f"[StrategyRegistry] 扫描完成，新发现 {new_count} 个策略，"
+                    f"总计 {len(self._strategies)} 个")
+        return new_count
+
+    def _infer_strategy_meta(self, py_file: Path, module_name: str) -> StrategyMeta:
+        """从 Python 文件推断策略元数据"""
+        # 读取文件前几行查找 docstring
+        docstring = ""
+        try:
+            content = py_file.read_text(encoding="utf-8")
+            lines = content.split("\n")
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
+                    docstring += stripped.lstrip("#").strip().strip('"""').strip("'''").strip() + " "
+                    if len(docstring) > 200:
+                        break
+                elif docstring:
+                    break
+            docstring = docstring.strip()[:200]
+        except Exception:
+            docstring = ""
+
+        # 从模块名推断类型
+        strategy_type = "general"
+        name_lower = module_name.lower()
+        if "grid" in name_lower:
+            strategy_type = "grid"
+        elif any(kw in name_lower for kw in ("ml", "machine", "adaptive_ml")):
+            strategy_type = "ml"
+        elif any(kw in name_lower for kw in ("rl", "ppo", "reinforcement")):
+            strategy_type = "rl"
+        elif "fourier" in name_lower:
+            strategy_type = "fourier"
+        elif "trend" in name_lower:
+            strategy_type = "trend"
+        elif any(kw in name_lower for kw in ("huijin", "value", "fundamental")):
+            strategy_type = "value"
+        elif any(kw in name_lower for kw in ("multi", "resonance", "combine")):
+            strategy_type = "composite"
+        elif "downtrend" in name_lower or "down" in name_lower:
+            strategy_type = "trend"
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        return StrategyMeta(
+            name=module_name,
+            display_name=module_name.replace("_", " ").title(),
+            file_path=str(py_file),
+            module_path=f"strategies.{module_name}",
+            strategy_type=strategy_type,
+            description=docstring or f"Aurora 策略：{module_name}",
+            created_at=now,
+            updated_at=now,
+            parameters={},
+        )
+
+    # ==================== 策略访问 ====================
+
+    def get(self, name: str) -> Optional[StrategyMeta]:
+        """获取策略元数据"""
+        return self._strategies.get(name)
+
+    def list_all(self) -> List[StrategyMeta]:
+        """列出所有策略"""
+        return list(self._strategies.values())
+
+    def list_enabled(self) -> List[StrategyMeta]:
+        """列出已启用的策略"""
+        return [m for m in self._strategies.values() if m.enabled]
+
+    def list_by_type(self, strategy_type: str) -> List[StrategyMeta]:
+        """按类型列出策略"""
+        return [m for m in self._strategies.values()
+                if m.strategy_type == strategy_type]
+
+    def list_by_status(self, status: str) -> List[StrategyMeta]:
+        """按状态列出策略"""
+        return [m for m in self._strategies.values()
+                if m.status == status]
+
+    def get_top_performers(self, n: int = 10) -> List[StrategyMeta]:
+        """获取评分最高的 N 个策略"""
+        sorted_strategies = sorted(
+            self._strategies.values(),
+            key=lambda m: m.performance_score,
+            reverse=True,
+        )
+        return sorted_strategies[:n]
+
+    def get_names(self) -> List[str]:
+        """获取所有策略名称"""
+        return list(self._strategies.keys())
+
+    def count(self) -> int:
+        """策略总数"""
+        return len(self._strategies)
+
+    def count_enabled(self) -> int:
+        """已启用策略数"""
+        return sum(1 for m in self._strategies.values() if m.enabled)
+
+    # ==================== 策略管理 ====================
+
+    def enable(self, name: str) -> bool:
+        """启用策略"""
+        meta = self._strategies.get(name)
+        if meta:
+            meta.enabled = True
+            meta.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"[StrategyRegistry] 启用策略: {name}")
+            return True
+        return False
+
+    def disable(self, name: str) -> bool:
+        """禁用策略"""
+        meta = self._strategies.get(name)
+        if meta:
+            meta.enabled = False
+            meta.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"[StrategyRegistry] 禁用策略: {name}")
+            return True
+        return False
+
+    def toggle(self, name: str) -> Optional[bool]:
+        """切换策略启用状态，返回新状态"""
+        meta = self._strategies.get(name)
+        if meta:
+            meta.enabled = not meta.enabled
+            meta.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"[StrategyRegistry] 切换策略 {name} → enabled={meta.enabled}")
+            return meta.enabled
+        return None
+
+    def update_performance(
+        self,
+        name: str,
+        performance_score: float = 0.0,
+        sharpe_ratio: float = 0.0,
+        annual_return: float = 0.0,
+        max_drawdown: float = 0.0,
+        win_rate: float = 0.0,
+        total_trades: int = 0,
+        **kwargs,
+    ) -> bool:
+        """更新策略性能指标"""
+        meta = self._strategies.get(name)
+        if not meta:
+            return False
+
+        meta.performance_score = performance_score
+        meta.sharpe_ratio = sharpe_ratio
+        meta.annual_return = annual_return
+        meta.max_drawdown = max_drawdown
+        meta.win_rate = win_rate
+        meta.total_trades = total_trades
+        meta.last_backtest = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        meta.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 自动更新状态
+        if meta.status == "untested" and total_trades > 0:
+            meta.status = "testing"
+        if performance_score >= 70:
+            meta.status = "production"
+
+        logger.info(
+            f"[StrategyRegistry] 更新 {name} 性能: "
+            f"score={performance_score:.2f}, sharpe={sharpe_ratio:.2f}, "
+            f"return={annual_return:.2f}%"
+        )
+        return True
+
+    def set_status(self, name: str, status: str) -> bool:
+        """设置策略状态"""
+        valid_statuses = {"untested", "testing", "production", "deprecated", "archived"}
+        if status not in valid_statuses:
+            logger.error(f"[StrategyRegistry] 无效状态: {status}")
+            return False
+        meta = self._strategies.get(name)
+        if meta:
+            meta.status = status
+            meta.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            return True
+        return False
+
+    def register(self, meta: StrategyMeta) -> None:
+        """手动注册策略"""
+        self._strategies[meta.name] = meta
+        logger.info(f"[StrategyRegistry] 手动注册: {meta.name}")
+
+    def unregister(self, name: str) -> bool:
+        """注销策略"""
+        if name in self._strategies:
+            del self._strategies[name]
+            self._loaded_modules.pop(name, None)
+            logger.info(f"[StrategyRegistry] 注销策略: {name}")
+            return True
+        return False
+
+    # ==================== 模块加载 ====================
+
+    def load_strategy_module(self, name: str) -> Optional[Any]:
+        """加载策略模块（懒加载）"""
+        meta = self._strategies.get(name)
+        if not meta:
+            logger.warning(f"[StrategyRegistry] 未找到策略: {name}")
+            return None
+
+        if name in self._loaded_modules:
+            return self._loaded_modules[name]
+
+        try:
+            module = importlib.import_module(meta.module_path)
+            self._loaded_modules[name] = module
+            logger.debug(f"[StrategyRegistry] 加载模块: {meta.module_path}")
+            return module
+        except Exception as e:
+            logger.error(f"[StrategyRegistry] 加载 {name} 失败: {e}")
+            return None
+
+    def get_strategy_class(self, name: str) -> Optional[Type]:
+        """获取策略类"""
+        module = self.load_strategy_module(name)
+        if not module:
+            return None
+
+        # 查找策略类（排除导入的类）
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (inspect.isclass(attr)
+                    and attr.__module__ == module.__name__
+                    and attr_name not in ("ABC", "StrategyBase")):
+                # 检查是否有常见的策略方法
+                if any(hasattr(attr, m) for m in
+                      ("generate_signals", "run", "execute", "predict", "on_bar")):
+                    return attr
+        return None
+
+    # ==================== 数据库同步 ====================
+
+    def sync_to_db(self, db_path: Optional[str] = None) -> int:
+        """同步策略注册表到数据库"""
+        path = db_path or self._db_path
+        if not path:
+            logger.warning("[StrategyRegistry] 未提供数据库路径")
+            return 0
+
+        try:
+            import sqlite3
+            conn = sqlite3.connect(path)
+            cursor = conn.cursor()
+
+            # 确保表存在
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS strategy_registry (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    strategy_name TEXT UNIQUE,
+                    file_path TEXT,
+                    strategy_type TEXT,
+                    enabled INTEGER DEFAULT 1,
+                    status TEXT DEFAULT 'untested',
+                    performance_score REAL DEFAULT 0,
+                    sharpe_ratio REAL DEFAULT 0,
+                    annual_return REAL DEFAULT 0,
+                    max_drawdown REAL DEFAULT 0,
+                    win_rate REAL DEFAULT 0,
+                    total_trades INTEGER DEFAULT 0,
+                    last_backtest TEXT,
+                    description TEXT,
+                    parameters TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """)
+
+            count = 0
+            for meta in self._strategies.values():
+                cursor.execute("""
+                    INSERT OR REPLACE INTO strategy_registry
+                    (strategy_name, file_path, strategy_type, enabled, status,
+                     performance_score, sharpe_ratio, annual_return, max_drawdown,
+                     win_rate, total_trades, last_backtest, description, parameters,
+                     created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    meta.name, meta.file_path, meta.strategy_type,
+                    1 if meta.enabled else 0, meta.status,
+                    meta.performance_score, meta.sharpe_ratio,
+                    meta.annual_return, meta.max_drawdown,
+                    meta.win_rate, meta.total_trades,
+                    meta.last_backtest or "",
+                    meta.description,
+                    str(meta.parameters),
+                    meta.created_at, meta.updated_at,
+                ))
+                count += 1
+
+            conn.commit()
+            conn.close()
+            logger.info(f"[StrategyRegistry] 同步 {count} 条策略到数据库")
+            return count
+        except Exception as e:
+            logger.error(f"[StrategyRegistry] 数据库同步失败: {e}")
+            return 0
+
+    def _sync_from_db(self) -> None:
+        """从数据库同步策略数据"""
+        if not self._db_path:
+            return
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self._db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='strategy_registry'")
+            if not cursor.fetchone():
+                conn.close()
+                return
+
+            cursor.execute("SELECT * FROM strategy_registry")
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+
+            for row in rows:
+                data = dict(zip(columns, row))
+                name = data.get("strategy_name", "")
+                if name and name in self._strategies:
+                    meta = self._strategies[name]
+                    meta.performance_score = data.get("performance_score", 0.0) or 0.0
+                    meta.sharpe_ratio = data.get("sharpe_ratio", 0.0) or 0.0
+                    meta.annual_return = data.get("annual_return", 0.0) or 0.0
+                    meta.max_drawdown = data.get("max_drawdown", 0.0) or 0.0
+                    meta.win_rate = data.get("win_rate", 0.0) or 0.0
+                    meta.total_trades = data.get("total_trades", 0) or 0
+                    meta.status = data.get("status", "untested") or "untested"
+                    meta.enabled = bool(data.get("enabled", 1))
+                    meta.last_backtest = data.get("last_backtest", "") or ""
+
+            conn.close()
+        except Exception as e:
+            logger.debug(f"[StrategyRegistry] 从数据库同步失败（可忽略）: {e}")
+
+    # ==================== 导出 ====================
+
+    def to_dict_list(self) -> List[Dict[str, Any]]:
+        """导出所有策略为字典列表"""
+        return [meta.to_dict() for meta in self._strategies.values()]
+
+    def to_summary(self) -> Dict[str, Any]:
+        """导出策略汇总"""
+        type_count: Dict[str, int] = {}
+        for meta in self._strategies.values():
+            t = meta.strategy_type
+            type_count[t] = type_count.get(t, 0) + 1
+
+        return {
+            "total_strategies": len(self._strategies),
+            "enabled_strategies": self.count_enabled(),
+            "by_type": type_count,
+            "by_status": {
+                s: len(self.list_by_status(s))
+                for s in ["untested", "testing", "production", "deprecated"]
+            },
+            "top_performers": [
+                {"name": m.name, "score": m.performance_score}
+                for m in self.get_top_performers(5)
+            ],
+        }
 
 
-def get_recommended_strategies(regime: MarketRegime) -> Dict[str, List[Dict]]:
-    """获取特定市场状态的推荐策略"""
-    recs = REGIME_RECOMMENDATIONS.get(regime, REGIME_RECOMMENDATIONS[MarketRegime.ADAPTIVE])
-    result = {}
-    for key, names in recs.items():
-        result[key] = [STRATEGY_REGISTRY[n] for n in names if n in STRATEGY_REGISTRY]
-    return result
+# ==================== 全局实例 ====================
+
+# 默认策略目录
+DEFAULT_STRATEGIES_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+)
+
+# 默认数据库路径
+DEFAULT_DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "aurora_backtest.db",
+)
+
+# 全局策略注册表单例
+STRATEGY_REGISTRY = StrategyRegistry(
+    strategies_dir=DEFAULT_STRATEGIES_DIR,
+    db_path=DEFAULT_DB_PATH,
+    auto_scan=True,
+)
+
+_registry_instance: Optional[StrategyRegistry] = None
 
 
-# ============================================================
-# 快速测试
-# ============================================================
+def get_strategy_registry(
+    strategies_dir: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> StrategyRegistry:
+    """
+    获取策略注册表单例
+
+    使用方式：
+        from strategies.strategy_registry import get_strategy_registry
+        registry = get_strategy_registry()
+        enabled = registry.list_enabled()
+    """
+    global _registry_instance
+    if _registry_instance is None:
+        _registry_instance = StrategyRegistry(
+            strategies_dir=strategies_dir or DEFAULT_STRATEGIES_DIR,
+            db_path=db_path or DEFAULT_DB_PATH,
+            auto_scan=True,
+        )
+    return _registry_instance
+
+
+# ==================== 便捷函数 ====================
+
+def get_enabled_strategies() -> List[StrategyMeta]:
+    """快捷方法：获取所有已启用策略"""
+    return STRATEGY_REGISTRY.list_enabled()
+
+
+def get_strategy_names() -> List[str]:
+    """快捷方法：获取所有策略名称"""
+    return STRATEGY_REGISTRY.get_names()
+
+
+# ==================== 自测 ====================
+
 if __name__ == "__main__":
-    import json
-    print("=" * 60)
-    print("Aurora 策略注册表 - 分类概览")
-    print("=" * 60)
+    logging.basicConfig(level=logging.INFO)
 
-    api_data = get_strategy_list_api()
-    for cat_key, cat_data in api_data["categories"].items():
-        print(f"\n{'─' * 50}")
-        print(f"{cat_data['label']} ({len(cat_data['strategies'])}个)")
-        print(f"  {cat_data['description']}")
-        for s in cat_data["strategies"]:
-            status_icon = "✅" if s["status"] == "active" else "🧪"
-            print(f"  {status_icon} {s['label']} [{s['name']}]")
-            print(f"     市场适配: {s['recommended_regime']} | 评分: {s['performance_rating']}")
-            print(f"     标签: {', '.join(s['tags'])}")
+    print("=" * 70)
+    print("策略注册表 (StrategyRegistry) 自测")
+    print("=" * 70)
 
-    print(f"\n{'=' * 60}")
-    print(f"总计: {api_data['total_count']} 个策略")
-    print(f"  活跃: {api_data['active_count']} 个")
-    print(f"  Beta: {api_data['beta_count']} 个")
-    print(f"{'=' * 60}")
+    registry = StrategyRegistry(
+        strategies_dir=DEFAULT_STRATEGIES_DIR,
+        db_path=DEFAULT_DB_PATH,
+        auto_scan=True,
+    )
+
+    # 1. 扫描结果
+    print(f"\n📊 扫描结果: 共 {registry.count()} 个策略")
+    print(f"   已启用: {registry.count_enabled()} 个")
+
+    # 2. 类型分布
+    summary = registry.to_summary()
+    print(f"\n📂 类型分布: {summary['by_type']}")
+    print(f"📋 状态分布: {summary['by_status']}")
+
+    # 3. 列出所有策略
+    print(f"\n📝 策略列表:")
+    print("-" * 70)
+    for i, meta in enumerate(registry.list_all(), 1):
+        status_icon = "✅" if meta.enabled else "❌"
+        print(f"  {i:2d}. {status_icon} {meta.name:<35} "
+              f"类型={meta.strategy_type:<12} "
+              f"评分={meta.performance_score:.1f} "
+              f"状态={meta.status}")
+
+    # 4. 按类型筛选
+    print(f"\n🔍 ML 类策略: {len(registry.list_by_type('ml'))} 个")
+    for meta in registry.list_by_type("ml"):
+        print(f"    - {meta.name}")
+
+    # 5. 性能排名
+    print(f"\n🏆 性能排名 TOP 5:")
+    for i, meta in enumerate(registry.get_top_performers(5), 1):
+        print(f"    {i}. {meta.name:<35} score={meta.performance_score:.2f}")
+
+    # 6. 测试启用/禁用
+    if registry.count() > 0:
+        test_name = registry.get_names()[0]
+        print(f"\n🔄 测试切换: {test_name}")
+        old_state = registry.get(test_name).enabled
+        registry.toggle(test_name)
+        new_state = registry.get(test_name).enabled
+        print(f"    {old_state} → {new_state}")
+        registry.toggle(test_name)  # 恢复
+
+    # 7. 同步到数据库
+    print(f"\n💾 数据库同步...")
+    count = registry.sync_to_db()
+    print(f"   已同步 {count} 条记录")
+
+    print("\n" + "=" * 70)
+    print("✅ 策略注册表自测完成！")
+    print("=" * 70)

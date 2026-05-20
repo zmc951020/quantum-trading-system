@@ -1,673 +1,674 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RLEnhancer — 深度强化学习优化引擎
-==================================
-增益性优化模块，不修改现有策略代码，通过依赖注入提供PPO强化学习能力。
+RLEnhancer — 金融级强化学习仓位管理增强器
+==========================================
+基于 stable-baselines3 PPO 实现，是 Aurora 系统的核心增益模块。
 
-设计目标：
-  1. 使用PPO（Proximal Policy Optimization）替代现有Q-learning
-  2. 连续状态空间（20维特征向量）替代4维离散状态
-  3. 连续动作空间（仓位比例[0,1]）替代5个离散动作
-  4. 经验回放缓冲区 + 多epoch更新
-  5. 丰富的奖励函数设计
+架构：
+  RLEnhancer (接口不变，enabled/disabled 开关)
+    ├── SB3TradingEnv (gymnasium.Env) — 交易环境
+    ├── PPO (stable_baselines3) — MlpPolicy [64, 64]
+    ├── GPU 训练 + 推理
+    ├── 模型持久化（自动保存/加载）
+    └── 金融级奖励函数（夏普、回撤、交易成本、市场对齐）
+
+设计原则：
+  - 增益性注入：不修改现有策略代码，通过 enabled 开关控制
+  - 回滚安全：enabled=False 立即回退到原始逻辑
+  - 金融级：严格风险预算约束、模型版本管理
 
 使用方式：
-  enhancer = RLEnhancer()
+  enhancer = get_rl_enhancer()
   enhancer.enabled = True
-  action = enhancer.select_action(state)
-  enhancer.store_transition(state, action, reward, next_state, done)
-  enhancer.update_policy()
-
-回滚方式：
-  enhancer.enabled = False  # 各策略回退到自有RL逻辑
+  action = enhancer.predict(state_vector)  # 返回仓位建议 [0, 1]
 """
 
-import numpy as np
-from typing import Dict, List, Tuple, Optional, Any, Callable
+from __future__ import annotations
+
+import logging
+import os
+import pickle
 from dataclasses import dataclass, field
 from datetime import datetime
-from collections import deque, defaultdict
-import logging
-import math
-import random
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# ==================== 可选依赖检查 ====================
+
+SB3_AVAILABLE = False
+GYMNASIUM_AVAILABLE = False
+
+try:
+    import gymnasium as gym
+    GYMNASIUM_AVAILABLE = True
+except ImportError:
+    logger.warning("[RLEnhancer] gymnasium 未安装，使用模拟模式")
+
+try:
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.callbacks import BaseCallback
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    SB3_AVAILABLE = True
+except ImportError:
+    logger.warning("[RLEnhancer] stable-baselines3 未安装，使用模拟模式")
+
+# 本地环境
+try:
+    from utils.sb3_trading_env import SB3TradingEnv, TradingEnvConfig, create_trading_env
+    ENV_AVAILABLE = True
+except ImportError:
+    ENV_AVAILABLE = False
+    logger.warning("[RLEnhancer] sb3_trading_env 未找到，使用内置降级环境")
+
+
+# ==================== 配置 ====================
 
 @dataclass
-class Transition:
-    """经验回放单元"""
-    state: np.ndarray
-    action: float
-    reward: float
-    next_state: np.ndarray
-    done: bool
+class RLEnhancerConfig:
+    """RLEnhancer 配置"""
+    # 模型
+    model_dir: str = "model_storage/rl_enhancer"
+    model_name: str = "ppo_position_manager"
+    policy_kwargs: Dict = field(default_factory=lambda: {"net_arch": [64, 64]})
+
+    # 训练
+    total_timesteps: int = 100_000
+    learning_rate: float = 3e-4
+    n_steps: int = 2048
+    batch_size: int = 64
+    gamma: float = 0.99
+    gae_lambda: float = 0.95
+
+    # 推理
+    deterministic_inference: bool = True
+    inference_clip_range: float = 0.2
+
+    # 风险
+    max_position: float = 1.0
+    min_position: float = 0.0
+    emergency_position: float = 0.0  # 紧急清仓
+
+    # 版本
+    auto_save: bool = True
+    save_frequency_steps: int = 10_000
+    max_model_versions: int = 5
 
 
-@dataclass
-class PolicyNetwork:
-    """策略网络（简化实现）"""
-    input_dim: int
-    hidden_dim: int = 64
+# ==================== 训练回调 ====================
 
-    def __post_init__(self):
-        # 初始化权重
-        self.w1 = np.random.randn(self.input_dim, self.hidden_dim) * 0.01
-        self.b1 = np.zeros(self.hidden_dim)
-        self.w2 = np.random.randn(self.hidden_dim, 1) * 0.01
-        self.b2 = np.zeros(1)
+class TrainingCallback(BaseCallback):
+    """训练进度回调"""
+    def __init__(self, verbose: int = 0):
+        super().__init__(verbose)
+        self.episode_rewards: List[float] = []
+        self.episode_lengths: List[int] = []
+        self._current_episode_reward = 0.0
+        self._current_episode_length = 0
 
-    def forward(self, x: np.ndarray) -> np.ndarray:
-        """前向传播"""
-        h = np.tanh(np.dot(x, self.w1) + self.b1)
-        mu = np.tanh(np.dot(h, self.w2) + self.b2)
-        # 输出在 [-1, 1] 范围，映射到 [0, 1]
-        return (mu + 1) / 2
+    def _on_step(self) -> bool:
+        self._current_episode_reward += self.locals.get("rewards", [0])[0]
+        self._current_episode_length += 1
 
-    def get_weights(self) -> List[np.ndarray]:
-        """获取所有权重"""
-        return [self.w1, self.b1, self.w2, self.b2]
-
-    def set_weights(self, weights: List[np.ndarray]):
-        """设置权重"""
-        self.w1, self.b1, self.w2, self.b2 = weights
+        if self.locals.get("dones", [False])[0]:
+            self.episode_rewards.append(self._current_episode_reward)
+            self.episode_lengths.append(self._current_episode_length)
+            self._current_episode_reward = 0.0
+            self._current_episode_length = 0
+        return True
 
 
-@dataclass
-class ValueNetwork:
-    """价值网络（简化实现）"""
-    input_dim: int
-    hidden_dim: int = 64
-
-    def __post_init__(self):
-        self.w1 = np.random.randn(self.input_dim, self.hidden_dim) * 0.01
-        self.b1 = np.zeros(self.hidden_dim)
-        self.w2 = np.random.randn(self.hidden_dim, 1) * 0.01
-        self.b2 = np.zeros(1)
-
-    def forward(self, x: np.ndarray) -> float:
-        """前向传播，返回状态价值"""
-        h = np.tanh(np.dot(x, self.w1) + self.b1)
-        value = np.dot(h, self.w2) + self.b2
-        return float(value[0])
-
-    def get_weights(self) -> List[np.ndarray]:
-        return [self.w1, self.b1, self.w2, self.b2]
-
-    def set_weights(self, weights: List[np.ndarray]):
-        self.w1, self.b1, self.w2, self.b2 = weights
-
+# ==================== RLEnhancer 主类 ====================
 
 class RLEnhancer:
     """
-    深度强化学习优化引擎
+    金融级强化学习仓位管理增强器
 
-    单例模式，全局唯一实例，默认关闭。
-    使用PPO算法进行连续动作空间的策略优化。
+    特性：
+    - 基于 stable-baselines3 PPO 的连续仓位控制
+    - 20维市场状态输入 → 连续仓位 [0, 1] 输出
+    - 自动模型持久化与版本管理
+    - enabled/disabled 一键回滚
+    - 紧急清仓机制
     """
 
-    _instance = None
-    _initialized = False
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if self._initialized:
-            return
-        self._initialized = True
-
-        self.enabled = False
-
-        # PPO配置
-        self.config = {
-            'state_dim': 20,              # 状态空间维度
-            'hidden_dim': 64,             # 隐藏层维度
-            'learning_rate': 3e-4,        # 学习率
-            'gamma': 0.99,                # 折扣因子
-            'clip_epsilon': 0.2,          # PPO裁剪系数
-            'value_coef': 0.5,            # 价值损失系数
-            'entropy_coef': 0.01,         # 熵正则化系数
-            'buffer_size': 10000,         # 经验回放缓冲区大小
-            'batch_size': 64,             # 批次大小
-            'update_epochs': 10,          # 每次更新轮数
-            'target_kl': 0.01,            # KL散度阈值
-            'reward_alpha': 0.4,          # 收益权重
-            'reward_beta': 0.3,           # 夏普权重
-            'reward_gamma': 0.2,          # 回撤惩罚
-            'reward_delta': 0.05,         # 交易频率惩罚
-            'reward_epsilon': 0.05,       # 市场状态对齐奖励
+    def __init__(self, config: Optional[RLEnhancerConfig] = None):
+        self.config = config or RLEnhancerConfig()
+        self.enabled: bool = True
+        self._model: Any = None  # PPO 模型
+        self._env: Any = None    # SB3TradingEnv
+        self._vec_env: Any = None
+        self._trained: bool = False
+        self._training_history: Dict[str, List] = {
+            "rewards": [],
+            "episodes": [],
+            "timestamps": [],
         }
+        self._inference_count: int = 0
+        self._emergency_mode: bool = False
 
-        # 策略网络和价值网络
-        self._policy = PolicyNetwork(
-            self.config['state_dim'],
-            self.config['hidden_dim']
+        # 确保模型目录
+        os.makedirs(self.config.model_dir, exist_ok=True)
+
+        # 尝试加载已有模型
+        if SB3_AVAILABLE:
+            self._try_load_model()
+        else:
+            logger.info("[RLEnhancer] SB3 不可用，初始化为模拟模式")
+
+        logger.info(
+            f"[RLEnhancer] 初始化完成 | "
+            f"enabled={self.enabled} | "
+            f"trained={self._trained} | "
+            f"SB3={SB3_AVAILABLE}"
         )
-        self._value = ValueNetwork(
-            self.config['state_dim'],
-            self.config['hidden_dim']
-        )
 
-        # 经验回放缓冲区
-        self._buffer = deque(maxlen=self.config['buffer_size'])
+    # ==================== 公共接口 ====================
 
-        # 优化器状态（简化Adam）
-        self._optimizer_step = 0
-
-        # 统计
-        self._total_steps = 0
-        self._total_updates = 0
-        self._episode_rewards: List[float] = []
-        self._current_episode_reward = 0.0
-
-        # 市场状态中心（延迟加载）
-        self._market_hub = None
-
-        logger.info("[RLEnhancer] 初始化完成，默认关闭")
-
-    @property
-    def market_hub(self):
-        """延迟加载市场状态中心"""
-        if self._market_hub is None:
-            try:
-                from signals.market_state_hub import MarketStateHub
-                self._market_hub = MarketStateHub()
-            except Exception as e:
-                logger.warning(f"[RLEnhancer] MarketStateHub 加载失败: {e}")
-        return self._market_hub
-
-    # ==================== 核心接口 ====================
-
-    def build_state(self, market_data: Dict[str, Any]) -> np.ndarray:
+    def predict(
+        self,
+        state: Union[np.ndarray, List[float], Dict[str, Any]],
+        deterministic: Optional[bool] = None,
+    ) -> Tuple[float, Dict[str, Any]]:
         """
-        构建状态向量（20维特征）
+        预测仓位建议
 
         Args:
-            market_data: 市场数据字典，包含价格、成交量、技术指标等
+            state: 市场状态，支持三种格式：
+                   - np.ndarray: 20维状态向量
+                   - List[float]: 20维列表
+                   - Dict[str, Any]: 原始市场数据字典（自动构建状态）
+            deterministic: 是否确定性推理，默认使用配置值
 
         Returns:
-            20维状态向量
-        """
-        state = np.zeros(self.config['state_dim'])
-
-        # 维度0: 归一化价格变化
-        if 'price_change_pct' in market_data:
-            state[0] = np.clip(market_data['price_change_pct'] / 10.0, -1, 1)
-
-        # 维度1: 波动率
-        if 'volatility' in market_data:
-            state[1] = np.clip(market_data['volatility'] / 0.5, 0, 1)
-
-        # 维度2: RSI (归一化到 [0,1])
-        if 'rsi' in market_data:
-            state[2] = market_data['rsi'] / 100.0
-
-        # 维度3: MACD信号
-        if 'macd' in market_data and 'macd_signal' in market_data:
-            state[3] = np.tanh(market_data['macd'] - market_data['macd_signal'])
-
-        # 维度4: ADX
-        if 'adx' in market_data:
-            state[4] = market_data['adx'] / 100.0
-
-        # 维度5: ATR (归一化)
-        if 'atr' in market_data and 'close' in market_data:
-            state[5] = np.clip(market_data['atr'] / market_data['close'], 0, 0.1) * 10
-
-        # 维度6: 持仓比例
-        if 'position_pct' in market_data:
-            state[6] = market_data['position_pct']
-
-        # 维度7: 当前盈亏
-        if 'unrealized_pnl_pct' in market_data:
-            state[7] = np.clip(market_data['unrealized_pnl_pct'] / 0.1, -1, 1)
-
-        # 维度8: 市场状态编码
-        if 'market_regime' in market_data:
-            regime_map = {'trending_up': 0.8, 'range_bound': 0.5, 'trending_down': 0.2}
-            state[8] = regime_map.get(market_data['market_regime'], 0.5)
-
-        # 维度9: 信号置信度
-        if 'signal_confidence' in market_data:
-            state[9] = market_data['signal_confidence']
-
-        # 维度10: 风险评分
-        if 'risk_score' in market_data:
-            state[10] = np.clip(market_data['risk_score'] / 100.0, 0, 1)
-
-        # 维度11: 成交量变化
-        if 'volume_change_pct' in market_data:
-            state[11] = np.clip(market_data['volume_change_pct'] / 5.0, -1, 1)
-
-        # 维度12: 动量 (短期)
-        if 'momentum_short' in market_data:
-            state[12] = np.clip(market_data['momentum_short'] / 0.1, -1, 1)
-
-        # 维度13: 动量 (长期)
-        if 'momentum_long' in market_data:
-            state[13] = np.clip(market_data['momentum_long'] / 0.2, -1, 1)
-
-        # 维度14: 布林带位置
-        if 'bb_position' in market_data:
-            state[14] = np.clip(market_data['bb_position'], -1, 1)
-
-        # 维度15: 夏普比率（滚动）
-        if 'rolling_sharpe' in market_data:
-            state[15] = np.clip(market_data['rolling_sharpe'] / 3.0, -1, 1)
-
-        # 维度16: 最大回撤
-        if 'max_drawdown' in market_data:
-            state[16] = np.clip(market_data['max_drawdown'] / 0.3, 0, 1)
-
-        # 维度17: 交易频率
-        if 'trade_frequency' in market_data:
-            state[17] = np.clip(market_data['trade_frequency'] / 50.0, 0, 1)
-
-        # 维度18: 时间衰减因子
-        if 'time_decay' in market_data:
-            state[18] = market_data['time_decay']
-
-        # 维度19: 市场状态对齐度
-        if 'regime_alignment' in market_data:
-            state[19] = market_data['regime_alignment']
-
-        return state
-
-    def select_action(self, state: np.ndarray,
-                     deterministic: bool = False) -> float:
-        """
-        选择动作（仓位比例）
-
-        Args:
-            state: 状态向量
-            deterministic: 是否确定性选择
-
-        Returns:
-            动作值 [0, 1]，表示仓位比例
+            action: 仓位建议 [0, 1]
+            info: 附加信息（置信度、风险标记等）
         """
         if not self.enabled:
-            return 0.5  # 默认半仓
+            return 0.5, {"source": "disabled", "confidence": 0.0}
 
-        self._total_steps += 1
+        # 紧急模式：强制清仓
+        if self._emergency_mode:
+            return self.config.emergency_position, {
+                "source": "emergency",
+                "confidence": 1.0,
+                "reason": "emergency_mode_active",
+            }
 
-        # 策略网络前向传播
-        mu = self._policy.forward(state)
-        # 确保 mu 是标量（forward 返回可能是 1D 数组）
-        mu = float(np.squeeze(mu))
+        # 无模型：返回默认中性仓位
+        if not self._model or not self._trained:
+            return 0.5, {"source": "fallback", "confidence": 0.0}
 
-        if deterministic:
-            return float(np.clip(mu, 0, 1))
+        det = deterministic if deterministic is not None else self.config.deterministic_inference
 
-        # 添加高斯噪声进行探索
-        noise = np.random.normal(0, 0.1)
-        action = float(np.clip(mu + noise, 0, 1))
+        try:
+            # 状态预处理
+            observation = self._preprocess_state(state)
 
-        return action
+            # SB3 推理
+            if SB3_AVAILABLE:
+                action, _states = self._model.predict(
+                    observation, deterministic=det
+                )
+                # action 是 [batch_size, action_dim] 或 [action_dim,]
+                if isinstance(action, np.ndarray):
+                    action_val = float(np.clip(action.flat[0], 0, 1))
+                else:
+                    action_val = float(np.clip(action, 0, 1))
+            else:
+                # 模拟模式：基于信号置信度的简单规则
+                action_val = float(np.clip(0.5 + 0.3 * (np.mean(observation) - 0.5), 0, 1))
 
-    def compute_reward(self,
-                      portfolio_return: float,
-                      sharpe_change: float,
-                      drawdown_change: float,
-                      trade_frequency: float,
-                      regime_alignment: float) -> float:
+            self._inference_count += 1
+
+            info = {
+                "source": "sb3_ppo" if SB3_AVAILABLE else "simulation",
+                "confidence": self._compute_confidence(observation),
+                "inference_count": self._inference_count,
+                "deterministic": det,
+            }
+
+            return action_val, info
+
+        except Exception as e:
+            logger.error(f"[RLEnhancer] 推理失败: {e}，返回默认仓位")
+            return 0.5, {"source": "error", "confidence": 0.0, "error": str(e)}
+
+    def predict_batch(
+        self,
+        states: List[Union[np.ndarray, List[float], Dict[str, Any]]],
+        deterministic: Optional[bool] = None,
+    ) -> List[Tuple[float, Dict[str, Any]]]:
+        """批量预测"""
+        return [self.predict(s, deterministic) for s in states]
+
+    def train(
+        self,
+        market_data_seq: Optional[List[Dict[str, Any]]] = None,
+        total_timesteps: Optional[int] = None,
+        reset_model: bool = False,
+    ) -> Dict[str, Any]:
         """
-        计算奖励值
+        训练/微调模型
 
         Args:
-            portfolio_return: 组合收益变化
-            sharpe_change: 夏普比率变化
-            drawdown_change: 回撤变化（正值为回撤增加）
-            trade_frequency: 交易频率
-            regime_alignment: 市场状态对齐度
+            market_data_seq: 市场数据序列（可选，不提供则使用模拟数据）
+            total_timesteps: 总步数
+            reset_model: 是否重置现有模型
 
         Returns:
-            奖励值
+            训练统计信息
         """
-        cfg = self.config
+        if not SB3_AVAILABLE:
+            return {
+                "status": "skipped",
+                "reason": "SB3 未安装",
+                "message": "请执行: pip install stable-baselines3 gymnasium",
+            }
 
-        reward = (
-            cfg['reward_alpha'] * portfolio_return
-            + cfg['reward_beta'] * sharpe_change
-            - cfg['reward_gamma'] * drawdown_change
-            - cfg['reward_delta'] * trade_frequency
-            + cfg['reward_epsilon'] * regime_alignment
-        )
+        steps = total_timesteps or self.config.total_timesteps
 
-        return reward
+        try:
+            # 创建环境
+            if ENV_AVAILABLE:
+                self._env = create_trading_env()
+            else:
+                self._env = self._build_minimal_env()
 
-    def store_transition(self, state: np.ndarray, action: float,
-                        reward: float, next_state: np.ndarray,
-                        done: bool = False):
-        """
-        存储经验到回放缓冲区
+            self._vec_env = DummyVecEnv([lambda: self._env])
 
-        Args:
-            state: 当前状态
-            action: 执行的动作
-            reward: 获得的奖励
-            next_state: 下一状态
-            done: 是否终止
-        """
-        if not self.enabled:
-            return
+            # 创建或加载模型
+            if self._model is None or reset_model:
+                self._model = PPO(
+                    "MlpPolicy",
+                    self._vec_env,
+                    policy_kwargs=self.config.policy_kwargs,
+                    learning_rate=self.config.learning_rate,
+                    n_steps=self.config.n_steps,
+                    batch_size=self.config.batch_size,
+                    gamma=self.config.gamma,
+                    gae_lambda=self.config.gae_lambda,
+                    verbose=0,
+                    tensorboard_log=None,
+                )
+                logger.info("[RLEnhancer] 创建新 PPO 模型")
 
-        transition = Transition(
-            state=state.copy(),
-            action=action,
-            reward=reward,
-            next_state=next_state.copy(),
-            done=done
-        )
-        self._buffer.append(transition)
-        self._current_episode_reward += reward
+            # 训练回调
+            callback = TrainingCallback()
 
-        if done:
-            self._episode_rewards.append(self._current_episode_reward)
-            self._current_episode_reward = 0.0
+            # 如果用自定义数据，先预填充环境
+            if market_data_seq:
+                self._env.set_market_data_sequence(market_data_seq)
 
-    def update_policy(self) -> Dict[str, float]:
-        """
-        更新策略网络（PPO算法）
+            # 训练
+            logger.info(f"[RLEnhancer] 开始训练，总步数={steps}")
+            self._model.learn(total_timesteps=steps, callback=callback, progress_bar=False)
+            self._trained = True
 
-        Returns:
-            更新统计信息
-        """
-        if not self.enabled or len(self._buffer) < self.config['batch_size']:
-            return {'policy_loss': 0, 'value_loss': 0, 'kl_divergence': 0}
+            # 记录统计
+            stats = {
+                "status": "success",
+                "total_timesteps": steps,
+                "num_episodes": len(callback.episode_rewards),
+                "avg_episode_reward": float(np.mean(callback.episode_rewards))
+                if callback.episode_rewards else 0.0,
+                "std_episode_reward": float(np.std(callback.episode_rewards))
+                if callback.episode_rewards else 0.0,
+                "avg_episode_length": float(np.mean(callback.episode_lengths))
+                if callback.episode_lengths else 0.0,
+                "timestamp": datetime.now().isoformat(),
+            }
+            self._training_history["rewards"].append(stats["avg_episode_reward"])
+            self._training_history["episodes"].append(stats["num_episodes"])
+            self._training_history["timestamps"].append(stats["timestamp"])
 
-        self._total_updates += 1
-        self._optimizer_step += 1
+            # 自动保存
+            if self.config.auto_save:
+                self.save()
 
-        # 从缓冲区采样
-        batch = random.sample(
-            self._buffer,
-            min(self.config['batch_size'], len(self._buffer))
-        )
-
-        # 准备数据
-        states = np.array([t.state for t in batch])
-        actions = np.array([t.action for t in batch])
-        rewards = np.array([t.reward for t in batch])
-        next_states = np.array([t.next_state for t in batch])
-        dones = np.array([t.done for t in batch])
-
-        # 计算折扣回报
-        returns = self._compute_returns(rewards, dones)
-
-        # 计算优势函数
-        values = np.array([self._value.forward(s) for s in states])
-        next_values = np.array([self._value.forward(s) for s in next_states])
-        advantages = returns - values
-
-        # 归一化优势
-        if np.std(advantages) > 0:
-            advantages = (advantages - np.mean(advantages)) / np.std(advantages)
-
-        # 多epoch更新
-        total_policy_loss = 0.0
-        total_value_loss = 0.0
-        total_kl = 0.0
-
-        for _ in range(self.config['update_epochs']):
-            # 计算旧策略概率
-            old_mu = np.array([self._policy.forward(s) for s in states])
-
-            # 策略梯度更新（简化PPO）
-            policy_loss = self._compute_policy_loss(
-                advantages, old_mu, actions
-            )
-            value_loss = self._compute_value_loss(returns, values)
-
-            # 更新策略网络（简化梯度下降）
-            self._apply_gradients(policy_loss, value_loss)
-
-            total_policy_loss += policy_loss
-            total_value_loss += value_loss
-
-            # 计算KL散度
-            new_mu = np.array([self._policy.forward(s) for s in states])
-            kl = np.mean((new_mu - old_mu) ** 2)
-            total_kl += kl
-
-            # KL散度早停
-            if kl > self.config['target_kl']:
-                break
-
-        return {
-            'policy_loss': total_policy_loss / self.config['update_epochs'],
-            'value_loss': total_value_loss / self.config['update_epochs'],
-            'kl_divergence': total_kl / self.config['update_epochs'],
-            'avg_reward': float(np.mean(rewards)),
-            'buffer_size': len(self._buffer),
-        }
-
-    def get_action_with_explanation(self, state: np.ndarray,
-                                   market_data: Dict[str, Any] = None) -> Dict:
-        """
-        获取动作并附带解释
-
-        Args:
-            state: 状态向量
-            market_data: 市场数据（可选，用于解释）
-
-        Returns:
-            动作和解释信息
-        """
-        action = self.select_action(state)
-
-        explanation = {
-            'action': action,
-            'position_pct': action,
-            'confidence': 0.5 + 0.5 * abs(action - 0.5),
-            'suggested_position': '加仓' if action > 0.6 else ('减仓' if action < 0.4 else '持仓'),
-        }
-
-        if market_data:
-            regime = market_data.get('market_regime', 'unknown')
-            explanation['market_regime'] = regime
-            explanation['reasoning'] = (
-                f"基于{regime}市场状态，"
-                f"建议{explanation['suggested_position']}，"
-                f"仓位比例{action:.1%}"
+            logger.info(
+                f"[RLEnhancer] 训练完成 | "
+                f"总步数={steps} | "
+                f"episodes={stats['num_episodes']} | "
+                f"平均奖励={stats['avg_episode_reward']:.4f}"
             )
 
-        return explanation
+            return stats
 
-    def get_stats(self) -> Dict:
-        """获取引擎统计信息"""
+        except Exception as e:
+            logger.error(f"[RLEnhancer] 训练失败: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def save(self, version: Optional[str] = None) -> Optional[str]:
+        """保存模型"""
+        if not self._model or not SB3_AVAILABLE:
+            logger.warning("[RLEnhancer] 无模型可保存")
+            return None
+
+        if version is None:
+            version = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        model_path = os.path.join(
+            self.config.model_dir, f"{self.config.model_name}_{version}.zip"
+        )
+
+        try:
+            self._model.save(model_path)
+            logger.info(f"[RLEnhancer] 模型已保存: {model_path}")
+
+            # 清理旧版本
+            self._cleanup_old_models()
+
+            # 保存元数据
+            meta_path = model_path.replace(".zip", "_meta.pkl")
+            metadata = {
+                "version": version,
+                "timestamp": datetime.now().isoformat(),
+                "config": {k: v for k, v in self.config.__dict__.items()
+                          if not k.startswith("_")},
+                "training_history": self._training_history,
+                "inference_count": self._inference_count,
+            }
+            with open(meta_path, "wb") as f:
+                pickle.dump(metadata, f)
+
+            return model_path
+
+        except Exception as e:
+            logger.error(f"[RLEnhancer] 保存失败: {e}")
+            return None
+
+    def load(self, version: Optional[str] = None) -> bool:
+        """加载指定版本模型"""
+        if not SB3_AVAILABLE:
+            return False
+
+        if version:
+            model_path = os.path.join(
+                self.config.model_dir, f"{self.config.model_name}_{version}.zip"
+            )
+        else:
+            model_path = self._find_latest_model()
+
+        if not model_path or not os.path.exists(model_path):
+            logger.warning(f"[RLEnhancer] 模型文件不存在: {model_path}")
+            return False
+
+        try:
+            self._env = self._ensure_env()
+            self._vec_env = DummyVecEnv([lambda: self._env])
+            self._model = PPO.load(model_path, env=self._vec_env)
+            self._trained = True
+            logger.info(f"[RLEnhancer] 模型已加载: {model_path}")
+            return True
+        except Exception as e:
+            logger.error(f"[RLEnhancer] 加载失败: {e}")
+            return False
+
+    # ==================== 紧急控制 ====================
+
+    def emergency_stop(self) -> None:
+        """紧急停止：强制清仓"""
+        self._emergency_mode = True
+        logger.warning("[RLEnhancer] ⚠️ 紧急模式已激活 — 所有预测返回清仓信号")
+
+    def emergency_reset(self) -> None:
+        """重置紧急模式"""
+        self._emergency_mode = False
+        logger.info("[RLEnhancer] 紧急模式已解除")
+
+    # ==================== 状态管理 ====================
+
+    def get_status(self) -> Dict[str, Any]:
+        """获取当前状态"""
         return {
-            'enabled': self.enabled,
-            'total_steps': self._total_steps,
-            'total_updates': self._total_updates,
-            'buffer_size': len(self._buffer),
-            'recent_episode_rewards': self._episode_rewards[-10:] if self._episode_rewards else [],
-            'avg_episode_reward': (
-                np.mean(self._episode_rewards[-100:])
-                if self._episode_rewards else 0
+            "enabled": self.enabled,
+            "trained": self._trained,
+            "sb3_available": SB3_AVAILABLE,
+            "emergency_mode": self._emergency_mode,
+            "inference_count": self._inference_count,
+            "model_dir": self.config.model_dir,
+            "training_history_length": len(self._training_history["rewards"]),
+            "last_training_time": (
+                self._training_history["timestamps"][-1]
+                if self._training_history["timestamps"] else None
             ),
-            'config': self.config.copy(),
         }
 
-    def reset(self):
-        """重置引擎状态"""
-        self._buffer.clear()
-        self._episode_rewards.clear()
-        self._current_episode_reward = 0.0
-        self._total_steps = 0
-        self._total_updates = 0
-        self._optimizer_step = 0
-
-        # 重新初始化网络
-        self._policy = PolicyNetwork(
-            self.config['state_dim'],
-            self.config['hidden_dim']
-        )
-        self._value = ValueNetwork(
-            self.config['state_dim'],
-            self.config['hidden_dim']
-        )
-
-        logger.info("[RLEnhancer] 已重置")
+    def reset_stats(self) -> None:
+        """重置推理计数"""
+        self._inference_count = 0
 
     # ==================== 内部方法 ====================
 
-    def _compute_returns(self, rewards: np.ndarray,
-                        dones: np.ndarray) -> np.ndarray:
-        """计算折扣回报"""
-        gamma = self.config['gamma']
-        returns = np.zeros_like(rewards)
-        running_return = 0.0
+    def _preprocess_state(
+        self,
+        state: Union[np.ndarray, List[float], Dict[str, Any]],
+    ) -> np.ndarray:
+        """状态预处理：统一转为 20 维 numpy 数组"""
+        if isinstance(state, dict):
+            # 从字典构建状态（委托给环境）
+            if self._env and hasattr(self._env, "_build_state"):
+                return self._env._build_state(state)
+            else:
+                # 降级：从字典提取可用数值
+                return self._dict_to_state_vector(state)
+        elif isinstance(state, list):
+            arr = np.array(state, dtype=np.float32)
+        elif isinstance(state, np.ndarray):
+            arr = state.astype(np.float32).copy()
+        else:
+            raise TypeError(f"不支持的状态类型: {type(state)}")
 
-        for i in reversed(range(len(rewards))):
-            if dones[i]:
-                running_return = 0.0
-            running_return = rewards[i] + gamma * running_return
-            returns[i] = running_return
+        # 确保 20 维
+        if len(arr) < 20:
+            padded = np.zeros(20, dtype=np.float32)
+            padded[:len(arr)] = arr
+            arr = padded
+        elif len(arr) > 20:
+            arr = arr[:20]
 
-        return returns
+        return arr
 
-    def _compute_policy_loss(self, advantages: np.ndarray,
-                            old_mu: np.ndarray,
-                            actions: np.ndarray) -> float:
-        """计算策略损失"""
-        # 简化PPO裁剪损失
-        ratio = np.ones_like(advantages)  # 简化：假设新旧策略比率为1
-        clip_epsilon = self.config['clip_epsilon']
+    def _dict_to_state_vector(self, data: Dict[str, Any]) -> np.ndarray:
+        """从字典构建状态向量（降级方案）"""
+        state = np.zeros(20, dtype=np.float32)
+        mapping = {
+            0: ("price_change_pct", 0.0),
+            1: ("volatility", 0.02),
+            2: ("rsi", 50.0),
+            3: ("macd_signal", 0.0),
+            4: ("adx", 25.0),
+            6: ("position", 0.5),
+            8: ("market_regime_encoded", 0.5),
+            9: ("signal_confidence", 0.5),
+            10: ("risk_score", 30.0),
+            11: ("volume_change_pct", 0.0),
+        }
+        for idx, (key, default) in mapping.items():
+            state[idx] = data.get(key, default)
+        return state
 
-        surr1 = advantages * ratio
-        surr2 = advantages * np.clip(ratio, 1 - clip_epsilon, 1 + clip_epsilon)
+    def _compute_confidence(self, observation: np.ndarray) -> float:
+        """基于观察的置信度估计"""
+        # 信号置信度维度（索引 9）直接反映
+        signal_conf = float(observation[9]) if len(observation) > 9 else 0.5
+        # 风险评分反向影响置信度
+        risk = float(observation[10]) / 100.0 if len(observation) > 10 else 0.3
+        confidence = signal_conf * (1.0 - risk * 0.5)
+        return float(np.clip(confidence, 0.01, 0.99))
 
-        policy_loss = -np.mean(np.minimum(surr1, surr2))
-        return float(policy_loss)
+    def _try_load_model(self) -> None:
+        """尝试加载已有模型"""
+        latest = self._find_latest_model()
+        if latest:
+            self.load()
+        else:
+            logger.info("[RLEnhancer] 未找到已有模型，需要训练")
 
-    def _compute_value_loss(self, returns: np.ndarray,
-                           values: np.ndarray) -> float:
-        """计算价值损失"""
-        value_loss = np.mean((returns - values) ** 2)
-        return float(value_loss)
+    def _find_latest_model(self) -> Optional[str]:
+        """查找最新模型文件"""
+        model_dir = Path(self.config.model_dir)
+        if not model_dir.exists():
+            return None
 
-    def _apply_gradients(self, policy_loss: float, value_loss: float):
-        """应用梯度更新（简化实现）"""
-        lr = self.config['learning_rate']
+        models = sorted(
+            model_dir.glob(f"{self.config.model_name}_*.zip"),
+            key=os.path.getmtime,
+            reverse=True,
+        )
+        return str(models[0]) if models else None
 
-        # 简化梯度更新：使用损失值调整网络参数
-        # 实际应使用自动微分和优化器
-        grad_scale = lr * (policy_loss + self.config['value_coef'] * value_loss)
+    def _cleanup_old_models(self) -> None:
+        """清理旧模型版本"""
+        model_dir = Path(self.config.model_dir)
+        models = sorted(
+            model_dir.glob(f"{self.config.model_name}_*.zip"),
+            key=os.path.getmtime,
+            reverse=True,
+        )
+        for old in models[self.config.max_model_versions:]:
+            old.unlink()
+            meta = Path(str(old).replace(".zip", "_meta.pkl"))
+            if meta.exists():
+                meta.unlink()
 
-        # 对策略网络参数添加小扰动
-        self._policy.w1 += np.random.randn(*self._policy.w1.shape) * grad_scale * 0.01
-        self._policy.w2 += np.random.randn(*self._policy.w2.shape) * grad_scale * 0.01
+    def _ensure_env(self):
+        """确保环境已创建"""
+        if self._env is None:
+            if ENV_AVAILABLE:
+                self._env = create_trading_env()
+            else:
+                self._env = self._build_minimal_env()
+        return self._env
 
-        # 对价值网络参数添加小扰动
-        self._value.w1 += np.random.randn(*self._value.w1.shape) * grad_scale * 0.01
-        self._value.w2 += np.random.randn(*self._value.w2.shape) * grad_scale * 0.01
+    def _build_minimal_env(self):
+        """构建最小化环境（降级方案）"""
+        # 不依赖外部文件的简单 gym 环境
+        if GYMNASIUM_AVAILABLE:
+            class MinimalTradingEnv(gym.Env):
+                def __init__(self):
+                    self.observation_space = gym.spaces.Box(
+                        low=-1, high=1, shape=(20,), dtype=np.float32
+                    )
+                    self.action_space = gym.spaces.Box(
+                        low=0, high=1, shape=(1,), dtype=np.float32
+                    )
+                    self._step_count = 0
+                    self._state = np.zeros(20, dtype=np.float32)
+
+                def reset(self, seed=None, options=None):
+                    super().reset(seed=seed)
+                    self._step_count = 0
+                    self._state = np.zeros(20, dtype=np.float32)
+                    return self._state.copy(), {}
+
+                def step(self, action):
+                    self._step_count += 1
+                    self._state = np.random.randn(20).astype(np.float32) * 0.1
+                    reward = float(np.sin(self._step_count * 0.1) * 0.01)
+                    terminated = self._step_count >= 1000
+                    truncated = False
+                    return self._state.copy(), reward, terminated, truncated, {}
+
+            return MinimalTradingEnv()
+        else:
+            raise RuntimeError("gymnasium 未安装，无法创建环境")
 
 
-# ==================== 全局单例 ====================
+# ==================== 单例/工厂 ====================
 
-_global_enhancer = None
-
-
-def get_rl_enhancer() -> RLEnhancer:
-    """获取全局RL增强器实例"""
-    global _global_enhancer
-    if _global_enhancer is None:
-        _global_enhancer = RLEnhancer()
-    return _global_enhancer
+_enhancer_instance: Optional[RLEnhancer] = None
 
 
-# ==================== 便捷函数 ====================
+def get_rl_enhancer(config: Optional[RLEnhancerConfig] = None) -> RLEnhancer:
+    """
+    获取全局 RLEnhancer 单例
 
-def select_action(state: np.ndarray) -> float:
-    """便捷函数：选择动作"""
-    enhancer = get_rl_enhancer()
-    return enhancer.select_action(state)
+    使用方式：
+        enhancer = get_rl_enhancer()
+        enhancer.enabled = True
+        action, info = enhancer.predict(state)
+
+    Returns:
+        RLEnhancer: 全局单例
+    """
+    global _enhancer_instance
+    if _enhancer_instance is None:
+        _enhancer_instance = RLEnhancer(config=config)
+    return _enhancer_instance
+
+
+def create_rl_enhancer(config: Optional[RLEnhancerConfig] = None) -> RLEnhancer:
+    """
+    创建新的 RLEnhancer 实例（非单例）
+
+    Returns:
+        RLEnhancer: 新实例
+    """
+    return RLEnhancer(config=config)
 
 
 # ==================== 自测 ====================
 
-if __name__ == '__main__':
-    enhancer = get_rl_enhancer()
-    enhancer.enabled = True
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
 
     print("=" * 60)
     print("RLEnhancer 自测")
     print("=" * 60)
 
-    # 模拟市场数据
+    enhancer = get_rl_enhancer()
+    print(f"\n状态: {enhancer.get_status()}")
+
+    # 测试预测（无模型时降级）
+    print("\n--- 测试 predict（降级模式）---")
+    for i in range(3):
+        state = np.random.randn(20).astype(np.float32)
+        action, info = enhancer.predict(state)
+        print(f"  输入状态: mean={np.mean(state):.3f} → 仓位={action:.3f} | {info}")
+
+    # 测试字典输入
+    print("\n--- 测试 predict（字典输入）---")
     market_data = {
-        'price_change_pct': 0.5,
-        'volatility': 0.15,
-        'rsi': 55.0,
-        'macd': 0.2,
-        'macd_signal': 0.1,
-        'adx': 30.0,
-        'atr': 1.5,
-        'close': 100.0,
-        'position_pct': 0.5,
-        'unrealized_pnl_pct': 0.02,
-        'market_regime': 'range_bound',
-        'signal_confidence': 0.75,
-        'risk_score': 30.0,
-        'volume_change_pct': 1.2,
-        'momentum_short': 0.03,
-        'momentum_long': 0.05,
-        'bb_position': 0.2,
-        'rolling_sharpe': 1.5,
-        'max_drawdown': 0.05,
-        'trade_frequency': 10,
-        'time_decay': 0.9,
-        'regime_alignment': 0.8,
+        "price_change_pct": 1.5,
+        "volatility": 0.03,
+        "rsi": 65.0,
+        "signal_confidence": 0.8,
+        "risk_score": 25.0,
+        "market_regime": "bull",
     }
+    action, info = enhancer.predict(market_data)
+    print(f"  市场数据 → 仓位={action:.3f} | {info}")
 
-    # 构建状态
-    state = enhancer.build_state(market_data)
-    print(f"\n状态向量维度: {len(state)}")
-    print(f"状态向量前5维: {state[:5]}")
+    # 紧急模式
+    print("\n--- 测试紧急模式 ---")
+    enhancer.emergency_stop()
+    action, info = enhancer.predict(np.zeros(20))
+    print(f"  紧急模式 → 仓位={action:.3f} | {info}")
+    enhancer.emergency_reset()
 
-    # 选择动作
-    action = enhancer.select_action(state)
-    print(f"\n选择动作（仓位比例）: {action:.4f}")
+    # 禁用模式
+    print("\n--- 测试禁用模式 ---")
+    enhancer.enabled = False
+    action, info = enhancer.predict(np.zeros(20))
+    print(f"  禁用模式 → 仓位={action:.3f} | {info}")
+    enhancer.enabled = True
 
-    # 带解释的动作
-    explanation = enhancer.get_action_with_explanation(state, market_data)
-    print(f"\n动作解释:")
-    for key, value in explanation.items():
-        print(f"  {key}: {value}")
-
-    # 模拟经验回放
-    print(f"\n模拟经验回放...")
-    for i in range(100):
-        next_state = state + np.random.normal(0, 0.01, 20)
-        reward = enhancer.compute_reward(
-            portfolio_return=0.01,
-            sharpe_change=0.02,
-            drawdown_change=-0.005,
-            trade_frequency=0.1,
-            regime_alignment=0.8,
-        )
-        enhancer.store_transition(state, action, reward, next_state, done=(i == 99))
-        state = next_state
-        action = enhancer.select_action(state)
-
-    # 更新策略
-    update_stats = enhancer.update_policy()
-    print(f"\n策略更新统计:")
-    for key, value in update_stats.items():
-        if isinstance(value, float):
-            print(f"  {key}: {value:.6f}")
-        else:
-            print(f"  {key}: {value}")
-
-    # 统计信息
-    stats = enhancer.get_stats()
-    print(f"\n引擎统计:")
-    print(f"  总步数: {stats['total_steps']}")
-    print(f"  总更新: {stats['total_updates']}")
-    print(f"  缓冲区大小: {stats['buffer_size']}")
+    # 训练（如果 SB3 可用）
+    if SB3_AVAILABLE:
+        print("\n--- 测试训练（快速）---")
+        stats = enhancer.train(total_timesteps=5000, reset_model=True)
+        print(f"  训练统计: {stats}")
+        print(f"  状态: {enhancer.get_status()}")
+    else:
+        print("\n" + "─" * 60)
+        print("⚠️ stable-baselines3 未安装，跳过训练测试")
+        print("  安装命令: pip install stable-baselines3 gymnasium")
+        print("─" * 60)
 
     print("\n✅ RLEnhancer 自测完成！")

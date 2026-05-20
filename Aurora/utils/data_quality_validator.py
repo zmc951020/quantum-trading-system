@@ -1,475 +1,272 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DataQualityValidator — 数据质量验证器
-======================================
-增益性优化模块，不修改现有数据源代码，通过依赖注入提供数据质量验证能力。
-
-设计目标：
-  1. 实时检测数据异常（缺失值、异常值、重复数据、延迟数据）
-  2. 多数据源交叉验证（主数据源 vs 备用数据源）
-  3. 数据质量评分与告警
-  4. 自动修复策略（插值、回退到备用源）
-
-使用方式：
-  validator = DataQualityValidator()
-  validator.enabled = True
-  quality = validator.check_data_quality(data)
-  is_valid = validator.validate_data_point(timestamp, price, volume)
-
-回滚方式：
-  validator.enabled = False  # 数据直接透传，不做质量检查
+数据质量验证器
+对实时/历史行情数据进行完整性、精度、时效性校验
 """
 
-import numpy as np
-from typing import Dict, List, Tuple, Optional, Any, Callable
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from collections import deque, defaultdict
 import logging
-import json
-import time
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, Tuple, List
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class DataQualityReport:
-    """数据质量报告"""
-    overall_score: float = 100.0
-    missing_rate: float = 0.0
-    anomaly_rate: float = 0.0
-    duplicate_rate: float = 0.0
-    staleness_seconds: float = 0.0
-    cross_validation_score: float = 100.0
-    issues: List[Dict] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    timestamp: str = ""
-
-
-@dataclass
-class DataPoint:
-    """数据点"""
-    timestamp: datetime
-    price: float
-    volume: float
-    source: str = "primary"
-    quality_score: float = 1.0
-
-
 class DataQualityValidator:
-    """
-    数据质量验证器
+    """数据质量验证器 — 检查数据的完整性、精度、时效性和一致性"""
 
-    单例模式，全局唯一实例，默认关闭。
-    提供实时数据质量检测、交叉验证、自动修复功能。
-    """
+    def __init__(
+        self,
+        max_staleness_seconds: int = 300,
+        min_price: float = 0.01,
+        max_price: float = 1_000_000.0,
+        max_volume_spike: float = 10.0,
+        require_ohlc: bool = True,
+    ):
+        """
+        Args:
+            max_staleness_seconds: 最大允许的数据延迟（秒）
+            min_price: 最小有效价格
+            max_price: 最大有效价格
+            max_volume_spike: 成交量相对历史均值的最大倍数
+            require_ohlc: 是否要求完整的 OHLC 字段
+        """
+        self.max_staleness_seconds = max_staleness_seconds
+        self.min_price = min_price
+        self.max_price = max_price
+        self.max_volume_spike = max_volume_spike
+        self.require_ohlc = require_ohlc
 
-    _instance = None
-    _initialized = False
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if self._initialized:
-            return
-        self._initialized = True
-
-        self.enabled = False
-
-        # 验证配置
-        self.config = {
-            'max_missing_rate': 0.05,         # 最大缺失率
-            'max_anomaly_rate': 0.02,         # 最大异常率
-            'max_duplicate_rate': 0.01,       # 最大重复率
-            'max_staleness_seconds': 60.0,    # 最大数据延迟（秒）
-            'min_cross_validation_score': 80.0,  # 最小交叉验证分数
-            'price_change_threshold': 0.10,   # 价格变化异常阈值（10%）
-            'volume_change_threshold': 5.0,   # 成交量变化异常阈值（5倍）
-            'z_score_threshold': 3.0,         # Z-score异常阈值
-            'auto_fix_missing': True,         # 自动修复缺失值
-            'auto_fix_anomaly': True,         # 自动修复异常值
-            'cross_validation_enabled': True, # 启用交叉验证
-        }
-
-        # 数据缓冲区
-        self._data_buffer: Dict[str, deque] = defaultdict(
-            lambda: deque(maxlen=1000)
-        )
-
-        # 备用数据源（延迟加载）
-        self._backup_source = None
+        # 历史统计（用于异常检测）
+        self._price_history: Dict[str, List[float]] = {}
+        self._volume_history: Dict[str, List[float]] = {}
+        self._history_max_len = 100
 
         # 统计
-        self._total_checks = 0
-        self._total_issues = 0
-        self._total_fixes = 0
-        self._last_check_time = None
+        self.total_validations = 0
+        self.total_failures = 0
 
-        logger.info("[DataQualityValidator] 初始化完成，默认关闭")
+        logger.info(
+            "[DataQualityValidator] 初始化完成，max_staleness=%ds, "
+            "min_price=%.4f, max_price=%.2f",
+            self.max_staleness_seconds,
+            self.min_price,
+            self.max_price,
+        )
 
-    # ==================== 核心接口 ====================
+    # ── 核心验证接口 ──────────────────────────────────────────
 
-    def check_data_quality(self, data: Dict[str, Any],
-                          source: str = "primary") -> DataQualityReport:
+    def validate(self, data: Dict[str, Any]) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
-        检查数据质量
+        验证单条数据记录
 
         Args:
-            data: 数据字典，包含 'prices', 'volumes', 'timestamps' 等
-            source: 数据源名称
+            data: 包含 symbol, price, timestamp 等字段的字典
 
         Returns:
-            数据质量报告
+            (is_valid, message, report)
         """
-        self._total_checks += 1
-        self._last_check_time = datetime.now()
+        self.total_validations += 1
+        report: Dict[str, Any] = {}
 
-        report = DataQualityReport()
-        report.timestamp = datetime.now().isoformat()
+        # 1. 基础字段存在性
+        symbol = data.get("symbol", data.get("code", ""))
+        if not symbol:
+            self.total_failures += 1
+            return False, "缺少 symbol/code 字段", None
 
-        if not self.enabled:
-            return report
+        # 2. 时效性检查
+        timestamp = data.get("timestamp", data.get("time"))
+        if timestamp is not None:
+            ok, msg = self._check_staleness(timestamp)
+            report["staleness"] = {"ok": ok, "msg": msg}
+            if not ok:
+                self.total_failures += 1
+                return False, msg, report
 
-        prices = data.get('prices', [])
-        volumes = data.get('volumes', [])
-        timestamps = data.get('timestamps', [])
+        # 3. 价格校验
+        for price_field in ("price", "close", "last"):
+            price = data.get(price_field)
+            if price is not None:
+                break
+        else:
+            price = None
 
-        if not prices:
-            report.overall_score = 0.0
-            report.issues.append({
-                'type': 'empty_data',
-                'severity': 'critical',
-                'message': '数据为空',
-            })
-            return report
+        if price is not None:
+            ok, msg = self._check_price(price, symbol)
+            report["price"] = {"ok": ok, "msg": msg}
+            if not ok:
+                self.total_failures += 1
+                return False, msg, report
+        else:
+            if self.require_ohlc:
+                self.total_failures += 1
+                return False, "缺少价格字段（price/close/last）", None
 
-        # 检查缺失值
-        missing_count = sum(1 for p in prices if p is None or np.isnan(p))
-        report.missing_rate = missing_count / len(prices)
-        if report.missing_rate > self.config['max_missing_rate']:
-            report.issues.append({
-                'type': 'high_missing_rate',
-                'severity': 'warning',
-                'message': f"缺失率 {report.missing_rate:.2%} 超过阈值 {self.config['max_missing_rate']:.2%}",
-                'missing_count': missing_count,
-                'total_count': len(prices),
-            })
+        # 4. 成交量校验
+        volume = data.get("volume", data.get("vol"))
+        if volume is not None:
+            ok, msg = self._check_volume(volume, symbol)
+            report["volume"] = {"ok": ok, "msg": msg}
+            if not ok:
+                self.total_failures += 1
+                return False, msg, report
 
-        # 检查异常值（Z-score方法）
-        valid_prices = [p for p in prices if p is not None and not np.isnan(p)]
-        if len(valid_prices) > 2:
-            mean_price = np.mean(valid_prices)
-            std_price = np.std(valid_prices)
-            if std_price > 0:
-                z_scores = [(p - mean_price) / std_price for p in valid_prices]
-                anomaly_count = sum(1 for z in z_scores if abs(z) > self.config['z_score_threshold'])
-                report.anomaly_rate = anomaly_count / len(valid_prices)
+        # 5. OHLC 完整性（可选）
+        if self.require_ohlc:
+            ohlc_fields = {"open", "high", "low", "close"}
+            missing = [f for f in ohlc_fields if data.get(f) is None]
+            if missing:
+                self.total_failures += 1
+                return False, f"缺失 OHLC 字段: {missing}", None
 
-                if report.anomaly_rate > self.config['max_anomaly_rate']:
-                    report.issues.append({
-                        'type': 'high_anomaly_rate',
-                        'severity': 'warning',
-                        'message': f"异常率 {report.anomaly_rate:.2%} 超过阈值 {self.config['max_anomaly_rate']:.2%}",
-                        'anomaly_count': anomaly_count,
-                        'total_count': len(valid_prices),
-                    })
+        return True, "数据有效", report
 
-        # 检查重复数据
-        if timestamps:
-            unique_timestamps = len(set(timestamps))
-            duplicate_count = len(timestamps) - unique_timestamps
-            report.duplicate_rate = duplicate_count / len(timestamps) if timestamps else 0
+    def validate_dataframe(self, df: pd.DataFrame) -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        批量验证 DataFrame
 
-            if report.duplicate_rate > self.config['max_duplicate_rate']:
-                report.issues.append({
-                    'type': 'high_duplicate_rate',
-                    'severity': 'info',
-                    'message': f"重复率 {report.duplicate_rate:.2%} 超过阈值 {self.config['max_duplicate_rate']:.2%}",
-                    'duplicate_count': duplicate_count,
-                })
+        Args:
+            df: 包含 OHLCV 列的 DataFrame
 
-        # 检查数据延迟
-        if timestamps:
+        Returns:
+            (all_valid, summary, details)
+        """
+        if df.empty:
+            return False, "DataFrame 为空", {}
+
+        required = {"open", "high", "low", "close", "volume"}
+        missing = required - set(col.lower() for col in df.columns)
+        if missing and self.require_ohlc:
+            return False, f"缺失列: {missing}", {}
+
+        null_summary = df[list(required)].isnull().sum().to_dict()
+        total_nulls = sum(null_summary.values())
+
+        dup_count = df.index.duplicated().sum() if df.index.is_unique is False else 0
+
+        summary = {
+            "total_rows": len(df),
+            "null_counts": null_summary,
+            "total_nulls": int(total_nulls),
+            "duplicate_timestamps": int(dup_count),
+        }
+
+        ok = total_nulls == 0 and dup_count == 0
+        msg = "数据有效" if ok else f"发现问题: nulls={total_nulls}, dup_ts={dup_count}"
+
+        return ok, msg, summary
+
+    # ── 内部检查方法 ─────────────────────────────────────────
+
+    def _check_staleness(self, timestamp) -> Tuple[bool, str]:
+        """检查数据是否过期"""
+        now = datetime.now()
+
+        if isinstance(timestamp, (int, float)):
+            # Unix 时间戳
+            if timestamp > 1e12:  # 毫秒
+                timestamp = timestamp / 1000.0
+            dt = datetime.fromtimestamp(timestamp)
+        elif isinstance(timestamp, str):
             try:
-                last_ts = max(timestamps)
-                if isinstance(last_ts, str):
-                    last_ts = datetime.fromisoformat(last_ts)
-                staleness = (datetime.now() - last_ts).total_seconds()
-                report.staleness_seconds = staleness
+                dt = datetime.fromisoformat(timestamp)
+            except ValueError:
+                try:
+                    dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    return True, "无法解析时间戳，跳过时效性检查"
+        elif isinstance(timestamp, datetime):
+            dt = timestamp
+        else:
+            return True, "未知时间戳格式，跳过"
 
-                if staleness > self.config['max_staleness_seconds']:
-                    report.issues.append({
-                        'type': 'data_staleness',
-                        'severity': 'warning',
-                        'message': f"数据延迟 {staleness:.1f}秒 超过阈值 {self.config['max_staleness_seconds']:.1f}秒",
-                        'staleness_seconds': staleness,
-                    })
-            except Exception as e:
-                logger.debug(f"[DataQualityValidator] 时间戳解析失败: {e}")
+        age = (now - dt).total_seconds()
+        if age > self.max_staleness_seconds:
+            return False, f"数据过期（{age:.0f}s > {self.max_staleness_seconds}s）"
+        return True, f"数据新鲜（{age:.0f}s）"
 
-        # 交叉验证
-        if self.config['cross_validation_enabled'] and source == 'primary':
-            cross_score = self._cross_validate(data)
-            report.cross_validation_score = cross_score
-            if cross_score < self.config['min_cross_validation_score']:
-                report.issues.append({
-                    'type': 'cross_validation_failed',
-                    'severity': 'warning',
-                    'message': f"交叉验证分数 {cross_score:.1f} 低于阈值 {self.config['min_cross_validation_score']:.1f}",
-                })
+    def _check_price(self, price: float, symbol: str) -> Tuple[bool, str]:
+        """检查价格有效性"""
+        try:
+            p = float(price)
+        except (ValueError, TypeError):
+            return False, f"价格无法转换为浮点数: {price}"
 
-        # 计算总体评分
-        report.overall_score = self._compute_overall_score(report)
+        if np.isnan(p) or np.isinf(p):
+            return False, f"价格值异常: {p}"
 
-        # 生成警告
-        if report.overall_score < 60:
-            report.warnings.append("数据质量严重下降，建议暂停交易")
-        elif report.overall_score < 80:
-            report.warnings.append("数据质量下降，建议谨慎操作")
+        if p < self.min_price:
+            return False, f"价格过低: {p} < {self.min_price}"
 
-        # 记录到缓冲区
-        self._data_buffer[source].append({
-            'timestamp': report.timestamp,
-            'score': report.overall_score,
-            'issues': len(report.issues),
-        })
+        if p > self.max_price:
+            return False, f"价格过高: {p} > {self.max_price}"
 
-        if report.issues:
-            self._total_issues += len(report.issues)
+        # 与历史比较，检测异常跳跃
+        history = self._price_history.setdefault(symbol, [])
+        if history:
+            median = np.median(history[-20:]) if len(history) >= 5 else history[-1]
+            if median > 0:
+                change = abs(p - median) / median
+                if change > 0.20:  # 20% 异常跳动
+                    msg = f"价格异常跳变: {change*100:.1f}%（当前={p:.4f}, 参照中位数={median:.4f}）"
+                    logger.warning("[DataQualityValidator] %s", msg)
+                    # 不直接拒绝，只记录警告
+                    return True, msg + "（仅警告）"
 
-        return report
+        history.append(p)
+        if len(history) > self._history_max_len:
+            history.pop(0)
 
-    def validate_data_point(self, timestamp: datetime,
-                           price: float, volume: float,
-                           source: str = "primary") -> Tuple[bool, float, str]:
-        """
-        验证单个数据点
+        return True, "价格有效"
 
-        Args:
-            timestamp: 时间戳
-            price: 价格
-            volume: 成交量
-            source: 数据源
+    def _check_volume(self, volume: float, symbol: str) -> Tuple[bool, str]:
+        """检查成交量有效性"""
+        try:
+            v = float(volume)
+        except (ValueError, TypeError):
+            return False, f"成交量无法转换为浮点数: {volume}"
 
-        Returns:
-            (是否有效, 质量评分, 问题描述)
-        """
-        if not self.enabled:
-            return True, 1.0, ""
+        if np.isnan(v) or np.isinf(v):
+            return False, f"成交量值异常: {v}"
 
-        issues = []
+        if v < 0:
+            return False, f"成交量为负: {v}"
 
-        # 检查缺失
-        if price is None or np.isnan(price) or volume is None or np.isnan(volume):
-            return False, 0.0, "数据缺失"
+        # 与历史比较
+        history = self._volume_history.setdefault(symbol, [])
+        if history:
+            avg = np.mean(history[-20:]) if len(history) >= 5 else history[-1]
+            if avg > 0 and v > avg * self.max_volume_spike:
+                msg = f"成交量异常飙升: {v:.0f} vs 均值 {avg:.0f}"
+                logger.warning("[DataQualityValidator] %s", msg)
+                return False, msg
 
-        # 检查价格有效性
-        if price <= 0:
-            issues.append("价格无效")
-        if volume < 0:
-            issues.append("成交量无效")
+        history.append(v)
+        if len(history) > self._history_max_len:
+            history.pop(0)
 
-        # 检查价格突变
-        source_buffer = self._data_buffer.get(source, [])
-        if source_buffer:
-            last_points = list(source_buffer)[-5:]
-            if last_points:
-                avg_price = np.mean([p.get('price', price) for p in last_points])
-                if avg_price > 0:
-                    change = abs(price - avg_price) / avg_price
-                    if change > self.config['price_change_threshold']:
-                        issues.append(f"价格突变 {change:.2%}")
+        return True, "成交量有效"
 
-        # 检查数据延迟
-        staleness = (datetime.now() - timestamp).total_seconds()
-        if staleness > self.config['max_staleness_seconds']:
-            issues.append(f"数据延迟 {staleness:.1f}秒")
-
-        # 计算质量评分
-        quality_score = 1.0 - len(issues) * 0.2
-        quality_score = max(0.0, quality_score)
-
-        is_valid = len(issues) == 0
-        issue_desc = "; ".join(issues) if issues else ""
-
-        return is_valid, quality_score, issue_desc
-
-    def fix_data(self, data: Dict[str, Any],
-                source: str = "primary") -> Dict[str, Any]:
-        """
-        自动修复数据质量问题
-
-        Args:
-            data: 原始数据
-            source: 数据源
-
-        Returns:
-            修复后的数据
-        """
-        if not self.enabled:
-            return data
-
-        fixed_data = data.copy()
-        fixes_applied = []
-
-        prices = list(fixed_data.get('prices', []))
-        volumes = list(fixed_data.get('volumes', []))
-        timestamps = list(fixed_data.get('timestamps', []))
-
-        # 修复缺失值（线性插值）
-        if self.config['auto_fix_missing']:
-            for i in range(len(prices)):
-                if prices[i] is None or np.isnan(prices[i]):
-                    # 前向填充
-                    if i > 0 and prices[i-1] is not None and not np.isnan(prices[i-1]):
-                        prices[i] = prices[i-1]
-                    # 后向填充
-                    elif i < len(prices) - 1 and prices[i+1] is not None and not np.isnan(prices[i+1]):
-                        prices[i] = prices[i+1]
-                    else:
-                        prices[i] = 0.0
-                    fixes_applied.append(f"修复缺失价格 [{i}]")
-
-            for i in range(len(volumes)):
-                if volumes[i] is None or np.isnan(volumes[i]):
-                    volumes[i] = 0.0
-                    fixes_applied.append(f"修复缺失成交量 [{i}]")
-
-        # 修复异常值（中位数替换）
-        if self.config['auto_fix_anomaly'] and len(prices) > 2:
-            valid_prices = [p for p in prices if p > 0]
-            if valid_prices:
-                median_price = np.median(valid_prices)
-                std_price = np.std(valid_prices)
-
-                for i in range(len(prices)):
-                    if prices[i] > 0 and std_price > 0:
-                        z_score = abs(prices[i] - median_price) / std_price
-                        if z_score > self.config['z_score_threshold']:
-                            old_price = prices[i]
-                            prices[i] = median_price
-                            fixes_applied.append(f"修复异常价格 [{i}]: {old_price:.2f} -> {median_price:.2f}")
-
-        fixed_data['prices'] = prices
-        fixed_data['volumes'] = volumes
-        fixed_data['timestamps'] = timestamps
-
-        if fixes_applied:
-            self._total_fixes += len(fixes_applied)
-            fixed_data['_fixes_applied'] = fixes_applied
-
-        return fixed_data
-
-    def get_quality_trend(self, source: str = "primary",
-                         window: int = 20) -> Dict:
-        """
-        获取数据质量趋势
-
-        Args:
-            source: 数据源
-            window: 窗口大小
-
-        Returns:
-            质量趋势信息
-        """
-        buffer = list(self._data_buffer.get(source, []))
-        if not buffer:
-            return {}
-
-        recent = buffer[-window:]
-        scores = [b['score'] for b in recent]
-
+    def get_status(self) -> Dict[str, Any]:
+        """获取验证器状态"""
         return {
-            'current_score': scores[-1] if scores else 0,
-            'avg_score': np.mean(scores) if scores else 0,
-            'min_score': min(scores) if scores else 0,
-            'max_score': max(scores) if scores else 0,
-            'score_std': np.std(scores) if len(scores) > 1 else 0,
-            'trend': 'improving' if len(scores) > 1 and scores[-1] > scores[0] else (
-                'declining' if len(scores) > 1 and scores[-1] < scores[0] else 'stable'
+            "total_validations": self.total_validations,
+            "total_failures": self.total_failures,
+            "failure_rate": (
+                self.total_failures / max(self.total_validations, 1)
             ),
-            'total_checks': len(buffer),
-            'total_issues': sum(b['issues'] for b in buffer),
+            "tracked_symbols": len(self._price_history),
+            "max_staleness_seconds": self.max_staleness_seconds,
         }
 
-    def get_stats(self) -> Dict:
-        """获取验证器统计信息"""
-        return {
-            'enabled': self.enabled,
-            'total_checks': self._total_checks,
-            'total_issues': self._total_issues,
-            'total_fixes': self._total_fixes,
-            'last_check_time': self._last_check_time.isoformat() if self._last_check_time else None,
-            'active_sources': list(self._data_buffer.keys()),
-            'config': self.config.copy(),
-        }
 
-    # ==================== 内部方法 ====================
+# ── 全局单例 ──────────────────────────────────────────────────
 
-    def _cross_validate(self, data: Dict[str, Any]) -> float:
-        """
-        交叉验证（主数据源 vs 备用数据源）
-
-        Returns:
-            交叉验证分数 (0-100)
-        """
-        # 简化实现：检查数据自洽性
-        prices = data.get('prices', [])
-        volumes = data.get('volumes', [])
-
-        if len(prices) < 2:
-            return 100.0
-
-        score = 100.0
-
-        # 检查价格单调性（非严格）
-        price_diffs = np.diff(prices)
-        extreme_diffs = sum(1 for d in price_diffs if abs(d) > np.mean(prices) * 0.05)
-        if extreme_diffs > len(price_diffs) * 0.1:
-            score -= 20.0
-
-        # 检查价格-成交量关系
-        if len(prices) == len(volumes) and len(prices) > 1:
-            price_vol_corr = np.corrcoef(prices, volumes)[0, 1]
-            if not np.isnan(price_vol_corr) and abs(price_vol_corr) > 0.9:
-                score -= 10.0  # 过高相关性可能表示数据异常
-
-        return max(0.0, score)
-
-    def _compute_overall_score(self, report: DataQualityReport) -> float:
-        """计算总体质量评分"""
-        score = 100.0
-
-        # 缺失率扣分
-        if report.missing_rate > 0:
-            score -= report.missing_rate * 100 * 2
-
-        # 异常率扣分
-        if report.anomaly_rate > 0:
-            score -= report.anomaly_rate * 100 * 3
-
-        # 重复率扣分
-        if report.duplicate_rate > 0:
-            score -= report.duplicate_rate * 100
-
-        # 延迟扣分
-        if report.staleness_seconds > 0:
-            score -= min(report.staleness_seconds / 10, 20)
-
-        # 交叉验证扣分
-        if report.cross_validation_score < 100:
-            score -= (100 - report.cross_validation_score) * 0.5
-
-        return max(0.0, min(100.0, score))
-
-
-# ==================== 全局单例 ====================
-
-_global_validator = None
+_global_validator: Optional[DataQualityValidator] = None
 
 
 def get_data_validator() -> DataQualityValidator:
@@ -478,87 +275,3 @@ def get_data_validator() -> DataQualityValidator:
     if _global_validator is None:
         _global_validator = DataQualityValidator()
     return _global_validator
-
-
-# ==================== 便捷函数 ====================
-
-def check_quality(data: Dict[str, Any]) -> DataQualityReport:
-    """便捷函数：检查数据质量"""
-    validator = get_data_validator()
-    return validator.check_data_quality(data)
-
-
-# ==================== 自测 ====================
-
-if __name__ == '__main__':
-    validator = get_data_validator()
-    validator.enabled = True
-
-    print("=" * 60)
-    print("DataQualityValidator 自测")
-    print("=" * 60)
-
-    # 模拟正常数据
-    normal_data = {
-        'prices': [100.0 + i * 0.1 + np.random.normal(0, 0.5) for i in range(100)],
-        'volumes': [10000 + int(np.random.normal(0, 1000)) for _ in range(100)],
-        'timestamps': [
-            (datetime.now() - timedelta(seconds=i)).isoformat()
-            for i in range(100)
-        ],
-    }
-
-    report = validator.check_data_quality(normal_data)
-    print(f"\n正常数据质量报告:")
-    print(f"  总体评分: {report.overall_score:.1f}")
-    print(f"  缺失率: {report.missing_rate:.2%}")
-    print(f"  异常率: {report.anomaly_rate:.2%}")
-    print(f"  问题数: {len(report.issues)}")
-
-    # 模拟异常数据
-    anomaly_data = {
-        'prices': [100.0] * 50 + [1000.0] * 50,  # 价格突变
-        'volumes': [10000] * 100,
-        'timestamps': [
-            (datetime.now() - timedelta(seconds=i)).isoformat()
-            for i in range(100)
-        ],
-    }
-
-    report2 = validator.check_data_quality(anomaly_data)
-    print(f"\n异常数据质量报告:")
-    print(f"  总体评分: {report2.overall_score:.1f}")
-    print(f"  异常率: {report2.anomaly_rate:.2%}")
-    for issue in report2.issues:
-        print(f"  问题: [{issue['severity']}] {issue['message']}")
-
-    # 测试数据修复
-    broken_data = {
-        'prices': [100.0, None, 102.0, 103.0, None, 105.0],
-        'volumes': [10000, 11000, None, 13000, 14000, 15000],
-        'timestamps': [datetime.now().isoformat()] * 6,
-    }
-
-    fixed = validator.fix_data(broken_data)
-    print(f"\n数据修复:")
-    print(f"  修复前价格: {broken_data['prices']}")
-    print(f"  修复后价格: {fixed['prices']}")
-    print(f"  修复操作: {fixed.get('_fixes_applied', [])}")
-
-    # 验证单个数据点
-    is_valid, score, desc = validator.validate_data_point(
-        datetime.now(), 100.5, 15000
-    )
-    print(f"\n单点验证:")
-    print(f"  有效: {is_valid}")
-    print(f"  评分: {score:.2f}")
-    print(f"  问题: {desc}")
-
-    # 统计信息
-    stats = validator.get_stats()
-    print(f"\n验证器统计:")
-    print(f"  总检查: {stats['total_checks']}")
-    print(f"  总问题: {stats['total_issues']}")
-    print(f"  总修复: {stats['total_fixes']}")
-
-    print("\n✅ DataQualityValidator 自测完成！")

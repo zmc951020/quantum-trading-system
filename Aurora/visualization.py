@@ -99,6 +99,48 @@ try:
 except Exception as e:
     print(f"[WARNING] trade_validator import failed: {e}")
 
+# ---------- 增量模块集成 ----------
+security_module = None
+monitor_module = None
+database_module = None
+system_switcher = None
+module_registry = None
+
+try:
+    from risk.security_module import get_security_module
+    security_module = get_security_module()
+    print("[OK] SecurityModule imported successfully")
+except Exception as e:
+    print(f"[WARNING] SecurityModule import failed: {e}")
+
+try:
+    from monitor.monitor_module import get_monitor_module
+    monitor_module = get_monitor_module()
+    print("[OK] MonitorModule imported successfully")
+except Exception as e:
+    print(f"[WARNING] MonitorModule import failed: {e}")
+
+try:
+    from utils.database_module import get_database_module
+    database_module = get_database_module()
+    print("[OK] DatabaseModule imported successfully")
+except Exception as e:
+    print(f"[WARNING] DatabaseModule import failed: {e}")
+
+try:
+    from utils.system_switcher import get_system_switcher
+    system_switcher = get_system_switcher()
+    print("[OK] SystemSwitcher imported successfully")
+except Exception as e:
+    print(f"[WARNING] SystemSwitcher import failed: {e}")
+
+try:
+    from utils.module_registry import get_module_registry
+    module_registry = get_module_registry()
+    print("[OK] ModuleRegistry imported successfully")
+except Exception as e:
+    print(f"[WARNING] ModuleRegistry import failed: {e}")
+
 def load_env_config():
     """加载环境变量配置"""
     env_file = os.path.join(os.path.dirname(__file__), '.env')
@@ -2397,6 +2439,383 @@ def create_templates():
     templates_dir = 'templates'
     if not os.path.exists(templates_dir):
         os.makedirs(templates_dir)
+
+
+# ========== 输入验证辅助函数 ==========
+
+def _validate_required_fields(data, required_fields):
+    """验证请求体中必需的字段"""
+    missing = [f for f in required_fields if f not in data or data[f] is None]
+    if missing:
+        return False, f"缺少必需字段: {', '.join(missing)}"
+    return True, ""
+
+def _validate_string_field(value, field_name, min_len=1, max_len=200):
+    """验证字符串字段"""
+    if not isinstance(value, str):
+        return False, f"{field_name} 必须是字符串类型"
+    if len(value) < min_len:
+        return False, f"{field_name} 长度不能小于 {min_len}"
+    if len(value) > max_len:
+        return False, f"{field_name} 长度不能超过 {max_len}"
+    return True, ""
+
+def _validate_numeric_field(value, field_name, min_val=None, max_val=None):
+    """验证数值字段"""
+    try:
+        num = float(value)
+        if min_val is not None and num < min_val:
+            return False, f"{field_name} 不能小于 {min_val}"
+        if max_val is not None and num > max_val:
+            return False, f"{field_name} 不能超过 {max_val}"
+        return True, ""
+    except (ValueError, TypeError):
+        return False, f"{field_name} 必须是有效数值"
+
+def _require_admin():
+    """验证管理员权限"""
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id or not user_manager:
+        return False, jsonify({'error': '未授权访问'}), 401
+    session = user_manager.validate_session(session_id)
+    if not session:
+        return False, jsonify({'error': '会话无效'}), 401
+    user = user_manager.get_user(session['username'])
+    if user['role'] != 'admin':
+        return False, jsonify({'error': '权限不足'}), 403
+    return True, None, None
+
+
+# ========== 增量模块 API 端点 ==========
+
+# --- 模块注册表 ---
+
+@app.route('/api/modules/status')
+def api_modules_status():
+    """获取所有集成模块的状态概览"""
+    result = {
+        "timestamp": datetime.now().isoformat(),
+        "modules": {}
+    }
+    
+    # 安全模块
+    if security_module:
+        result["modules"]["security_module"] = security_module.get_module_info()
+    else:
+        result["modules"]["security_module"] = {"status": "unavailable"}
+    
+    # 监控模块
+    if monitor_module:
+        result["modules"]["monitor_module"] = monitor_module.get_module_info()
+    else:
+        result["modules"]["monitor_module"] = {"status": "unavailable"}
+    
+    # 数据库模块
+    if database_module:
+        result["modules"]["database_module"] = database_module.get_module_info()
+    else:
+        result["modules"]["database_module"] = {"status": "unavailable"}
+    
+    # 切换器模块
+    if system_switcher:
+        result["modules"]["system_switcher"] = system_switcher.get_switcher_info()
+    else:
+        result["modules"]["system_switcher"] = {"status": "unavailable"}
+    
+    # 模块注册表
+    if module_registry:
+        result["modules"]["module_registry"] = module_registry.get_registry_info()
+    else:
+        result["modules"]["module_registry"] = {"status": "unavailable"}
+    
+    return jsonify({"success": True, "data": result})
+
+
+@app.route('/api/modules/registry/list')
+def api_registry_list():
+    """列出注册表中所有模块"""
+    if not module_registry:
+        return jsonify({"success": False, "message": "模块注册表不可用"}), 503
+    modules = module_registry.list_modules()
+    return jsonify({"success": True, "modules": modules})
+
+
+@app.route('/api/modules/registry/<module_name>')
+def api_registry_module_detail(module_name):
+    """获取注册表中指定模块详情"""
+    if not module_registry:
+        return jsonify({"success": False, "message": "模块注册表不可用"}), 503
+    valid, msg = _validate_string_field(module_name, "module_name", max_len=100)
+    if not valid:
+        return jsonify({"success": False, "message": msg}), 400
+    info = module_registry.get_module_info(module_name)
+    if info:
+        return jsonify({"success": True, "module": info})
+    return jsonify({"success": False, "message": f"模块 {module_name} 未注册"}), 404
+
+
+# --- 系统切换器 ---
+
+@app.route('/api/switcher/status')
+def api_switcher_status():
+    """获取系统切换器完整状态"""
+    if not system_switcher:
+        return jsonify({"success": False, "message": "系统切换器不可用"}), 503
+    
+    status = system_switcher.get_full_status()
+    return jsonify({"success": True, "data": status})
+
+
+@app.route('/api/switcher/data-source/switch', methods=['POST'])
+def api_switch_data_source():
+    """切换数据源"""
+    if not system_switcher:
+        return jsonify({"success": False, "message": "系统切换器不可用"}), 503
+    
+    data = request.json or {}
+    valid, msg = _validate_required_fields(data, ['source_name'])
+    if not valid:
+        return jsonify({"success": False, "message": msg}), 400
+    
+    result = system_switcher.switch_data_source(data['source_name'])
+    return jsonify(result)
+
+
+@app.route('/api/switcher/strategy/switch', methods=['POST'])
+def api_switch_strategy():
+    """切换策略"""
+    if not system_switcher:
+        return jsonify({"success": False, "message": "系统切换器不可用"}), 503
+    
+    data = request.json or {}
+    valid, msg = _validate_required_fields(data, ['strategy_name'])
+    if not valid:
+        return jsonify({"success": False, "message": msg}), 400
+    
+    result = system_switcher.switch_strategy(data['strategy_name'])
+    return jsonify(result)
+
+
+@app.route('/api/switcher/mode/switch', methods=['POST'])
+def api_switch_mode():
+    """切换运行模式"""
+    if not system_switcher:
+        return jsonify({"success": False, "message": "系统切换器不可用"}), 503
+    
+    data = request.json or {}
+    valid, msg = _validate_required_fields(data, ['mode'])
+    if not valid:
+        return jsonify({"success": False, "message": msg}), 400
+    
+    valid_modes = ['paper', 'live', 'backtest', 'maintenance']
+    if data['mode'] not in valid_modes:
+        return jsonify({"success": False, "message": f"无效模式，支持: {valid_modes}"}), 400
+    
+    result = system_switcher.switch_mode(data['mode'])
+    return jsonify(result)
+
+
+@app.route('/api/switcher/history')
+def api_switcher_history():
+    """获取切换历史"""
+    if not system_switcher:
+        return jsonify({"success": False, "message": "系统切换器不可用"}), 503
+    
+    limit = request.args.get('limit', 50, type=int)
+    history = system_switcher.get_history(limit=min(limit, 200))
+    return jsonify({"success": True, "history": history})
+
+
+# --- 安全模块 ---
+
+@app.route('/api/security-module/status')
+def api_security_module_status():
+    """获取安全模块状态"""
+    if not security_module:
+        return jsonify({"success": False, "message": "安全模块不可用"}), 503
+    
+    info = security_module.get_module_info()
+    return jsonify({"success": True, "data": info})
+
+
+@app.route('/api/security-module/audit', methods=['POST'])
+def api_security_module_audit():
+    """触发安全模块审核"""
+    if not security_module:
+        return jsonify({"success": False, "message": "安全模块不可用"}), 503
+    
+    # 管理员权限检查
+    is_admin, resp, code = _require_admin()
+    if not is_admin:
+        return resp, code
+    
+    data = request.json or {}
+    scope = data.get('scope', 'full')
+    
+    result = security_module.run_audit(scope=scope)
+    return jsonify({"success": True, "data": result})
+
+
+@app.route('/api/security-module/alerts')
+def api_security_module_alerts():
+    """获取安全模块告警列表"""
+    if not security_module:
+        return jsonify({"success": False, "message": "安全模块不可用"}), 503
+    
+    limit = request.args.get('limit', 20, type=int)
+    alerts = security_module.get_alerts(limit=min(limit, 100))
+    return jsonify({"success": True, "alerts": alerts})
+
+
+# --- 监控模块 ---
+
+@app.route('/api/monitor-module/status')
+def api_monitor_module_status():
+    """获取监控模块状态"""
+    if not monitor_module:
+        return jsonify({"success": False, "message": "监控模块不可用"}), 503
+    
+    info = monitor_module.get_module_info()
+    return jsonify({"success": True, "data": info})
+
+
+@app.route('/api/monitor-module/metrics')
+def api_monitor_module_metrics():
+    """获取监控指标"""
+    if not monitor_module:
+        return jsonify({"success": False, "message": "监控模块不可用"}), 503
+    
+    period = request.args.get('period', '1h')
+    metrics = monitor_module.collect_metrics(period=period)
+    return jsonify({"success": True, "metrics": metrics})
+
+
+@app.route('/api/monitor-module/check', methods=['POST'])
+def api_monitor_module_check():
+    """手动触发监控检查"""
+    if not monitor_module:
+        return jsonify({"success": False, "message": "监控模块不可用"}), 503
+    
+    result = monitor_module.run_check()
+    return jsonify({"success": True, "data": result})
+
+
+# --- 数据库模块 ---
+
+@app.route('/api/database-module/status')
+def api_database_module_status():
+    """获取数据库模块状态"""
+    if not database_module:
+        return jsonify({"success": False, "message": "数据库模块不可用"}), 503
+    
+    info = database_module.get_module_info()
+    return jsonify({"success": True, "data": info})
+
+
+@app.route('/api/database-module/tables')
+def api_database_module_tables():
+    """获取数据库表列表"""
+    if not database_module:
+        return jsonify({"success": False, "message": "数据库模块不可用"}), 503
+    
+    tables = database_module.get_tables()
+    return jsonify({"success": True, "tables": tables})
+
+
+@app.route('/api/database-module/query', methods=['POST'])
+def api_database_module_query():
+    """执行数据库查询（只读）"""
+    if not database_module:
+        return jsonify({"success": False, "message": "数据库模块不可用"}), 503
+    
+    # 管理员权限检查
+    is_admin, resp, code = _require_admin()
+    if not is_admin:
+        return resp, code
+    
+    data = request.json or {}
+    valid, msg = _validate_required_fields(data, ['query'])
+    if not valid:
+        return jsonify({"success": False, "message": msg}), 400
+    
+    # 安全检查：仅允许 SELECT 查询
+    query = data['query'].strip().upper()
+    if not query.startswith('SELECT'):
+        return jsonify({"success": False, "message": "仅允许 SELECT 查询"}), 403
+    
+    result = database_module.execute_query(data['query'])
+    return jsonify({"success": True, "data": result})
+
+
+@app.route('/api/database-module/backup', methods=['POST'])
+def api_database_module_backup():
+    """触发数据库备份"""
+    if not database_module:
+        return jsonify({"success": False, "message": "数据库模块不可用"}), 503
+    
+    # 管理员权限检查
+    is_admin, resp, code = _require_admin()
+    if not is_admin:
+        return resp, code
+    
+    result = database_module.create_backup()
+    return jsonify({"success": True, "data": result})
+
+
+# ========== 全局健康检查增强版 ==========
+
+@app.route('/api/health/enhanced')
+def api_health_enhanced():
+    """增强版健康检查 - 包含所有增量模块"""
+    results = {
+        "timestamp": datetime.now().isoformat(),
+        "overall_status": "healthy",
+        "core_components": {},
+        "integrated_modules": {}
+    }
+    
+    # 核心组件检查
+    core_checks = {
+        "auth_service": check_auth_service,
+        "strategy_service": check_strategy_service,
+        "risk_service": check_risk_service,
+        "data_service": check_data_service
+    }
+    
+    for name, check_func in core_checks.items():
+        try:
+            results["core_components"][name] = check_func()
+        except Exception as e:
+            results["core_components"][name] = {"status": "critical", "error": str(e)}
+    
+    # 增量模块检查
+    integrated_checks = {
+        "security_module": lambda: {"status": "healthy", "message": "安全模块正常"} if security_module else {"status": "unavailable"},
+        "monitor_module": lambda: {"status": "healthy", "message": "监控模块正常"} if monitor_module else {"status": "unavailable"},
+        "database_module": lambda: {"status": "healthy", "message": "数据库模块正常"} if database_module else {"status": "unavailable"},
+        "system_switcher": lambda: {"status": "healthy", "message": "切换器正常"} if system_switcher else {"status": "unavailable"},
+        "module_registry": lambda: {"status": "healthy", "message": "注册表正常"} if module_registry else {"status": "unavailable"}
+    }
+    
+    for name, check_func in integrated_checks.items():
+        try:
+            results["integrated_modules"][name] = check_func()
+        except Exception as e:
+            results["integrated_modules"][name] = {"status": "critical", "error": str(e)}
+    
+    # 判断整体状态
+    all_statuses = []
+    for comp in results["core_components"].values():
+        all_statuses.append(comp.get("status", "unknown"))
+    for mod in results["integrated_modules"].values():
+        all_statuses.append(mod.get("status", "unknown"))
+    
+    if "critical" in all_statuses:
+        results["overall_status"] = "critical"
+    elif "unavailable" in all_statuses or "warning" in all_statuses:
+        results["overall_status"] = "degraded"
+    
+    return jsonify({"success": True, "data": results})
 
 
 if __name__ == '__main__':
