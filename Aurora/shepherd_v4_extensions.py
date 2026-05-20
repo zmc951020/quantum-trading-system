@@ -942,8 +942,8 @@ class StrategyRebirthEngine:
         newborn["fitness"] = 0.0
         newborn["generation"] = max(p.get("generation", 0) for p in selected_parents) + 1
         newborn["source_template"] = f"rebirth({fusion})"
-        newborn["gestation_round": 0
-        newborn["viable": False
+        newborn["gestation_round"] = 0
+        newborn["viable"] = False
         newborn["tech_stack_fingerprint"] = self._compute_newborn_fingerprint(newborn)
         newborn["novelty_score"] = 0.0
         newborn["created_at"] = datetime.now().isoformat()
