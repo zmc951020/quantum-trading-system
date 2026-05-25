@@ -382,16 +382,16 @@ def save_backtest_result(self, result_dict: Dict) -> bool:
                 strategy_name, symbol, start_date, end_date,
                 initial_balance, final_balance, total_return,
                 sharpe_ratio, win_rate, total_trades,
-                winning_trades, losing_trades, extra_data, created_at
+                winning_trades, losing_trades, config_json, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             result_dict.get('strategy_name', 'unknown'),
-            result_dict.get('symbol'),
-            result_dict.get('start_date'),
-            result_dict.get('end_date'),
-            result_dict.get('initial_balance'),
-            result_dict.get('final_balance'),
-            result_dict.get('total_return'),
+            result_dict.get('symbol', ''),
+            result_dict.get('start_date', ''),
+            result_dict.get('end_date', ''),
+            result_dict.get('initial_balance', 0.0),
+            result_dict.get('final_balance', 0.0),
+            result_dict.get('total_return', 0.0),
             result_dict.get('sharpe_ratio'),
             result_dict.get('win_rate'),
             result_dict.get('total_trades'),
@@ -426,9 +426,9 @@ def get_backtest_results(self, strategy_name: str = None, limit: int = 10) -> Li
         for row in cursor.fetchall():
             r = dict(row)
             import json
-            if r.get('extra_data'):
+            if r.get('config_json'):
                 try:
-                    r.update(json.loads(r['extra_data']))
+                    r.update(json.loads(r['config_json']))
                 except (json.JSONDecodeError, TypeError):
                     pass
             results.append(r)
@@ -454,9 +454,9 @@ def get_best_backtest_result(self, strategy_name: str, metric: str = 'total_retu
         if row:
             r = dict(row)
             import json
-            if r.get('extra_data'):
+            if r.get('config_json'):
                 try:
-                    r.update(json.loads(r['extra_data']))
+                    r.update(json.loads(r['config_json']))
                 except (json.JSONDecodeError, TypeError):
                     pass
             return r
