@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora量化交易系统 - 策略管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0a0d14;
+            --bg-card: #111827;
+            --bg-card-hover: #1f2937;
+            --accent-cyan: #00d4ff;
+            --accent-blue: #4a7dff;
+            --accent-purple: #7c5cfc;
+            --accent-gold: #c9a84c;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --border-subtle: rgba(255, 255, 255, 0.1);
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: rgba(17, 24, 39, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 1rem 0;
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-link {
+            color: var(--text-secondary) !important;
+            font-weight: 500;
+            padding: 0.75rem 1rem !important;
+            transition: all 0.3s;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--accent-cyan) !important;
+        }
+
+        .main-container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .environment-badge {
+            padding: 0.5rem 1.5rem;
+            border-radius: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .env-paper {
+            background: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .env-live {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+        }
+
+        .strategy-tree {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.5rem;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .tree-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tree-category {
+            margin-bottom: 1.5rem;
+        }
+
+        .tree-category-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .tree-category-header:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .tree-category-header.active {
+            background: rgba(0, 212, 255, 0.1);
+            color: var(--accent-cyan);
+        }
+
+        .tree-items {
+            padding-left: 2rem;
+        }
+
+        .tree-item {
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+
+        .tree-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tree-item.selected {
+            background: rgba(74, 125, 255, 0.15);
+            color: var(--accent-blue);
+        }
+
+        .tree-item.active {
+            background: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+        }
+
+        .tree-item.pending {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--warning);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.active { background: var(--success); }
+        .status-dot.pending { background: var(--warning); }
+        .status-dot.available { background: var(--text-secondary); }
+
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+
+        .panel-header {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .strategy-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .detail-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-value {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .btn-action {
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(74, 125, 255, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #22c55e);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--accent-gold), #d97706);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: white;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .optimizer-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 0.75rem;
+        }
+
+        .optimizer-tab {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+        }
+
+        .optimizer-tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .optimizer-tab.active {
+            background: rgba(0, 212, 255, 0.15);
+            color: var(--accent-cyan);
+        }
+
+        .optimizer-content {
+            display: none;
+        }
+
+        .optimizer-content.active {
+            display: block;
+        }
+
+        .optimizer-description {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .optimizer-features {
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-item {
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .backtest-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .backtest-tab {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .backtest-tab:hover {
+            border-color: var(--accent-cyan);
+        }
+
+        .backtest-tab.active {
+            background: rgba(0, 212, 255, 0.15);
+            color: var(--accent-cyan);
+            border-color: var(--accent-cyan);
+        }
+
+        .pending-strategies {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .pending-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .pending-title {
+            font-weight: 600;
+            color: var(--warning);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .pending-count {
+            background: var(--warning);
+            color: var(--bg-deep);
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.875rem;
+        }
+
+        .pending-item {
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loading.active {
+            display: flex;
+        }
+
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--border-subtle);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .metric-value.success { color: var(--success); }
+        .metric-value.warning { color: var(--warning); }
+        .metric-value.danger { color: var(--danger); }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Aurora</a>
+            <div class="navbar-collapse show">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="/">📊 完整可视化</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/dashboard">📈 监控仪表盘</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/strategy-platform">🎯 策略管理</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/deepseek">🤖 机器人助手</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/security-monitor">🛡️ 安全监控</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/maintenance">🔧 系统维护</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="page-header">
+            <h1 class="page-title">🎯 策略管理平台</h1>
+            <div id="envSwitch" class="environment-badge env-paper" onclick="toggleEnvironment()">
+                <i class="bi bi-clock-history"></i>
+                <span id="envLabel">模拟盘</span>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <div class="strategy-tree">
+                <div class="tree-header">
+                    <i class="bi bi-folder-tree"></i>
+                    策略库
+                </div>
+                <div id="strategyTree">
+                    <!-- 动态生成策略树 -->
+                </div>
+
+                <div id="pendingStrategies" class="pending-strategies" style="display: none;">
+                    <div class="pending-header">
+                        <div class="pending-title">
+                            <i class="bi bi-hourglass-split"></i>
+                            待激活策略
+                        </div>
+                        <div id="pendingCount" class="pending-count">0</div>
+                    </div>
+                    <div id="pendingList">
+                        <!-- 动态生成待激活列表 -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <i class="bi bi-info-circle"></i>
+                        策略详情
+                    </div>
+                    <div id="strategyDetails">
+                        <div class="strategy-details">
+                            <div class="detail-section">
+                                <div class="detail-label">策略名称</div>
+                                <div class="detail-value" id="strategyName">请选择策略</div>
+                            </div>
+                            <div class="detail-section">
+                                <div class="detail-label">策略分类</div>
+                                <div class="detail-value" id="strategyCategory">-</div>
+                            </div>
+                            <div class="detail-section">
+                                <div class="detail-label">风险等级</div>
+                                <div class="detail-value" id="strategyRisk">-</div>
+                            </div>
+                            <div class="detail-section">
+                                <div class="detail-label">策略状态</div>
+                                <div class="detail-value" id="strategyStatus">-</div>
+                            </div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">策略描述</div>
+                            <div id="strategyDescription" style="color: var(--text-secondary); line-height: 1.6;">请从左侧选择一个策略查看详情</div>
+                        </div>
+                        <div id="strategyActions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+                            <button class="btn-action btn-primary" id="btnActivate" onclick="activateStrategy()" disabled>
+                                <i class="bi bi-play-fill"></i> 激活策略
+                            </button>
+                            <button class="btn-action btn-warning" id="btnPending" onclick="addToPending()" disabled>
+                                <i class="bi bi-hourglass-split"></i> 待激活
+                            </button>
+                            <button class="btn-action btn-danger" id="btnDeactivate" onclick="deactivateStrategy()" style="display: none;">
+                                <i class="bi bi-stop-fill"></i> 停用策略
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <i class="bi bi-gear-wide-connected"></i>
+                        策略优化器
+                    </div>
+
+                    <div class="optimizer-tabs">
+                        <button class="optimizer-tab active" onclick="switchOptimizerTab('rl')">强化学习机器人</button>
+                        <button class="optimizer-tab" onclick="switchOptimizerTab('v5')">智能体优化器V5</button>
+                        <button class="optimizer-tab" onclick="switchOptimizerTab('v6')">超能优化器V6</button>
+                    </div>
+
+                    <div id="optimizerRL" class="optimizer-content active">
+                        <div class="optimizer-description">
+                            <strong>强化学习机器人</strong> - 一键回测优化的智能体，自动完成策略回测和参数优化。
+                        </div>
+                        <div class="optimizer-features">
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                一键启动回测
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                自动参数调优
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                多周期验证
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                性能可视化
+                            </div>
+                        </div>
+                        <button class="btn-action btn-success" onclick="runBacktest('rl_bot')" id="btnRLBacktest">
+                            <i class="bi bi-play-fill"></i> 一键回测优化
+                        </button>
+                    </div>
+
+                    <div id="optimizerV5" class="optimizer-content">
+                        <div class="optimizer-description">
+                            <strong>智能体优化器V5</strong> - 基于遗传算法的策略参数优化，具备全局搜索和自适应能力。
+                        </div>
+                        <div class="optimizer-features">
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                多参数同时优化
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                全局搜索最优解
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                自适应变异率
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                精英保留机制
+                            </div>
+                        </div>
+                        <button class="btn-action btn-primary" onclick="runBacktest('v5')" id="btnV5Backtest">
+                            <i class="bi bi-magic"></i> 执行V5优化
+                        </button>
+                    </div>
+
+                    <div id="optimizerV6" class="optimizer-content">
+                        <div class="optimizer-description">
+                            <strong>超能优化器V6</strong> - 基于深度强化学习的下一代优化器，具备自我演进能力。
+                        </div>
+
+                        <div style="margin-bottom: 1.5rem;">
+                            <div class="detail-label" style="margin-bottom: 0.75rem;">选择优化模式：</div>
+                            <div class="backtest-tabs">
+                                <button class="backtest-tab active" onclick="switchV6Mode('v6_deep')">深度优化</button>
+                                <button class="backtest-tab" onclick="switchV6Mode('v6_auto')">自动演进</button>
+                            </div>
+                        </div>
+
+                        <div class="optimizer-features">
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                深度神经网络
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                端到端优化
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                自动特征工程
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle text-success"></i>
+                                持续自我改进
+                            </div>
+                        </div>
+                        <button class="btn-action btn-warning" onclick="runBacktest('v6_deep')" id="btnV6Backtest">
+                            <i class="bi bi-rocket-takeoff"></i> 执行V6优化
+                        </button>
+                    </div>
+                </div>
+
+                <div class="panel-card" id="backtestResults" style="display: none;">
+                    <div class="panel-header">
+                        <i class="bi bi-graph-up"></i>
+                        回测结果
+                    </div>
+                    <div id="backtestMetrics" class="metrics-grid">
+                        <!-- 动态生成指标 -->
+                    </div>
+                    <div id="backtestDetails" style="color: var(--text-secondary);">
+                        <!-- 动态生成详情 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div id="loadingText">处理中...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentEnvironment = 'paper';
+        let selectedStrategy = null;
+        let strategyLibrary = {};
+        let pendingStrategies = [];
+        let activeStrategies = [];
+        let v6Mode = 'v6_deep';
+
+        async function loadStrategyLibrary() {
+            try {
+                const response = await fetch('/api/strategy/library');
+                const data = await response.json();
+                if (data.success) {
+                    strategyLibrary = data.data;
+                    renderStrategyTree();
+                }
+            } catch (error) {
+                console.error('加载策略库失败:', error);
+            }
+        }
+
+        function renderStrategyTree() {
+            const treeContainer = document.getElementById('strategyTree');
+            let html = '';
+
+            const categoryIcons = {
+                'core': '⚙️',
+                'bull': '📈',
+                'bear': '📉',
+                'sideways': '➡️',
+                'volatile': '🔄'
+            };
+
+            const categoryNames = {
+                'core': '核心通用策略',
+                'bull': '上涨市场策略',
+                'bear': '下跌市场策略',
+                'sideways': '横盘市场策略',
+                'volatile': '震荡市场策略'
+            };
+
+            for (const [categoryKey, categoryData] of Object.entries(strategyLibrary)) {
+                html += `
+                    <div class="tree-category">
+                        <div class="tree-category-header" onclick="toggleCategory('${categoryKey}')">
+                            <i class="bi bi-chevron-right" id="icon-${categoryKey}"></i>
+                            <span>${categoryIcons[categoryKey]} ${categoryNames[categoryKey]}</span>
+                        </div>
+                        <div class="tree-items" id="category-${categoryKey}" style="display: none;">
+                `;
+
+                categoryData.strategies.forEach(strategy => {
+                    const statusClass = activeStrategies.includes(strategy.id) ? 'active' :
+                                       pendingStrategies.includes(strategy.id) ? 'pending' : 'available';
+                    const statusDot = `<span class="status-dot ${statusClass}"></span>`;
+
+                    html += `
+                        <div class="tree-item ${statusClass}" onclick="selectStrategy('${strategy.id}', event)" data-category="${categoryKey}">
+                            <span>${strategy.name}</span>
+                            ${statusDot}
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            treeContainer.innerHTML = html;
+        }
+
+        function toggleCategory(categoryKey) {
+            const itemsContainer = document.getElementById(`category-${categoryKey}`);
+            const icon = document.getElementById(`icon-${categoryKey}`);
+            const header = itemsContainer.previousElementSibling;
+
+            if (itemsContainer.style.display === 'none') {
+                itemsContainer.style.display = 'block';
+                icon.className = 'bi bi-chevron-down';
+                header.classList.add('active');
+            } else {
+                itemsContainer.style.display = 'none';
+                icon.className = 'bi bi-chevron-right';
+                header.classList.remove('active');
+            }
+        }
+
+        function selectStrategy(strategyId, event) {
+            event.stopPropagation();
+
+            document.querySelectorAll('.tree-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+
+            const clickedItem = event.target.closest('.tree-item');
+            clickedItem.classList.add('selected');
+
+            selectedStrategy = strategyId;
+
+            let strategy = null;
+            let categoryName = '';
+
+            for (const [categoryKey, categoryData] of Object.entries(strategyLibrary)) {
+                const found = categoryData.strategies.find(s => s.id === strategyId);
+                if (found) {
+                    strategy = found;
+                    categoryName = categoryData.name;
+                    break;
+                }
+            }
+
+            if (strategy) {
+                document.getElementById('strategyName').textContent = strategy.name;
+                document.getElementById('strategyCategory').textContent = categoryName;
+                document.getElementById('strategyRisk').textContent = strategy.risk_level;
+                document.getElementById('strategyDescription').textContent = strategy.description;
+
+                const isActive = activeStrategies.includes(strategyId);
+                const isPending = pendingStrategies.includes(strategyId);
+
+                if (isActive) {
+                    document.getElementById('strategyStatus').innerHTML = '<span style="color: var(--success);">● 已激活</span>';
+                    document.getElementById('btnActivate').style.display = 'none';
+                    document.getElementById('btnPending').style.display = 'none';
+                    document.getElementById('btnDeactivate').style.display = 'inline-flex';
+                } else if (isPending) {
+                    document.getElementById('strategyStatus').innerHTML = '<span style="color: var(--warning);">● 待激活</span>';
+                    document.getElementById('btnActivate').style.display = 'inline-flex';
+                    document.getElementById('btnPending').style.display = 'none';
+                    document.getElementById('btnDeactivate').style.display = 'none';
+                } else {
+                    document.getElementById('strategyStatus').textContent = '可用';
+                    document.getElementById('btnActivate').style.display = 'inline-flex';
+                    document.getElementById('btnPending').style.display = 'inline-flex';
+                    document.getElementById('btnDeactivate').style.display = 'none';
+                }
+
+                document.getElementById('btnActivate').disabled = false;
+                document.getElementById('btnPending').disabled = false;
+            }
+        }
+
+        async function activateStrategy() {
+            if (!selectedStrategy) return;
+
+            showLoading('正在激活策略...');
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${selectedStrategy}/activate`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    activeStrategies = data.data.active_strategies;
+                    pendingStrategies = data.data.pending_strategies;
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    selectStrategy(selectedStrategy, { target: document.querySelector('.tree-item.selected') });
+                }
+            } catch (error) {
+                console.error('激活策略失败:', error);
+            }
+
+            hideLoading();
+        }
+
+        async function addToPending() {
+            if (!selectedStrategy) return;
+
+            showLoading('正在添加到待激活列表...');
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${selectedStrategy}/pending`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    pendingStrategies.push(selectedStrategy);
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    selectStrategy(selectedStrategy, { target: document.querySelector('.tree-item.selected') });
+                }
+            } catch (error) {
+                console.error('添加到待激活失败:', error);
+            }
+
+            hideLoading();
+        }
+
+        async function deactivateStrategy() {
+            if (!selectedStrategy) return;
+
+            showLoading('正在停用策略...');
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${selectedStrategy}/deactivate`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    activeStrategies = data.data.active_strategies;
+                    pendingStrategies = data.data.pending_strategies;
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    selectStrategy(selectedStrategy, { target: document.querySelector('.tree-item.selected') });
+                }
+            } catch (error) {
+                console.error('停用策略失败:', error);
+            }
+
+            hideLoading();
+        }
+
+        function renderPendingStrategies() {
+            const container = document.getElementById('pendingStrategies');
+            const listContainer = document.getElementById('pendingList');
+            const countElement = document.getElementById('pendingCount');
+
+            if (pendingStrategies.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            countElement.textContent = pendingStrategies.length;
+
+            let html = '';
+            pendingStrategies.forEach(strategyId => {
+                let strategyName = '';
+                for (const categoryData of Object.values(strategyLibrary)) {
+                    const found = categoryData.strategies.find(s => s.id === strategyId);
+                    if (found) {
+                        strategyName = found.name;
+                        break;
+                    }
+                }
+
+                html += `
+                    <div class="pending-item">
+                        <span>${strategyName}</span>
+                        <button class="btn-action btn-outline" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;"
+                                onclick="activatePending('${strategyId}')">激活</button>
+                    </div>
+                `;
+            });
+
+            listContainer.innerHTML = html;
+        }
+
+        async function activatePending(strategyId) {
+            showLoading('正在激活策略...');
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${strategyId}/activate`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    activeStrategies = data.data.active_strategies;
+                    pendingStrategies = data.data.pending_strategies;
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    if (selectedStrategy === strategyId) {
+                        selectStrategy(selectedStrategy, { target: document.querySelector('.tree-item.selected') });
+                    }
+                }
+            } catch (error) {
+                console.error('激活待激活策略失败:', error);
+            }
+
+            hideLoading();
+        }
+
+        async function toggleEnvironment() {
+            const newEnv = currentEnvironment === 'paper' ? 'live' : 'paper';
+            let confirmed = false;
+
+            if (newEnv === 'live') {
+                confirmed = confirm('⚠️ 确定要切换到实盘吗？实盘交易会产生真实盈亏！');
+                if (!confirmed) return;
+            }
+
+            showLoading('正在切换环境...');
+
+            try {
+                const response = await fetch('/api/strategy/environment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        environment: newEnv,
+                        confirmed: confirmed
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.require_confirmation && !confirmed) {
+                        // 后端要求确认（理论上不会走到这里，因为前端已经确认过了）
+                        if (confirm(data.message)) {
+                            // 再次调用API并带上confirmed=true
+                            await toggleEnvironment();
+                        }
+                    } else {
+                        currentEnvironment = newEnv;
+                        const envSwitch = document.getElementById('envSwitch');
+                        const envLabel = document.getElementById('envLabel');
+                        envSwitch.className = `environment-badge ${newEnv === 'paper' ? 'env-paper' : 'env-live'}`;
+                        envLabel.textContent = newEnv === 'paper' ? '模拟盘' : '实盘';
+                    }
+                }
+            } catch (error) {
+                console.error('切换环境失败:', error);
+                alert('切换环境失败，请稍后重试');
+            }
+
+            hideLoading();
+        }
+
+        function switchOptimizerTab(tab) {
+            document.querySelectorAll('.optimizer-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.optimizer-content').forEach(c => c.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(`optimizer${tab.toUpperCase()}`).classList.add('active');
+        }
+
+        function switchV6Mode(mode) {
+            v6Mode = mode;
+            document.querySelectorAll('#optimizerV6 .backtest-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const btn = document.getElementById('btnV6Backtest');
+            if (mode === 'v6_auto') {
+                btn.innerHTML = '<i class="bi bi-robot"></i> 执行自动演进';
+            } else {
+                btn.innerHTML = '<i class="bi bi-rocket-takeoff"></i> 执行深度优化';
+            }
+        }
+
+        async function runBacktest(optimizerType) {
+            if (!selectedStrategy) {
+                alert('请先选择一个策略');
+                return;
+            }
+
+            const optimizerNames = {
+                'rl_bot': '强化学习机器人',
+                'v5': '智能体优化器V5',
+                'v6_deep': '超能优化器V6-深度优化',
+                'v6_auto': '超能优化器V6-自动演进'
+            };
+
+            const finalOptimizerType = optimizerType === 'v6' ? v6Mode : optimizerType;
+
+            showLoading(`正在执行${optimizerNames[finalOptimizerType]}回测...`);
+
+            try {
+                const response = await fetch('/api/strategy/backtest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        strategy_id: selectedStrategy,
+                        optimizer_type: finalOptimizerType,
+                        period: '1y'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayBacktestResults(data.data);
+                }
+            } catch (error) {
+                console.error('回测失败:', error);
+                alert('回测执行失败，请稍后重试');
+            }
+
+            hideLoading();
+        }
+
+        function displayBacktestResults(results) {
+            const container = document.getElementById('backtestResults');
+            const metricsContainer = document.getElementById('backtestMetrics');
+            const detailsContainer = document.getElementById('backtestDetails');
+
+            container.style.display = 'block';
+
+            const metrics = results.metrics;
+            metricsContainer.innerHTML = `
+                <div class="metric-card">
+                    <div class="metric-value success">${metrics.total_return}%</div>
+                    <div class="metric-label">总收益率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${metrics.annual_return}%</div>
+                    <div class="metric-label">年化收益</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${metrics.sharpe_ratio}</div>
+                    <div class="metric-label">夏普比率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value danger">${metrics.max_drawdown}%</div>
+                    <div class="metric-label">最大回撤</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value success">${metrics.win_rate}%</div>
+                    <div class="metric-label">胜率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${metrics.total_trades}</div>
+                    <div class="metric-label">总交易次数</div>
+                </div>
+            `;
+
+            detailsContainer.innerHTML = `
+                <div class="detail-section">
+                    <div class="detail-label">优化器</div>
+                    <div class="detail-value">${results.optimizer_name}</div>
+                </div>
+                <div class="detail-section">
+                    <div class="detail-label">回测周期</div>
+                    <div class="detail-value">${results.period}</div>
+                </div>
+                <div class="detail-section">
+                    <div class="detail-label">耗时</div>
+                    <div class="detail-value">${results.duration}秒</div>
+                </div>
+            `;
+
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loading').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('active');
+        }
+
+        async function loadInitialState() {
+            try {
+                const response = await fetch('/api/strategy/status');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentEnvironment = data.data.environment;
+                    activeStrategies = data.data.active_strategies;
+                    pendingStrategies = data.data.pending_strategies;
+
+                    if (currentEnvironment === 'live') {
+                        document.getElementById('envSwitch').className = 'environment-badge env-live';
+                        document.getElementById('envLabel').textContent = '实盘';
+                    }
+
+                    renderPendingStrategies();
+                }
+            } catch (error) {
+                console.error('加载初始状态失败:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStrategyLibrary();
+            loadInitialState();
+
+            setTimeout(() => {
+                toggleCategory('core');
+            }, 500);
+        });
+    </script>
+</body>
+</html>

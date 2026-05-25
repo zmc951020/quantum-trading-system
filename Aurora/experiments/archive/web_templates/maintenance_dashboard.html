@@ -1,0 +1,652 @@
+*<!DOCTYPE html>
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora 系统维护信息示现</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0a0e17;
+            --card-bg: #111827;
+            --border: #1e293b;
+            --text: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --critical: #ef4444;
+            --high: #f97316;
+            --medium: #eab308;
+            --low: #22c55e;
+            --info: #3b82f6;
+            --accent: #6366f1;
+            --success: #10b981;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-bottom: 2px solid var(--accent);
+            padding: 20px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .status-bar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            display: inline-block; margin-right: 6px;
+        }
+        .status-dot.live { background: #10b981; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px 32px;
+        }
+        .layout-3col {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        .full-width { grid-column: 1 / -1; }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(99,102,241,0.1); }
+        .card h3 {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .metric-row {
+            display: flex; justify-content: space-between;
+            padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .metric-value {
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        .metric-value.critical { color: var(--critical); }
+        .metric-value.high { color: var(--high); }
+        .metric-value.warning { color: var(--medium); }
+        .metric-value.good { color: var(--success); }
+        .health-score {
+            text-align: center; padding: 24px 0;
+        }
+        .health-score .score {
+            font-size: 4rem; font-weight: 800;
+            line-height: 1;
+        }
+        .health-score .label {
+            color: var(--text-secondary); font-size: 0.85rem;
+            margin-top: 8px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 10px; border-radius: 12px;
+            font-size: 0.75rem; font-weight: 600;
+        }
+        .badge-critical { background: rgba(239,68,68,0.2); color: var(--critical); }
+        .badge-high { background: rgba(249,115,22,0.2); color: var(--high); }
+        .badge-medium { background: rgba(234,179,8,0.2); color: var(--medium); }
+        .badge-low { background: rgba(34,197,94,0.2); color: var(--low); }
+        .badge-info { background: rgba(59,130,246,0.2); color: var(--info); }
+        table {
+            width: 100%; border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+        th {
+            text-align: left; padding: 10px 8px;
+            color: var(--text-secondary); font-weight: 600;
+            border-bottom: 2px solid var(--border);
+        }
+        td {
+            padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        tr:hover td { background: rgba(99,102,241,0.05); }
+        .progress-bar {
+            height: 8px; border-radius: 4px;
+            background: rgba(255,255,255,0.1); overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; border-radius: 4px;
+            transition: width 1s ease;
+        }
+        .fill-success { background: var(--success); }
+        .fill-warning { background: var(--medium); }
+        .fill-danger { background: var(--critical); }
+        .fill-accent { background: var(--accent); }
+        .timeline {
+            position: relative; padding-left: 24px;
+        }
+        .timeline::before {
+            content: ''; position: absolute;
+            left: 8px; top: 0; bottom: 0;
+            width: 2px; background: var(--border);
+        }
+        .timeline-item {
+            position: relative;
+            padding: 8px 0 8px 20px;
+            border-left: 2px solid transparent;
+        }
+        .timeline-item::before {
+            content: ''; position: absolute;
+            left: -5px; top: 14px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent);
+        }
+        .timeline-item .ts { color: var(--text-secondary); font-size: 0.75rem; }
+        .recommendation {
+            background: rgba(99,102,241,0.08);
+            border-left: 3px solid var(--accent);
+            padding: 10px 14px; margin: 8px 0;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.83rem;
+        }
+        .module-flow {
+            display: flex; align-items: center; gap: 8px;
+            flex-wrap: wrap; padding: 12px 0;
+        }
+        .flow-box {
+            background: rgba(99,102,241,0.15);
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 8px; padding: 8px 14px;
+            font-size: 0.78rem; text-align: center;
+            white-space: nowrap;
+        }
+        .flow-arrow { color: var(--accent); font-size: 1.2rem; }
+        .chart-container { position: relative; height: 250px; }
+        .refresh-btn {
+            background: var(--accent); color: #fff;
+            border: none; padding: 8px 20px; border-radius: 8px;
+            cursor: pointer; font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .refresh-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        @media (max-width: 1200px) {
+            .layout { grid-template-columns: 1fr; }
+            .layout-3col { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1>⚙️ Aurora 系统维护信息示现</h1>
+        <div style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 4px;">
+            检测 → 归因 → 优化 → 进化 | 四阶闭环 | 实时监控
+        </div>
+    </div>
+    <div class="status-bar">
+        <span><span class="status-dot live"></span> 监控中</span>
+        <span style="color: var(--text-secondary);">上次刷新: <span id="lastRefresh">--</span></span>
+        <button class="refresh-btn" onclick="loadData()">🔄 刷新数据</button>
+    </div>
+</div>
+
+<!-- ===== 第一行：健康概览 + 严重度分布 ===== -->
+<div class="layout">
+    <div class="card" style="grid-row: span 2;">
+        <h3>🏥 系统健康概览</h3>
+        <div class="health-score">
+            <div class="score" id="healthScore" style="color: var(--critical);">--</div>
+            <div class="label">健康评分 / 100</div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="metric-row">
+                <span>总缺陷数</span>
+                <span class="metric-value" id="totalDefects">--</span>
+            </div>
+            <div class="metric-row">
+                <span>修复成功率</span>
+                <span class="metric-value" id="fixRate">--</span>
+            </div>
+            <div class="metric-row">
+                <span>知识库条目</span>
+                <span class="metric-value" id="knowledgeEntries">--</span>
+            </div>
+            <div class="metric-row">
+                <span>模型版本归档</span>
+                <span class="metric-value" id="modelVersions">--</span>
+            </div>
+            <div class="metric-row">
+                <span>下次深度优化</span>
+                <span style="color: var(--text-secondary);" id="nextDeepOpt">--</span>
+            </div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 6px;">健康趋势</div>
+            <div class="progress-bar">
+                <div class="progress-fill fill-danger" id="healthBar" style="width: 0%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>📊 缺陷严重度分布</h3>
+        <div class="chart-container">
+            <canvas id="severityChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>📐 10维度缺陷分布</h3>
+        <div class="chart-container">
+            <canvas id="dimensionChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 第二行：信息流 + 归因分析 ===== -->
+<div class="layout">
+    <div class="card full-width">
+        <h3>🔗 维护体系信息流 (模块间信息传递)</h3>
+        <div class="module-flow">
+            <div class="flow-box">📡 检测中心<br><small>10维度×28项扫描</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-box">🔍 归因分析中心<br><small>因果推断+DeepSeek</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-box">⚡ 微调引擎<br><small>GP-UCB贝叶斯优化</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-box">🧠 深度优化引擎<br><small>PPO+LSTM全量重训</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-box">👤 人类审核工作台<br><small>Human-in-the-Loop</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-box">🧬 进化引擎<br><small>知识沉淀+策略迭代</small></div>
+            <span class="flow-arrow">↻</span>
+            <div class="flow-box" style="border-style: dashed;">反馈闭环</div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 第三行：归因分析详情 + 自优化效果 ===== -->
+<div class="layout">
+    <div class="card">
+        <h3>🔬 缺陷归因分析 (Attribution Center)</h3>
+        <div id="attributionTable"></div>
+    </div>
+
+    <div class="card">
+        <h3>📈 自优化效果分析 (Self-Optimization)</h3>
+        <div class="chart-container">
+            <canvas id="optimizationChart"></canvas>
+        </div>
+        <div id="optimizationStats" style="margin-top: 12px;"></div>
+    </div>
+</div>
+
+<!-- ===== 第四行：技术栈实现途径 + 建议 ===== -->
+<div class="layout">
+    <div class="card">
+        <h3>🛠️ 技术栈实现途径 (Tech Stack Implementation)</h3>
+        <table>
+            <thead>
+                <tr><th>模块</th><th>技术栈</th><th>状态</th><th>实现阶段</th></tr>
+            </thead>
+            <tbody id="techStackTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>💡 维护建议与行动计划</h3>
+        <div id="recommendations"></div>
+    </div>
+</div>
+
+<!-- ===== 第五行：模拟时间线 ===== -->
+<div class="layout">
+    <div class="card full-width">
+        <h3>⏱️ 模拟执行时间线</h3>
+        <div class="timeline" id="timeline"></div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// 仪表盘数据加载与渲染
+// ═══════════════════════════════════════════════════════════════
+
+const API_URL = '/api/maintenance/report/latest';
+const TECH_STACK = [
+    { module: "检测中心 (DetectionCenter)", tech: "Python asyncio + psutil + pgmpy", status: "active", phase: "Phase 0 ✅" },
+    { module: "归因分析引擎 (AttributionEngine)", tech: "因果推断 + 贝叶斯网络 + DeepSeek", status: "active", phase: "Phase 0 ✅" },
+    { module: "微调优化 (FineTuneEngine)", tech: "GP-UCB (scikit-learn) + BO优化", status: "active", phase: "Phase 1 ✅" },
+    { module: "RL仓位优化 (RLEnhancerV2-PPO)", tech: "stable-baselines3 PPO + ONNX加速<1ms", status: "training", phase: "Phase 2 🔄" },
+    { module: "RL调度优化 (RLEnhancerV2-DQN)", tech: "stable-baselines3 DQN + ONNX加速", status: "training", phase: "Phase 2 🔄" },
+    { module: "深度优化 (DeepOptimizeEngine)", tech: "PPO全量重训 + LSTM市场预测器 + MLP评分预估", status: "pending", phase: "Phase 3 ⏳" },
+    { module: "渐进式部署 (Canary)", tech: "5%→10%→50%→100% 自动中止条件", status: "pending", phase: "Phase 3 ⏳" },
+    { module: "人类审核 (HumanReviewBoard)", tech: "Flask Web + 企业微信MCP推送", status: "active", phase: "Phase 4 ✅" },
+    { module: "进化引擎 (EvolutionEngine)", tech: "JSON知识库 + 版本管理 + 策略迭代", status: "active", phase: "Phase 4 ✅" },
+    { module: "运维监控 (Prometheus+Grafana)", tech: "prometheus_client + Grafana仪表盘", status: "pending", phase: "Phase 5 ⏳" },
+];
+
+let severityChart, dimensionChart, optimizationChart;
+
+function getStatusBadge(status) {
+    const map = {
+        'active': '<span class="badge badge-low">运行中</span>',
+        'training': '<span class="badge badge-info">训练中</span>',
+        'pending': '<span class="badge badge-medium">待实施</span>',
+    };
+    return map[status] || status;
+}
+
+function renderTechStack() {
+    document.getElementById('techStackTable').innerHTML = TECH_STACK.map(t =>
+        `<tr>
+            <td>${t.module}</td>
+            <td style="color:var(--text-secondary);font-size:0.78rem;">${t.tech}</td>
+            <td>${getStatusBadge(t.status)}</td>
+            <td style="font-size:0.78rem;">${t.phase}</td>
+        </tr>`
+    ).join('');
+}
+
+async function loadData() {
+    try {
+        const resp = await fetch(API_URL);
+        const data = await resp.json();
+        renderDashboard(data);
+        document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString('zh-CN');
+    } catch (e) {
+        console.warn('API未就绪，显示静态演示数据');
+        renderDashboardFallback();
+    }
+}
+
+function renderDashboard(data) {
+    const sev = data.defects_by_severity || {};
+    const dim = data.defects_by_dimension || {};
+    const evo = data.evolution || {};
+    const timeline = data.timeline || [];
+
+    // 健康评分
+    const score = data.system_health_score || 0;
+    const scoreEl = document.getElementById('healthScore');
+    scoreEl.textContent = score;
+    scoreEl.style.color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--medium)' : 'var(--critical)';
+
+    document.getElementById('healthBar').style.width = Math.max(0, Math.min(100, score)) + '%';
+    document.getElementById('healthBar').className = 'progress-fill ' +
+        (score >= 80 ? 'fill-success' : score >= 50 ? 'fill-warning' : 'fill-danger');
+
+    document.getElementById('totalDefects').textContent = data.total_defects || 0;
+    document.getElementById('fixRate').textContent = (evo.fix_success_rate || 0) + '%';
+    document.getElementById('fixRate').className = 'metric-value ' + ((evo.fix_success_rate || 0) >= 70 ? 'good' : 'warning');
+    document.getElementById('knowledgeEntries').textContent = evo.knowledge_entries_added || 0;
+    document.getElementById('modelVersions').textContent = evo.model_versions_archived || 0;
+    document.getElementById('nextDeepOpt').textContent = evo.next_scheduled_deep_optimize || '--';
+
+    // 严重度饼图
+    if (severityChart) severityChart.destroy();
+    severityChart = new Chart(document.getElementById('severityChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'],
+            datasets: [{
+                data: [sev.CRITICAL||0, sev.HIGH||0, sev.MEDIUM||0, sev.LOW||0, sev.INFO||0],
+                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'],
+                borderWidth: 2,
+                borderColor: '#111827',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } } }
+        }
+    });
+
+    // 维度柱状图
+    if (dimensionChart) dimensionChart.destroy();
+    const dimLabels = Object.keys(dim);
+    const dimValues = Object.values(dim);
+    dimensionChart = new Chart(document.getElementById('dimensionChart'), {
+        type: 'bar',
+        data: {
+            labels: dimLabels.map(l => l.replace('_', ' ')),
+            datasets: [{
+                label: '缺陷数',
+                data: dimValues,
+                backgroundColor: ['#6366f1','#8b5cf6','#a78bfa','#c084fc','#e879f9','#f472b6','#fb7185','#f97316','#eab308','#22c55e'],
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }
+            }
+        }
+    });
+
+    // 归因表
+    renderAttributionTable(Array.isArray(data.attribution_results) ? data.attribution_results : []);
+
+    // 优化效果图
+    renderOptimization(Array.isArray(data.fix_results) ? data.fix_results : []);
+
+    // 建议
+    renderRecommendations(Array.isArray(data.recommendations) ? data.recommendations : []);
+
+    // 时间线
+    renderTimeline(timeline);
+}
+
+function renderDashboardFallback() {
+    // 无API时显示静态演示
+    document.getElementById('healthScore').textContent = '10';
+    document.getElementById('healthScore').style.color = 'var(--critical)';
+    document.getElementById('healthBar').style.width = '10%';
+    document.getElementById('healthBar').className = 'progress-fill fill-danger';
+
+    document.getElementById('totalDefects').textContent = '24';
+    document.getElementById('fixRate').textContent = '45.8%';
+    document.getElementById('fixRate').className = 'metric-value warning';
+    document.getElementById('knowledgeEntries').textContent = '24';
+    document.getElementById('modelVersions').textContent = '3';
+    document.getElementById('nextDeepOpt').textContent = '2026-06-12';
+
+    if (severityChart) severityChart.destroy();
+    severityChart = new Chart(document.getElementById('severityChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['CRITICAL (4)', 'HIGH (11)', 'MEDIUM (8)', 'LOW (1)'],
+            datasets: [{
+                data: [4, 11, 8, 1],
+                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e'],
+                borderWidth: 2,
+                borderColor: '#111827',
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } } }
+        }
+    });
+
+    if (dimensionChart) dimensionChart.destroy();
+    dimensionChart = new Chart(document.getElementById('dimensionChart'), {
+        type: 'bar',
+        data: {
+            labels: ['data_source','database','strategy','security','system_resource','network','model','logs','trade_execution','compliance'],
+            datasets: [{
+                label: '缺陷数',
+                data: [3,2,3,3,3,2,2,1,3,2],
+                backgroundColor: ['#6366f1','#8b5cf6','#a78bfa','#c084fc','#e879f9','#f472b6','#fb7185','#f97316','#eab308','#22c55e'],
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }
+            }
+        }
+    });
+
+    // 示例归因数据
+    renderAttributionTable([
+        {defect_id:'DEF-0001',dimension:'strategy',root_cause:'市场结构转变导致策略信号失效',confidence:0.88,pnl_risk:15420},
+        {defect_id:'DEF-0002',dimension:'strategy',root_cause:'策略参数过拟合历史数据',confidence:0.82,pnl_risk:8920},
+        {defect_id:'DEF-0003',dimension:'security',root_cause:'外部IP扫描攻击',confidence:0.93,pnl_risk:35100},
+        {defect_id:'DEF-0004',dimension:'security',root_cause:'凭证泄露',confidence:0.76,pnl_risk:42000},
+        {defect_id:'DEF-0005',dimension:'model',root_cause:'模型漂移(Concept Drift)',confidence:0.84,pnl_risk:6700},
+    ]);
+
+    renderRecommendations([
+        '立即处理 4 个CRITICAL缺陷，建议暂停自动交易',
+        'HIGH缺陷超过3个，建议触发深度全面审查',
+        '修复成功率低于70%，需优化归因分析模型',
+        '系统健康评分仅 10/100，建议安排维护窗口',
+        '建议每日凌晨2:00-5:00执行全量10维度扫描',
+    ]);
+
+    renderTimeline([
+        {phase:'detection',timestamp:'2026-05-22T21:03:23'},
+        {phase:'attribution',timestamp:'2026-05-22T21:03:24'},
+        {phase:'optimization',timestamp:'2026-05-22T21:03:25'},
+        {phase:'review',timestamp:'2026-05-22T21:03:25'},
+        {phase:'evolution',timestamp:'2026-05-22T21:03:26'},
+    ]);
+
+    document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString('zh-CN');
+}
+
+function renderAttributionTable(items) {
+    const getBadge = (sev) => {
+        const map = {'CRITICAL':'badge-critical','HIGH':'badge-high','MEDIUM':'badge-medium','LOW':'badge-low'};
+        return map[sev] || 'badge-info';
+    };
+    const rows = items.slice(0, 8).map(a => {
+        const sev = a.dimension === 'strategy' ? (a.pnl_risk > 10000 ? 'CRITICAL' : 'HIGH') : 'MEDIUM';
+        return `<tr>
+            <td>${a.defect_id}</td>
+            <td>${a.dimension?.replace('_',' ') || '--'}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${a.root_cause}">${a.root_cause}</td>
+            <td>${(a.confidence*100).toFixed(0)}%</td>
+            <td style="color:var(--critical)">$${(a.pnl_risk||0).toLocaleString()}</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('attributionTable').innerHTML = `
+        <table>
+            <thead>
+                <tr><th>ID</th><th>维度</th><th>根因</th><th>置信度</th><th>PnL风险</th></tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary)">暂无归因数据</td></tr>'}</tbody>
+        </table>
+    `;
+}
+
+function renderOptimization(fixResults) {
+    const ftResults = fixResults.filter(f => f.track === 'fine_tune');
+    const doResults = fixResults.filter(f => f.track === 'deep_optimize');
+    const ftImproved = ftResults.filter(f => f.improved).length;
+    const doCount = doResults.length;
+
+    if (optimizationChart) optimizationChart.destroy();
+    optimizationChart = new Chart(document.getElementById('optimizationChart'), {
+        type: 'bar',
+        data: {
+            labels: ['微调执行', '微调成功', '深度优化'],
+            datasets: [{
+                label: '次数',
+                data: [ftResults.length, ftImproved, doCount],
+                backgroundColor: ['#6366f1', '#10b981', '#f97316'],
+                borderRadius: 8,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { ticks: { color: '#94a3b8', stepSize: 2 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+            }
+        }
+    });
+
+    const avgImprovement = ftResults.length > 0
+        ? (ftResults.reduce((s,f) => s + (f.improvement||0), 0) / ftResults.length).toFixed(2)
+        : '0';
+    document.getElementById('optimizationStats').innerHTML = `
+        <div class="metric-row">
+            <span>微调平均收益提升</span>
+            <span class="metric-value good">+${avgImprovement}%</span>
+        </div>
+        <div class="metric-row">
+            <span>微调成功率</span>
+            <span class="metric-value ${ftImproved/ftResults.length >= 0.7 ? 'good' : 'warning'}">
+                ${ftResults.length > 0 ? (ftImproved/ftResults.length*100).toFixed(0) : 0}%
+            </span>
+        </div>
+        <div class="metric-row">
+            <span>深度优化触发</span>
+            <span class="metric-value high">${doCount} 次</span>
+        </div>
+    `;
+}
+
+function renderRecommendations(recs) {
+    document.getElementById('recommendations').innerHTML = recs.map((r, i) =>
+        `<div class="recommendation">🔹 ${r}</div>`
+    ).join('');
+}
+
+function renderTimeline(timeline) {
+    const phaseNames = {
+        'detection': '📡 检测中心：10维度28项扫描',
+        'attribution': '🔍 归因分析中心：因果推断 + 根因定位',
+        'optimization': '⚡ 双轨优化引擎：微调 + 深度优化',
+        'review': '👤 人类审核工作台：关键操作审查',
+        'evolution': '🧬 进化引擎：知识沉淀 + 策略迭代',
+    };
+    document.getElementById('timeline').innerHTML = timeline.map((t, i) => `
+        <div class="timeline-item">
+            <div style="font-weight:600;">${phaseNames[t.phase] || t.phase}</div>
+            <div class="ts">${t.timestamp}</div>
+        </div>
+    `).join('');
+}
+
+// 初始化
+renderTechStack();
+loadData();
+
+// 自动刷新每30秒
+setInterval(loadData, 30000);
+</script>
+
+</body>
+</html>

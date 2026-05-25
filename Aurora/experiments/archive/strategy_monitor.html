@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora量化交易系统 - 策略监控与维护平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0a0d14;
+            --bg-card: #111827;
+            --bg-card-hover: #1f2937;
+            --accent-cyan: #00d4ff;
+            --accent-blue: #4a7dff;
+            --accent-purple: #7c5cfc;
+            --accent-gold: #c9a84c;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --border-subtle: rgba(255, 255, 255, 0.1);
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: rgba(17, 24, 39, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 1rem 0;
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-link {
+            color: var(--text-secondary) !important;
+            font-weight: 500;
+            padding: 0.75rem 1rem !important;
+            transition: all 0.3s;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--accent-cyan) !important;
+        }
+
+        .main-container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .panel-header {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .metric-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value.success {
+            color: var(--success);
+        }
+
+        .metric-value.danger {
+            color: var(--danger);
+        }
+
+        .metric-value.warning {
+            color: var(--warning);
+        }
+
+        .metric-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-badge.success {
+            background: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+        }
+
+        .status-badge.warning {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--warning);
+        }
+
+        .status-badge.danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+        }
+
+        .event-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .event-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .event-item:last-child {
+            border-bottom: none;
+        }
+
+        .event-type {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .event-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .btn-action {
+            padding: 0.5rem 1rem;
+            border-radius: 10px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(74, 125, 255, 0.4);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-subtle);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .chain-item {
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+        }
+
+        .chain-status {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid main-container" style="padding: 0 2rem;">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-graph-up-arrow me-2"></i>Aurora策略监控
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/strategy-platform">
+                    <i class="bi bi-boxes me-1"></i>策略管理
+                </a>
+                <a class="nav-link active" href="/strategy-monitor">
+                    <i class="bi bi-activity me-1"></i>策略监控
+                </a>
+                <a class="nav-link" href="/system-maintenance">
+                    <i class="bi bi-gear me-1"></i>系统维护
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- 页面标题 -->
+        <div class="page-header">
+            <h1 class="page-title">
+                <i class="bi bi-bar-chart-line me-2"></i>策略监控与维护平台
+            </h1>
+            <div>
+                <button class="btn-action btn-primary me-2" onclick="refreshData()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>刷新数据
+                </button>
+                <button class="btn-action btn-primary" onclick="generateReport()">
+                    <i class="bi bi-file-earmark-text me-1"></i>生成报告
+                </button>
+            </div>
+        </div>
+
+        <!-- 加载状态 -->
+        <div id="loading" class="loading show">
+            <div class="spinner"></div>
+            <p class="mt-3 text-secondary">正在加载监控数据...</p>
+        </div>
+
+        <!-- 主内容 -->
+        <div id="main-content" style="display: none;">
+            <!-- 概览统计卡片 -->
+            <div class="row mb-4">
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="total-events">0</div>
+                        <div class="metric-label">总事件数</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value success" id="success-events">0</div>
+                        <div class="metric-label">成功事件</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value danger" id="failed-events">0</div>
+                        <div class="metric-label">失败事件</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="paper-trades">0</div>
+                        <div class="metric-label">模拟盘活动</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="live-trades">0</div>
+                        <div class="metric-label">实盘活动</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="total-optimizations">0</div>
+                        <div class="metric-label">优化次数</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 优化器统计 -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <i class="bi bi-robot me-2"></i>优化器执行统计
+                </div>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="metric-card">
+                            <div class="metric-value" id="rl-count">0</div>
+                            <div class="metric-label">强化学习机器人</div>
+                            <div class="small text-success mt-2" id="rl-success">成功: 0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card">
+                            <div class="metric-value" id="v5-count">0</div>
+                            <div class="metric-label">智能体优化器V5</div>
+                            <div class="small text-success mt-2" id="v5-success">成功: 0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card">
+                            <div class="metric-value" id="v6-deep-count">0</div>
+                            <div class="metric-label">超能优化器V6(深度)</div>
+                            <div class="small text-success mt-2" id="v6-deep-success">成功: 0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card">
+                            <div class="metric-value" id="v6-auto-count">0</div>
+                            <div class="metric-label">超能优化器V6(自动)</div>
+                            <div class="small text-success mt-2" id="v6-auto-success">成功: 0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 最近事件 -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <i class="bi bi-clock-history me-2"></i>最近事件
+                </div>
+                <div class="event-list" id="event-list">
+                    <!-- 事件列表将动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let refreshInterval = null;
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardData();
+            // 每30秒自动刷新
+            refreshInterval = setInterval(loadDashboardData, 30000);
+        });
+
+        // 加载仪表盘数据
+        async function loadDashboardData() {
+            try {
+                showLoading(true);
+                
+                const response = await fetch('/api/strategy/monitor/dashboard');
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateDashboard(result.data);
+                }
+                
+                showLoading(false);
+            } catch (error) {
+                console.error('加载监控数据失败:', error);
+                showLoading(false);
+            }
+        }
+
+        // 显示/隐藏加载状态
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('show', show);
+            document.getElementById('main-content').style.display = show ? 'none' : 'block';
+        }
+
+        // 更新仪表盘
+        function updateDashboard(data) {
+            const stats = data.overview || {};
+            
+            // 更新基础统计
+            document.getElementById('total-events').textContent = stats.total_events || 0;
+            document.getElementById('success-events').textContent = stats.successful_events || 0;
+            document.getElementById('failed-events').textContent = stats.failed_events || 0;
+            document.getElementById('paper-trades').textContent = stats.paper_trades || 0;
+            document.getElementById('live-trades').textContent = stats.live_trades || 0;
+            document.getElementById('total-optimizations').textContent = 
+                (stats.rl_count || 0) + (stats.v5_count || 0) + (stats.v6_deep_count || 0) + (stats.v6_auto_count || 0);
+            
+            // 更新优化器统计
+            document.getElementById('rl-count').textContent = stats.rl_count || 0;
+            document.getElementById('rl-success').textContent = `成功: ${stats.rl_success || 0}`;
+            document.getElementById('v5-count').textContent = stats.v5_count || 0;
+            document.getElementById('v5-success').textContent = `成功: ${stats.v5_success || 0}`;
+            document.getElementById('v6-deep-count').textContent = stats.v6_deep_count || 0;
+            document.getElementById('v6-deep-success').textContent = `成功: ${stats.v6_deep_success || 0}`;
+            document.getElementById('v6-auto-count').textContent = stats.v6_auto_count || 0;
+            document.getElementById('v6-auto-success').textContent = `成功: ${stats.v6_auto_success || 0}`;
+            
+            // 更新事件列表
+            updateEventList(data.recent_events || []);
+        }
+
+        // 更新事件列表
+        function updateEventList(events) {
+            const container = document.getElementById('event-list');
+            
+            if (events.length === 0) {
+                container.innerHTML = '<div class="text-center text-secondary py-4">暂无事件记录</div>';
+                return;
+            }
+            
+            container.innerHTML = events.map(event => {
+                const statusClass = event.status === 'completed' ? 'success' : 
+                                   event.status === 'error' ? 'danger' : 'warning';
+                const statusIcon = event.status === 'completed' ? 'check-circle' : 
+                                  event.status === 'error' ? 'exclamation-circle' : 'clock';
+                
+                return `
+                    <div class="event-item">
+                        <div>
+                            <div class="event-type">
+                                <i class="bi bi-${statusIcon} text-${statusClass} me-2"></i>
+                                ${formatEventType(event.event_type)}
+                            </div>
+                            <div class="event-time">
+                                <i class="bi bi-clock me-1"></i>${new Date(event.timestamp).toLocaleString('zh-CN')}
+                            </div>
+                            ${event.strategy_id ? `<div class="small text-secondary mt-1">策略: ${event.strategy_id}</div>` : ''}
+                        </div>
+                        <span class="status-badge ${statusClass}">${formatEventStatus(event.status)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 格式化事件类型
+        function formatEventType(type) {
+            const typeMap = {
+                'environment_switch': '环境切换',
+                'environment_check': '环境检查',
+                'strategy_select': '策略选择',
+                'strategy_activate': '策略激活',
+                'strategy_deactivate': '策略停用',
+                'strategy_pending': '策略待激活',
+                'strategy_load': '策略加载',
+                'optimization_start': '优化任务开始',
+                'optimization_complete': '优化任务完成',
+                'optimization_error': '优化任务失败',
+                'optimizer_rl_start': '强化学习优化开始',
+                'optimizer_rl_complete': '强化学习优化完成',
+                'optimizer_rl_error': '强化学习优化失败',
+                'optimizer_v5_start': 'V5优化开始',
+                'optimizer_v5_complete': 'V5优化完成',
+                'optimizer_v5_error': 'V5优化失败',
+                'optimizer_v6_deep_start': 'V6深度优化开始',
+                'optimizer_v6_deep_complete': 'V6深度优化完成',
+                'optimizer_v6_deep_error': 'V6深度优化失败',
+                'optimizer_v6_auto_start': 'V6自动演进开始',
+                'optimizer_v6_auto_complete': 'V6自动演进完成',
+                'optimizer_v6_auto_error': 'V6自动演进失败',
+                'backtest_start': '回测开始',
+                'backtest_complete': '回测完成',
+                'backtest_error': '回测失败',
+                'backtest_report_generate': '回测报告生成',
+                'user_action': '用户操作',
+                'system_init': '系统初始化',
+                'api_error': 'API错误',
+                'performance_metric': '性能指标'
+            };
+            return typeMap[type] || type;
+        }
+
+        // 格式化事件状态
+        function formatEventStatus(status) {
+            const statusMap = {
+                'completed': '成功',
+                'error': '失败',
+                'in_progress': '进行中',
+                'pending': '待处理'
+            };
+            return statusMap[status] || status;
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadDashboardData();
+        }
+
+        // 生成报告
+        async function generateReport() {
+            try {
+                const response = await fetch('/api/strategy/monitor/report');
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 创建报告下载
+                    const reportData = JSON.stringify(result.data, null, 2);
+                    const blob = new Blob([reportData], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `strategy_monitor_report_${new Date().toISOString().slice(0,10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    
+                    alert('报告已生成并开始下载！');
+                }
+            } catch (error) {
+                console.error('生成报告失败:', error);
+                alert('生成报告失败，请检查控制台日志');
+            }
+        }
+    </script>
+</body>
+</html>
