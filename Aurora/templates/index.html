@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ch<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -9,7 +9,7 @@
     <style>
         :root {
             --primary-color: #00d4ff;
-            --success-color: #4ade80;
+            --success-color: #00ff88;
             --warning-color: #ffaa00;
             --danger-color: #ff4757;
             --bg-dark: #0d1117;
@@ -168,13 +168,9 @@
         }
         
         /* ===== 表格 ===== */
-        .table-custom,
-        .table-custom > thead > tr > th,
-        .table-custom > tbody > tr > td,
-        .table-custom > tbody > tr {
-            background-color: var(--bg-card) !important;
-            color: var(--text-primary) !important;
-            border-color: var(--border-color) !important;
+        .table-custom {
+            color: var(--text-primary);
+            margin-bottom: 0;
         }
         .table-custom thead th {
             border-bottom: 2px solid var(--border-color);
@@ -291,13 +287,87 @@
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
         
         /* ===== 徽章 ===== */
-        .badge-running { border: 1px solid #4ade80; color: #4ade80; font-weight: 700; }
-        .badge-paused { border: 1px solid #fbbf24; color: #fbbf24; font-weight: 700; }
-        .badge-stopped { border: 1px solid #f87171; color: #f87171; font-weight: 700; }
-        .badge-waiting { border: 1px solid #9ca3af; color: #9ca3af; font-weight: 700; }
-        .alert-item { color: #8b949e; }
-        .alert-item span:not([style*="color"]) { color: #8b949e; }
-        .text-muted { color: #6e7681 !important; }
+        .badge-running { background-color: rgba(0,255,136,0.15); color: var(--success-color); }
+        .badge-paused { background-color: rgba(255,170,0,0.15); color: var(--warning-color); }
+        .badge-stopped { background-color: rgba(255,71,87,0.15); color: var(--danger-color); }
+        .badge-waiting { background-color: rgba(139,148,158,0.15); color: var(--text-muted); }
+        .badge-enabled { background: rgba(0,255,136,0.15); color: var(--success-color); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+        .badge-disabled { background: rgba(139,148,158,0.15); color: var(--text-muted); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+
+        /* ===== 增益模块卡片 ===== */
+        .gain-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            transition: all 0.3s;
+            height: 100%;
+        }
+        .gain-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.1);
+        }
+        .gain-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .gain-card-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .gain-card-body {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .gain-metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .gain-metric:last-child {
+            border-bottom: none;
+        }
+        .gain-metric-label { color: var(--text-muted); }
+        .gain-metric-value { color: var(--text-primary); font-weight: 500; }
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            cursor: pointer;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #30363d;
+            border-radius: 24px;
+            transition: 0.3s;
+        }
+        .toggle-slider:before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: #8b949e;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: rgba(0,212,255,0.3);
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+            background: var(--primary-color);
+        }
     </style>
 </head>
 <body>
@@ -790,8 +860,223 @@
         </div>
     </div>
 
-    <!-- ===== 第八行：安全监控中心 ===== -->
+    <!-- ===== 第八行：增益性优化模块 ===== -->
     <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header-custom">
+                    🚀 增益性优化模块
+                    <small class="text-muted ms-2" style="font-size:12px;">策略性能追踪 · 统一风险控制 · 智能参数优化 · RL增强 · 数据质量验证</small>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3" id="gainModulesContainer">
+                        <!-- 策略性能追踪器 -->
+                        <div class="col-lg-2-4 col-md-6" style="flex:0 0 20%;max-width:20%;">
+                            <div class="gain-card" id="gain-performance">
+                                <div class="gain-card-header">
+                                    <span class="gain-card-title">📊 性能追踪器</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="toggle-performance" onchange="toggleGainModule('performance', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="gain-card-body">
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">状态</span>
+                                        <span class="gain-metric-value" id="perf-status"><span class="badge-disabled">未加载</span></span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">夏普比率</span>
+                                        <span class="gain-metric-value" id="perf-sharpe">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">交易次数</span>
+                                        <span class="gain-metric-value" id="perf-trades">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">胜率</span>
+                                        <span class="gain-metric-value" id="perf-winrate">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 统一风险控制器 -->
+                        <div class="col-lg-2-4 col-md-6" style="flex:0 0 20%;max-width:20%;">
+                            <div class="gain-card" id="gain-risk">
+                                <div class="gain-card-header">
+                                    <span class="gain-card-title">🛡️ 风险控制器</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="toggle-risk" onchange="toggleGainModule('risk', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="gain-card-body">
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">状态</span>
+                                        <span class="gain-metric-value" id="risk-status"><span class="badge-disabled">未加载</span></span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">总预算</span>
+                                        <span class="gain-metric-value" id="risk-budget">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">已使用</span>
+                                        <span class="gain-metric-value" id="risk-used">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">策略数</span>
+                                        <span class="gain-metric-value" id="risk-strategies">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 智能参数优化器 -->
+                        <div class="col-lg-2-4 col-md-6" style="flex:0 0 20%;max-width:20%;">
+                            <div class="gain-card" id="gain-optimizer">
+                                <div class="gain-card-header">
+                                    <span class="gain-card-title">🔧 参数优化器</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="toggle-optimizer" onchange="toggleGainModule('optimizer', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="gain-card-body">
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">状态</span>
+                                        <span class="gain-metric-value" id="opt-status"><span class="badge-disabled">未加载</span></span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">优化次数</span>
+                                        <span class="gain-metric-value" id="opt-count">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">最佳收益</span>
+                                        <span class="gain-metric-value" id="opt-best">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">搜索空间</span>
+                                        <span class="gain-metric-value" id="opt-space">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- RL增强器 -->
+                        <div class="col-lg-2-4 col-md-6" style="flex:0 0 20%;max-width:20%;">
+                            <div class="gain-card" id="gain-rl">
+                                <div class="gain-card-header">
+                                    <span class="gain-card-title">🧠 RL增强器</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="toggle-rl" onchange="toggleGainModule('rl', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="gain-card-body">
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">状态</span>
+                                        <span class="gain-metric-value" id="rl-status"><span class="badge-disabled">未加载</span></span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">训练步数</span>
+                                        <span class="gain-metric-value" id="rl-steps">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">策略损失</span>
+                                        <span class="gain-metric-value" id="rl-loss">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">经验数</span>
+                                        <span class="gain-metric-value" id="rl-experience">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 数据质量验证器 -->
+                        <div class="col-lg-2-4 col-md-6" style="flex:0 0 20%;max-width:20%;">
+                            <div class="gain-card" id="gain-quality">
+                                <div class="gain-card-header">
+                                    <span class="gain-card-title">✅ 数据质量</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="toggle-quality" onchange="toggleGainModule('quality', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="gain-card-body">
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">状态</span>
+                                        <span class="gain-metric-value" id="qual-status"><span class="badge-disabled">未加载</span></span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">综合评分</span>
+                                        <span class="gain-metric-value" id="qual-score">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">异常数</span>
+                                        <span class="gain-metric-value" id="qual-anomalies">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">数据源</span>
+                                        <span class="gain-metric-value" id="qual-sources">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 牧羊人五行安全优化器 -->
+                        <div class="col-lg-2-4 col-md-6" style="flex:0 0 20%;max-width:20%;">
+                            <div class="gain-card" id="gain-shepherd">
+                                <div class="gain-card-header">
+                                    <span class="gain-card-title">🐑 牧羊人优化器</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="toggle-shepherd" onchange="toggleShepherdAutoRefresh(this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="gain-card-body">
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">状态</span>
+                                        <span class="gain-metric-value" id="shepherd-status"><span class="badge-disabled">未加载</span></span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">评分</span>
+                                        <span class="gain-metric-value" id="shepherd-score">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">迭代次数</span>
+                                        <span class="gain-metric-value" id="shepherd-loops">--</span>
+                                    </div>
+                                    <div class="gain-metric">
+                                        <span class="gain-metric-label">运行次数</span>
+                                        <span class="gain-metric-value" id="shepherd-runs">--</span>
+                                    </div>
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-primary w-100" onclick="startShepherdOptimization()" id="shepherd-start-btn">▶ 启动优化</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- 增益模块趋势图 -->
+                <div class="row g-3 mt-2">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header-custom">
+                                📈 增益模块趋势总览
+                                <small class="text-muted ms-2" style="font-size:12px;">各模块关键指标可视化</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" id="gainTrendChart" style="height:320px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 第九行：安全监控中心 ===== -->
+    <div class="row g-3 mb-4">
+
         <div class="col-12">
             <div class="phishing-defense">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -859,7 +1144,9 @@
 let profitChart, positionChart, strategyChart, technicalChart;
 let mlOptimizationChart, strategyComparisonChart, performanceAttributionChart;
 let riskHeatmapChart, rollingBacktestChart, westernQuantChart, strategyCombinationChart;
+let gainTrendChart;
 let updateInterval;
+
 
 // ===== 颜色主题 =====
 const colors = {
@@ -1065,13 +1352,89 @@ function initCharts() {
         }]
     });
 
+    // 增益模块趋势图
+    gainTrendChart = echarts.init(document.getElementById('gainTrendChart'));
+    gainTrendChart.setOption({
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(22,27,34,0.9)',
+            borderColor: '#30363d',
+            textStyle: { color: '#e6edf3' }
+        },
+        legend: {
+            data: ['性能追踪器', '风险控制器', '参数优化器', 'RL增强器', '数据质量', '牧羊人优化器'],
+            textStyle: { color: colors.text },
+            top: 0
+        },
+
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: ['指标1', '指标2', '指标3', '指标4', '指标5', '指标6'],
+            axisLine: { lineStyle: { color: colors.grid } },
+            axisLabel: { color: colors.text }
+        },
+        yAxis: {
+            type: 'value',
+            splitLine: { lineStyle: { color: colors.grid } },
+            axisLabel: { color: colors.text }
+        },
+        series: [
+            {
+                name: '性能追踪器',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: colors.primary },
+                barWidth: '12%'
+            },
+            {
+                name: '风险控制器',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: colors.success },
+                barWidth: '12%'
+            },
+            {
+                name: '参数优化器',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: colors.warning },
+                barWidth: '12%'
+            },
+            {
+                name: 'RL增强器',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: colors.purple },
+                barWidth: '12%'
+            },
+            {
+                name: '数据质量',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: colors.teal },
+                barWidth: '12%'
+            },
+            {
+                name: '牧羊人优化器',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: '#ff6b35' },
+                barWidth: '12%'
+            }
+        ]
+
+    });
+
     // 窗口自适应
     window.addEventListener('resize', () => {
         [profitChart, positionChart, strategyChart, technicalChart,
          mlOptimizationChart, strategyComparisonChart, performanceAttributionChart,
-         riskHeatmapChart, rollingBacktestChart, westernQuantChart, strategyCombinationChart].forEach(c => c && c.resize());
+         riskHeatmapChart, rollingBacktestChart, westernQuantChart, strategyCombinationChart,
+         gainTrendChart].forEach(c => c && c.resize());
     });
 }
+
 
 // ===== 模拟数据更新 =====
 function updateMockData() {
@@ -1258,21 +1621,270 @@ document.getElementById('logout-btn')?.addEventListener('click', async () => {
     }
 });
 
+// ========== 增益性优化模块 ==========
+
+// 获取增益模块全局状态
+async function loadGainStatus() {
+    try {
+        const response = await fetch('/api/gain/status');
+        const data = await response.json();
+        if (data.success) {
+            updateGainUI(data);
+        }
+    } catch (e) {
+        console.error('加载增益模块状态失败:', e);
+    }
+}
+
+// 更新增益模块UI
+function updateGainUI(data) {
+    // 后端 /api/gain/status 返回 {success: true, data: {performance_tracker: {...}, risk_controller: {...}, ...}}
+    const modules = data.data || {};
+
+    // 性能追踪器
+    const perf = modules.performance_tracker || {};
+    updateGainCard('perf', perf, {
+        status: perf.enabled ? '<span class="badge-enabled">已启用</span>' : (perf.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        sharpe: perf.sharpe_ratio != null ? perf.sharpe_ratio.toFixed(2) : '--',
+        trades: perf.total_trades != null ? perf.total_trades : (perf.strategies ? perf.strategies.length : '--'),
+        winrate: perf.win_rate != null ? (perf.win_rate * 100).toFixed(1) + '%' : '--'
+    });
+    document.getElementById('toggle-performance').checked = perf.enabled || false;
+
+    // 风险控制器
+    const risk = modules.risk_controller || {};
+    updateGainCard('risk', risk, {
+        status: risk.enabled ? '<span class="badge-enabled">已启用</span>' : (risk.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        budget: risk.capital != null ? risk.capital.toFixed(2) : '--',
+        used: risk.used_budget != null ? risk.used_budget.toFixed(2) : '--',
+        strategies: risk.strategies ? risk.strategies.length : '--'
+    });
+    document.getElementById('toggle-risk').checked = risk.enabled || false;
+
+    // 参数优化器
+    const opt = modules.param_optimizer || {};
+    updateGainCard('opt', opt, {
+        status: opt.enabled ? '<span class="badge-enabled">已启用</span>' : (opt.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        count: opt.total_optimizations != null ? opt.total_optimizations : '--',
+        best: opt.best_return != null ? opt.best_return.toFixed(2) + '%' : '--',
+        space: opt.search_space_size != null ? opt.search_space_size : '--'
+    });
+    document.getElementById('toggle-optimizer').checked = opt.enabled || false;
+
+    // RL增强器
+    const rl = modules.rl_enhancer || {};
+    updateGainCard('rl', rl, {
+        status: rl.enabled ? '<span class="badge-enabled">已启用</span>' : (rl.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        steps: rl.total_steps != null ? rl.total_steps : '--',
+        loss: rl.policy_loss != null ? rl.policy_loss.toFixed(4) : '--',
+        experience: rl.buffer_size != null ? rl.buffer_size : '--'
+    });
+    document.getElementById('toggle-rl').checked = rl.enabled || false;
+
+    // 数据质量验证器
+    const qual = modules.data_validator || {};
+    updateGainCard('qual', qual, {
+        status: qual.enabled ? '<span class="badge-enabled">已启用</span>' : (qual.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        score: qual.overall_score != null ? qual.overall_score.toFixed(1) : '--',
+        anomalies: qual.total_issues != null ? qual.total_issues : '--',
+        sources: qual.total_checks != null ? qual.total_checks : '--'
+    });
+    document.getElementById('toggle-quality').checked = qual.enabled || false;
+
+    // 牧羊人优化器
+    const shepherd = modules.shepherd_optimizer || {};
+    updateGainCard('shepherd', shepherd, {
+        status: shepherd.enabled ? '<span class="badge-enabled">已启用</span>' : (shepherd.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+        score: shepherd.overall_score != null ? shepherd.overall_score.toFixed(1) : '--',
+        loops: shepherd.total_loops != null ? shepherd.total_loops : '--',
+        runs: shepherd.total_runs != null ? shepherd.total_runs : '--'
+    });
+    document.getElementById('toggle-shepherd').checked = shepherd.enabled || false;
+    const startBtn = document.getElementById('shepherd-start-btn');
+    if (startBtn) {
+        startBtn.disabled = shepherd.running || false;
+        startBtn.textContent = shepherd.running ? '⏳ 运行中...' : '▶ 启动优化';
+    }
+}
+
+
+// 更新单个增益卡片
+function updateGainCard(prefix, moduleData, fields) {
+    for (const [key, value] of Object.entries(fields)) {
+        const el = document.getElementById(prefix + '-' + key);
+        if (el) el.innerHTML = value;
+    }
+}
+
+// 切换增益模块启用/禁用
+async function toggleGainModule(module, enabled) {
+    const endpoints = {
+        'performance': '/api/gain/performance/enable',
+        'risk': '/api/gain/risk/enable',
+        'optimizer': '/api/gain/optimizer/enable',
+        'rl': '/api/gain/rl/enable',
+        'quality': '/api/gain/quality/enable'
+    };
+    const endpoint = endpoints[module];
+    if (!endpoint) return;
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+        });
+        const data = await response.json();
+        if (data.success) {
+            // 重新加载所有增益模块状态
+            setTimeout(loadGainStatus, 500);
+        } else {
+            console.error('切换增益模块失败:', data.message);
+            // 恢复开关状态
+            document.getElementById('toggle-' + module).checked = !enabled;
+        }
+    } catch (e) {
+        console.error('切换增益模块失败:', e);
+        document.getElementById('toggle-' + module).checked = !enabled;
+    }
+}
+
+// ===== 加载增益模块趋势数据 =====
+async function loadGainTrend() {
+    try {
+        const response = await fetch('/api/gain/history');
+        const data = await response.json();
+        if (data.success) {
+            const history = data.data || {};
+            
+            // 构建分组柱状图数据
+            // 每个模块取前3个指标展示
+            const categories = ['指标1', '指标2', '指标3'];
+            const perfData = (history.performance || []).slice(0, 3).map(i => i.value);
+            const riskData = (history.risk || []).slice(0, 3).map(i => i.value);
+            const optData = (history.optimizer || []).slice(0, 3).map(i => i.value);
+            const rlData = (history.rl || []).slice(0, 3).map(i => i.value);
+            const qualData = (history.quality || []).slice(0, 3).map(i => i.value);
+            const shepherdData = (history.shepherd || []).slice(0, 3).map(i => i.value);
+            
+            // 构建类别标签（取各模块指标名称）
+            const perfLabels = (history.performance || []).slice(0, 3).map(i => i.label);
+            const riskLabels = (history.risk || []).slice(0, 3).map(i => i.label);
+            const optLabels = (history.optimizer || []).slice(0, 3).map(i => i.label);
+            const rlLabels = (history.rl || []).slice(0, 3).map(i => i.label);
+            const qualLabels = (history.quality || []).slice(0, 3).map(i => i.label);
+            const shepherdLabels = (history.shepherd || []).slice(0, 3).map(i => i.label);
+            
+            // 取最长的标签组作为x轴
+            const allLabels = [perfLabels, riskLabels, optLabels, rlLabels, qualLabels, shepherdLabels];
+            const maxLen = Math.max(...allLabels.map(l => l.length));
+            const xData = [];
+            for (let i = 0; i < maxLen; i++) {
+                const label = allLabels.map(l => l[i] || '').filter(Boolean).join(' / ');
+                xData.push(label || `指标${i+1}`);
+            }
+            
+            // 补齐数据到相同长度
+            const pad = (arr, len) => {
+                const result = [...arr];
+                while (result.length < len) result.push(0);
+                return result;
+            };
+            
+            gainTrendChart.setOption({
+                xAxis: { data: xData },
+                series: [
+                    { data: pad(perfData, maxLen) },
+                    { data: pad(riskData, maxLen) },
+                    { data: pad(optData, maxLen) },
+                    { data: pad(rlData, maxLen) },
+                    { data: pad(qualData, maxLen) },
+                    { data: pad(shepherdData, maxLen) }
+                ]
+            });
+        }
+    } catch (e) {
+        console.error('加载增益趋势数据失败:', e);
+    }
+}
+
+// ===== 牧羊人优化器 =====
+async function loadShepherdStatus() {
+    try {
+        const response = await fetch('/api/shepherd/status');
+        const data = await response.json();
+        if (data.success) {
+            const s = data.data || {};
+            updateGainCard('shepherd', s, {
+                status: s.enabled ? '<span class="badge-enabled">已启用</span>' : (s.available === false ? '<span class="badge-disabled">不可用</span>' : '<span class="badge-disabled">已禁用</span>'),
+                score: s.overall_score != null ? s.overall_score.toFixed(1) : '--',
+                loops: s.total_loops != null ? s.total_loops : '--',
+                runs: s.total_runs != null ? s.total_runs : '--'
+            });
+            document.getElementById('toggle-shepherd').checked = s.enabled || false;
+            const startBtn = document.getElementById('shepherd-start-btn');
+            if (startBtn) {
+                startBtn.disabled = s.running || false;
+                startBtn.textContent = s.running ? '⏳ 运行中...' : '▶ 启动优化';
+            }
+        }
+    } catch (e) {
+        console.error('加载牧羊人优化器状态失败:', e);
+    }
+}
+
+async function startShepherdOptimization() {
+    const btn = document.getElementById('shepherd-start-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = '⏳ 启动中...';
+    try {
+        const response = await fetch('/api/shepherd/start', { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+            btn.textContent = '⏳ 运行中...';
+            setTimeout(loadShepherdStatus, 2000);
+        } else {
+            btn.disabled = false;
+            btn.textContent = '▶ 启动优化';
+            console.error('启动牧羊人优化器失败:', data.message);
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '▶ 启动优化';
+        console.error('启动牧羊人优化器失败:', e);
+    }
+}
+
+function toggleShepherdAutoRefresh(enabled) {
+    fetch('/api/shepherd/auto-refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled })
+    }).catch(e => console.error('切换牧羊人自动刷新失败:', e));
+}
+
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
+
     initCharts();
     checkAuth();
     loadMarketData();
     loadStockPool();
     updateSecurityLogs();
     updateMockData();
+    loadGainStatus();
+    loadGainTrend();
 
     // 定时更新
     updateInterval = setInterval(() => {
         updateMockData();
         loadMarketData();
-    }, 5000);
+        loadGainStatus();
+        loadGainTrend();
+    }, 10000);
 });
+
 </script>
 </body>
 </html>
