@@ -293,8 +293,8 @@ def check_network_status():
 def check_database_status():
     """检查数据库状态"""
     try:
-        from utils.database_manager import get_database_manager
-        db = get_database_manager()
+        from utils.database_manager import get_db_manager
+        db = get_db_manager()
         stats = db.get_database_stats()
         
         # 分析数据库状态

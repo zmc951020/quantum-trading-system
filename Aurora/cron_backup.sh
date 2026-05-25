@@ -1,25 +1,25 @@
 #!/bin/bash
-"""
-Aurora量化交易系统 - 数据库备份与归档定时任务脚本
-用于Linux crontab定时执行数据库备份和归档
-
-使用方法:
-  1. 编辑crontab: crontab -e
-  2. 添加以下行:
-     # 每天凌晨2点执行数据库备份
-     0 2 * * * /path/to/Aurora/cron_backup.sh backup
-     
-     # 每周日凌晨3点执行归档
-     0 3 * * 0 /path/to/Aurora/cron_backup.sh archive
-     
-     # 每月1日凌晨4点执行压缩
-     0 4 1 * * /path/to/Aurora/cron_backup.sh vacuum
-     
-     # 每天凌晨2:30执行完整维护（备份+归档+压缩）
-     30 2 * * * /path/to/Aurora/cron_backup.sh full
-
-  3. 确保脚本有执行权限: chmod +x cron_backup.sh
-"""
+# ================================================================
+# Aurora量化交易系统 - 数据库备份与归档定时任务脚本
+# 用于Linux crontab定时执行数据库备份和归档
+#
+# 使用方法:
+#   1. 编辑crontab: crontab -e
+#   2. 添加以下行:
+#      # 每天凌晨2点执行数据库备份
+#      0 2 * * * /path/to/Aurora/cron_backup.sh backup
+#
+#      # 每周日凌晨3点执行归档
+#      0 3 * * 0 /path/to/Aurora/cron_backup.sh archive
+#
+#      # 每月1日凌晨4点执行压缩
+#      0 4 1 * * /path/to/Aurora/cron_backup.sh vacuum
+#
+#      # 每天凌晨2:30执行完整维护（备份+归档+压缩）
+#      30 2 * * * /path/to/Aurora/cron_backup.sh full
+#
+#   3. 确保脚本有执行权限: chmod +x cron_backup.sh
+# ================================================================
 
 APP_DIR=$(dirname "$0")
 LOG_DIR="$APP_DIR/logs"

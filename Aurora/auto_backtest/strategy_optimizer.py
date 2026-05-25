@@ -81,9 +81,6 @@ class StrategyOptimizer:
     def _optimize_parameters(self, strategy_name):
         """
         根据策略类型生成优化参数
-        支持两种模式：
-          1. 动态读取 — 策略类有 get_optimizable_params() 方法时优先使用
-          2. 硬编码回退 — 兼容没有该方法的旧策略
         
         Args:
             strategy_name: 策略名称
@@ -91,7 +88,17 @@ class StrategyOptimizer:
         Returns:
             优化后的参数
         """
-        # --- 硬编码配置（向后兼容，作为回退方案）---
+        # ===== 增益性优化：尝试使用SmartParamOptimizer =====
+        smart_optimizer = None
+        try:
+            from utils.smart_param_optimizer import get_param_optimizer
+            smart_optimizer = get_param_optimizer()
+            if smart_optimizer and smart_optimizer.enabled:
+                print(f"[SmartOptimizer] 使用智能参数优化器优化 {strategy_name}")
+        except Exception as e:
+            print(f"[SmartOptimizer] 导入失败: {e}")
+            smart_optimizer = None
+
         optimization_configs = {
             'MLRangeGridTrading': {
                 'description': '机器学习网格交易策略',
@@ -121,52 +128,60 @@ class StrategyOptimizer:
             }
         }
 
-        config = None
+        config = optimization_configs.get(strategy_name)
 
-        # === 模式1：尝试动态读取策略参数（优先） ===
-        try:
-            file_name = self._get_strategy_file(strategy_name)
-            if file_name:
-                module_path = f"strategies.{file_name.replace('.py', '')}"
-                # 动态导入策略模块
-                import importlib
-                module = importlib.import_module(module_path)
-                strategy_class = getattr(module, strategy_name, None)
-                if strategy_class and hasattr(strategy_class, 'get_optimizable_params'):
-                    optimizable_params = strategy_class.get_optimizable_params()
-                    if optimizable_params:
-                        config = {
-                            'description': f'{strategy_name}（动态读取）',
-                            'params': optimizable_params
-                        }
-                        print(f"[成功] 从策略类 {strategy_name} 动态读取参数配置")
-        except Exception as e:
-            print(f"[提示] 动态读取策略参数失败（将使用硬编码回退）: {e}")
+        # ===== 增益性优化：如果硬编码配置中找不到，尝试从策略类动态读取 =====
+        if not config:
+            try:
+                # 通过策略文件映射动态导入策略类
+                strategy_file = self._strategy_file_map.get(strategy_name)
+                if strategy_file:
+                    module_name = strategy_file.replace('.py', '')
+                    # 尝试从 strategies 包导入
+                    module = __import__(f'strategies.{module_name}', fromlist=[strategy_name])
+                    strategy_class = getattr(module, strategy_name, None)
+                    if strategy_class and hasattr(strategy_class, 'get_optimizable_params'):
+                        optimizable_params = strategy_class.get_optimizable_params()
+                        if optimizable_params:
+                            config = {
+                                'description': f'{strategy_name} 动态参数配置',
+                                'params': optimizable_params
+                            }
+                            print(f"[StrategyOptimizer] 从策略类 {strategy_name} 动态读取参数配置: {list(optimizable_params.keys())}")
+            except Exception as e:
+                print(f"[StrategyOptimizer] 动态读取策略参数失败: {e}")
 
-        # === 模式2：硬编码回退 ===
-        if config is None:
-            config = optimization_configs.get(strategy_name)
-            if config:
-                print(f"[信息] 使用硬编码配置优化 {strategy_name}")
-            else:
-                print(f"[警告] 未找到策略 '{strategy_name}' 的优化配置")
-                return None
+        if not config:
+            return None
 
-        # === 执行参数优化 ===
         optimized_params = {}
         for param_name, param_info in config['params'].items():
-            current = param_info.get('current', param_info.get('default', 0.5))
-            param_range = param_info.get('range', [current * 0.5, current * 1.5])
-            step = param_info.get('step', max(current * 0.1, 0.001))
+            current = param_info['current']
+            param_range = param_info['range']
+            step = param_info['step']
 
+            # ===== 增益性优化：使用SmartParamOptimizer进行智能参数优化 =====
+            if smart_optimizer and smart_optimizer.enabled:
+                smart_result = smart_optimizer.optimize_param(
+                    param_name=param_name,
+                    current_value=current,
+                    param_range=param_range,
+                    step=step,
+                    strategy_name=strategy_name,
+                )
+                if smart_result is not None:
+                    optimized_params[param_name] = round(smart_result, 6)
+                    print(f"[SmartOptimizer] {param_name}: {current} -> {smart_result:.6f}")
+                    continue
+
+            # 回退到随机搜索
             num_trials = 10
             best_value = current
             best_score = -float('inf')
 
             for _ in range(num_trials):
                 trial_value = np.random.uniform(param_range[0], param_range[1])
-                if step > 0:
-                    trial_value = round(trial_value / step) * step
+                trial_value = round(trial_value / step) * step
 
                 score = self._calculate_param_score(param_name, trial_value, param_info)
                 
@@ -175,6 +190,14 @@ class StrategyOptimizer:
                     best_value = trial_value
 
             optimized_params[param_name] = round(best_value, 6)
+
+        # ===== 增益性优化：记录优化历史 =====
+        if smart_optimizer and smart_optimizer.enabled:
+            smart_optimizer.record_optimization(
+                strategy_name=strategy_name,
+                params=optimized_params,
+                performance_score=0.0,  # 将在回测后更新
+            )
 
         return optimized_params
 

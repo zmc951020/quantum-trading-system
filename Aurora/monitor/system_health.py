@@ -78,11 +78,14 @@ class SystemHealthMonitor:
             "ml_manager",           # 机器学习模块
             "risk_control",         # 风控模块
             "strategy",             # 策略模块
+            "strategy_monitor",     # 策略监控模块
+            "enhanced_evaluator",   # 增强型评估器模块
             "system",               # 系统整体
             "phishing_defense",    # 防钓鱼系统
             "enhanced_security",    # 增强安全控制
             "monitoring_scheduler",  # 监控调度器
             "database",             # 数据库
+            "gain_modules",         # 增益性优化模块
         ]
 
         for module_name in module_list:
@@ -122,20 +125,29 @@ class SystemHealthMonitor:
         # 6. 检查策略模块
         self._check_strategy(results)
 
-        # 7. 检查系统整体
+        # 7. 检查策略监控模块
+        self._check_strategy_monitor(results)
+
+        # 8. 检查增强型评估器模块
+        self._check_enhanced_evaluator(results)
+
+        # 9. 检查系统整体
         self._check_system(results)
         
-        # 8. 检查防钓鱼系统
+        # 9. 检查防钓鱼系统
         self._check_phishing_defense(results)
         
-        # 9. 检查增强安全控制
+        # 10. 检查增强安全控制
         self._check_enhanced_security(results)
         
-        # 10. 检查监控调度器
+        # 11. 检查监控调度器
         self._check_monitoring_scheduler(results)
         
-        # 11. 检查数据库
+        # 12. 检查数据库
         self._check_database(results)
+
+        # 12. 检查增益性优化模块
+        self._check_gain_modules(results)
 
         # 计算总体状态
         self._calculate_overall_status(results)
@@ -344,6 +356,112 @@ class SystemHealthMonitor:
             "last_error": module.last_error
         }
 
+    def _check_strategy_monitor(self, results: Dict):
+        """检查策略监控模块"""
+        module = self.modules["strategy_monitor"]
+        module.checks = {}
+
+        try:
+            # 检查导入
+            try:
+                import sys
+                import os
+                # 添加上级目录到路径以便导入
+                aurora_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                if aurora_dir not in sys.path:
+                    sys.path.insert(0, aurora_dir)
+                
+                from strategy_monitor import get_strategy_monitor
+                module.checks["import"] = {"result": "ok", "message": "策略监控模块导入成功"}
+            except Exception as import_e:
+                module.checks["import"] = {"result": "warning", "message": f"策略监控模块导入警告: {str(import_e)}"}
+                results["warnings"].append(f"策略监控模块导入警告: {str(import_e)}")
+            
+            # 尝试获取监控器
+            try:
+                monitor = get_strategy_monitor()
+                if monitor:
+                    module.checks["init"] = {"result": "ok", "message": "策略监控器初始化成功"}
+                    
+                    # 获取监控统计
+                    try:
+                        stats = monitor.get_stats()
+                        module.checks["stats"] = {"result": "ok", "message": f"监控统计已获取: 总事件 {stats.get('total_events', 0)} 个"}
+                        
+                        # 获取最近事件
+                        recent_events = monitor.get_recent_events(limit=5)
+                        module.checks["events"] = {"result": "ok", "message": f"最近事件: {len(recent_events)} 条"}
+                        
+                        module.set_healthy("策略监控模块正常")
+                    except Exception as stat_e:
+                        module.checks["stats"] = {"result": "warning", "message": f"获取监控统计异常: {str(stat_e)}"}
+                        module.set_warning("策略监控模块部分功能受限")
+                        results["warnings"].append(f"策略监控统计获取异常: {str(stat_e)}")
+                else:
+                    module.set_warning("策略监控器未初始化")
+                    results["warnings"].append("策略监控器未初始化")
+            except Exception as e:
+                module.set_warning(f"策略监控模块异常: {str(e)}")
+                results["warnings"].append(f"策略监控模块异常: {str(e)}")
+
+        except Exception as e:
+            module.set_warning(f"策略监控模块检查异常: {str(e)}")
+            results["warnings"].append(f"策略监控模块检查异常: {str(e)}")
+
+        results["modules"]["strategy_monitor"] = {
+            "status": module.status.value,
+            "checks": module.checks,
+            "last_error": module.last_error
+        }
+
+    def _check_enhanced_evaluator(self, results: Dict):
+        """检查增强型评估器模块"""
+        module = self.modules["enhanced_evaluator"]
+        module.checks = {}
+
+        try:
+            # 检查导入
+            try:
+                import sys
+                import os
+                aurora_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                if aurora_dir not in sys.path:
+                    sys.path.insert(0, aurora_dir)
+                
+                from enhanced_evaluator import EnhancedFinancialEvaluator
+                module.checks["import"] = {"result": "ok", "message": "增强型评估器模块导入成功"}
+            except Exception as import_e:
+                module.checks["import"] = {"result": "warning", "message": f"增强型评估器模块导入警告: {str(import_e)}"}
+                results["warnings"].append(f"增强型评估器模块导入警告: {str(import_e)}")
+            
+            # 尝试创建评估器实例
+            try:
+                evaluator = EnhancedFinancialEvaluator()
+                module.checks["init"] = {"result": "ok", "message": "增强型评估器初始化成功"}
+                
+                # 检查指标数量
+                total_metrics = len(evaluator.weights)
+                module.checks["metrics"] = {"result": "ok", "message": f"评估指标数量: {total_metrics}"}
+                
+                # 检查权重总和
+                total_weight = sum(evaluator.weights.values())
+                module.checks["weights"] = {"result": "ok", "message": f"权重总和: {total_weight:.2f}"}
+                
+                module.set_healthy("增强型评估器模块正常")
+            except Exception as e:
+                module.set_warning(f"增强型评估器初始化异常: {str(e)}")
+                results["warnings"].append(f"增强型评估器初始化异常: {str(e)}")
+
+        except Exception as e:
+            module.set_warning(f"增强型评估器模块检查异常: {str(e)}")
+            results["warnings"].append(f"增强型评估器模块检查异常: {str(e)}")
+
+        results["modules"]["enhanced_evaluator"] = {
+            "status": module.status.value,
+            "checks": module.checks,
+            "last_error": module.last_error
+        }
+
     def _check_system(self, results: Dict):
         """检查系统整体状态"""
         module = self.modules["system"]
@@ -483,6 +601,46 @@ class SystemHealthMonitor:
             "last_error": module.last_error
         }
 
+    def _check_gain_modules(self, results: Dict):
+        """检查增益性优化模块"""
+        module = self.modules["gain_modules"]
+        module.checks = {}
+
+        try:
+            # 检查各增益模块的导入和状态
+            gain_modules = {
+                "performance_tracker": "utils.strategy_performance_tracker",
+                "risk_controller": "utils.unified_risk_controller",
+                "param_optimizer": "utils.smart_param_optimizer",
+                "rl_enhancer": "utils.rl_enhancer",
+                "data_validator": "utils.data_quality_validator",
+            }
+
+            all_ok = True
+            for name, import_path in gain_modules.items():
+                try:
+                    __import__(import_path)
+                    module.checks[name] = {"result": "ok", "message": f"{name} 导入成功"}
+                except ImportError as e:
+                    module.checks[name] = {"result": "warning", "message": f"{name} 导入失败: {str(e)}"}
+                    all_ok = False
+
+            if all_ok:
+                module.set_healthy("所有增益模块导入正常")
+            else:
+                module.set_warning("部分增益模块导入失败")
+                results["warnings"].append("部分增益模块导入失败")
+
+        except Exception as e:
+            module.set_critical(f"增益模块检查错误: {str(e)}")
+            results["criticals"].append(f"增益模块检查错误: {str(e)}")
+
+        results["modules"]["gain_modules"] = {
+            "status": module.status.value,
+            "checks": module.checks,
+            "last_error": module.last_error
+        }
+
     def _check_database(self, results: Dict):
         """检查数据库模块"""
         module = self.modules["database"]
@@ -490,11 +648,11 @@ class SystemHealthMonitor:
 
         try:
             # 检查导入
-            from utils.database_manager import get_database_manager
+            from utils.database_manager import get_db_manager
             module.checks["import"] = {"result": "ok", "message": "数据库管理模块导入成功"}
 
             # 检查初始化
-            db = get_database_manager()
+            db = get_db_manager()
             if db:
                 module.checks["init"] = {"result": "ok", "message": "数据库管理器初始化成功"}
                 

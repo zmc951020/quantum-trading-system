@@ -15,9 +15,9 @@ def test_database_manager():
     print("=" * 60)
     
     try:
-        from utils.database_manager import get_database_manager
+        from utils.database_manager import get_db_manager
         
-        db = get_database_manager()
+        db = get_db_manager()
         print("[OK] 数据库管理器初始化成功")
         
         db.insert_system_log('INFO', 'Test', '数据库测试日志')

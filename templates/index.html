@@ -1,1060 +1,300 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang='zh-CN'>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aurora量化交易系统</title>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Aurora量化交易系统 - 策略优化器 V5/V6</title>
+    <script src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js'></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; }
-        .dashboard { padding: 20px; }
-        .card { margin-bottom: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
-        .card-header { background-color: #007bff; color: white; border-radius: 10px 10px 0 0; }
-        .chart-container { height: 300px; margin: 10px 0; }
-        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
-        .status-running { background-color: #28a745; }
-        .status-stopped { background-color: #dc3545; }
-        .market-state { font-size: 14px; margin: 5px 0; }
-        .performance-metric { font-size: 18px; font-weight: bold; color: #007bff; }
-        .indicator-value { font-size: 14px; padding: 5px 10px; background: #f0f0f0; border-radius: 5px; margin: 2px; display: inline-block; }
-        .indicator-group { margin-bottom: 15px; }
-        .indicator-group-title { font-weight: bold; margin-bottom: 5px; color: #333; }
-        .stock-item { padding: 10px; border-bottom: 1px solid #eee; }
-        .stock-item:hover { background-color: #f8f9fa; }
-        .trade-item { padding: 10px; border-bottom: 1px solid #eee; }
-        .trade-profit { color: #28a745; }
-        .trade-loss { color: #dc3545; }
-        .nav-tabs { margin-bottom: 15px; }
-        .tab-content { padding: 15px; background: white; border-radius: 5px; }
+        :root {
+            --bg-primary: #070a10; --bg-secondary: #0d1117; --bg-card: #121820;
+            --bg-card-hover: #161f2b; --border-subtle: #1a2838; --border-active: #4fc3f7;
+            --text-primary: #e4e8ed; --text-secondary: #8899aa; --text-muted: #526677;
+            --accent-blue: #4fc3f7; --accent-green: #69f0ae; --accent-red: #ef5350;
+            --accent-orange: #ffb74d; --accent-purple: #ce93d8; --accent-gold: #ffd54f;
+            --shadow-card: 0 2px 12px rgba(0,0,0,0.4); --shadow-glow: 0 0 20px rgba(79,195,247,0.15);
+            --font-smooth: 'Segoe UI Variable','Inter','Microsoft YaHei UI','PingFang SC',sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-primary); color: var(--text-primary);
+            font-family: var(--font-smooth);
+            font-size: 14px; line-height: 1.6; min-height: 100vh;
+            -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility; font-synthesis: none;
+            font-optical-sizing: auto; font-variation-settings: 'wght' 400;
+        }
+        .navbar-top {
+            background: linear-gradient(135deg,#080f1d,#0e1828);
+            border-bottom: 2px solid var(--border-subtle); padding: 12px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.5); position: sticky; top: 0; z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        .navbar-brand {
+            font-size: 1.4rem; font-weight: 800;
+            background: linear-gradient(135deg,#4fc3f7,#69f0ae);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: 2px; font-synthesis: none;
+        }
+        .sys-info { display: flex; gap: 20px; font-size: 0.82rem; color: var(--text-secondary); }
+        .sys-info strong { color: var(--text-primary); font-weight: 700; font-synthesis: none; }
+        .main-container { padding: 18px 24px; max-width: 1600px; margin: 0 auto; }
+        .dashboard-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 16px; }
+        .stat-card {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 10px; padding: 16px 20px; box-shadow: var(--shadow-card);
+            transition: all 0.25s; cursor: default;
+        }
+        .stat-card:hover { background: var(--bg-card-hover); border-color: var(--border-active); box-shadow: var(--shadow-glow); }
+        .stat-label {
+            font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 1.2px; font-weight: 700; font-synthesis: none;
+        }
+        .stat-value {
+            font-size: 1.6rem; font-weight: 800; margin-top: 6px; color: var(--text-primary);
+            font-synthesis: none; font-feature-settings: 'tnum';
+        }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+        .chart-panel {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 10px; padding: 14px; box-shadow: var(--shadow-card);
+        }
+        .chart-box { width: 100%; height: 280px; }
+        .indicator-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+        .indicator-panel {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 10px; padding: 12px; box-shadow: var(--shadow-card);
+        }
+        .indicator-box { width: 100%; height: 200px; }
+        .section-title {
+            font-size: 0.95rem; font-weight: 800; color: var(--text-primary);
+            margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+            letter-spacing: 0.03em; font-synthesis: none;
+        }
+        .section-title::before {
+            content: ''; display: inline-block; width: 4px; height: 20px;
+            background: linear-gradient(180deg,var(--accent-blue),var(--accent-green));
+            border-radius: 2px;
+        }
+        .strategy-section, .optimizer-section, .decision-section, .stock-section, .trade-section {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 12px; padding: 16px 20px; margin-bottom: 14px;
+            box-shadow: var(--shadow-card);
+        }
+        .strategy-sub-title {
+            font-size: 0.76rem; font-weight: 700; color: var(--text-secondary);
+            margin: 10px 0 6px 0; padding-bottom: 4px; border-bottom: 1px solid var(--border-subtle);
+            font-synthesis: none; display: flex; align-items: center; gap: 6px;
+        }
+        .strategy-sub-title .market-icon { font-size: 0.85rem; }
+        .strategy-chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px; padding: 2px 0; }
+        .strategy-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 6px 14px; border-radius: 20px; background: var(--bg-secondary);
+            border: 1.5px solid var(--border-subtle); color: var(--text-secondary);
+            font-size: 0.78rem; font-weight: 600; cursor: pointer;
+            transition: all 0.25s; user-select: none; white-space: nowrap;
+            font-synthesis: none;
+        }
+        .strategy-chip:hover {
+            background: #152236; border-color: var(--accent-blue);
+            color: var(--text-primary); transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(79,195,247,0.2);
+        }
+        .strategy-chip.active {
+            background: linear-gradient(135deg,#082132,#103250);
+            border-color: var(--accent-blue); color: #fff; font-weight: 700;
+            box-shadow: 0 0 16px rgba(79,195,247,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .chip-icon { font-size: 0.95rem; }
+        .chip-desc { font-size: 0.62rem; color: var(--text-muted); margin-left: 3px; font-weight: 400; }
+        .strategy-chip.active .chip-desc { color: #7ec8e3; }
+        .active-strategy-bar {
+            margin-top: 12px; padding: 10px 16px; background: var(--bg-secondary);
+            border-radius: 8px; display: flex; align-items: center; gap: 12px;
+            font-size: 0.78rem; font-synthesis: none; border: 1px solid var(--border-subtle);
+        }
+        .active-strategy-label { color: var(--text-muted); font-weight: 600; }
+        .active-strategy-name { color: var(--accent-blue); font-weight: 800; font-size: 0.92rem; letter-spacing: 0.02em; font-synthesis: none; }
+        .link-indicator { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 0.74rem; padding: 5px 14px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); }
+        .link-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent-red); transition: all 0.3s; }
+        .link-dot.connected { background: var(--accent-green); box-shadow: 0 0 10px rgba(105,240,174,0.6); animation: pulse-dot 1.5s infinite; }
+        @keyframes pulse-dot { 0%,100%{ box-shadow: 0 0 6px rgba(105,240,174,0.4); } 50%{ box-shadow: 0 0 16px rgba(105,240,174,0.9); } }
+        .optimizer-target {
+            font-size: 0.74rem; color: var(--text-muted); margin-bottom: 8px;
+            padding: 6px 10px; background: var(--bg-secondary); border-radius: 6px;
+        }
+        .optimizer-target strong { color: var(--accent-blue); font-weight: 700; }
+        .optimizer-options { display: flex; flex-direction: column; gap: 10px; }
+        .optimizer-option {
+            display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px;
+            border-radius: 8px; background: var(--bg-secondary); border: 2px solid var(--border-subtle);
+            cursor: pointer; transition: all 0.25s;
+        }
+        .optimizer-option:hover { background: #152236; border-color: var(--accent-blue); box-shadow: 0 2px 12px rgba(79,195,247,0.15); }
+        .optimizer-option.selected {
+            border-color: var(--accent-green); background: linear-gradient(135deg,#081e16,#0f2e22);
+            box-shadow: 0 0 14px rgba(105,240,174,0.25);
+        }
+        .optimizer-radio {
+            width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border-subtle);
+            flex-shrink: 0; margin-top: 2px; transition: all 0.2s;
+        }
+        .optimizer-option.selected .optimizer-radio {
+            border-color: var(--accent-green); background: var(--accent-green);
+            box-shadow: inset 0 0 0 4px var(--bg-card);
+        }
+        .optimizer-name {
+            font-weight: 800; color: var(--text-primary); font-size: 0.9rem; font-synthesis: none;
+        }
+        .optimizer-version {
+            font-size: 0.68rem; color: var(--accent-blue); background: rgba(79,195,247,0.12);
+            padding: 2px 8px; border-radius: 4px; margin-left: 8px; font-weight: 700;
+        }
+        .optimizer-features { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+        .optimizer-feature-tag {
+            font-size: 0.64rem; padding: 2px 8px; border-radius: 12px;
+            background: rgba(206,147,216,0.12); color: var(--accent-purple);
+            border: 1px solid rgba(206,147,216,0.2); font-weight: 500;
+        }
+        .optimizer-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+        .btn-optimize {
+            padding: 9px 22px; border: none; border-radius: 8px; font-size: 0.8rem;
+            font-weight: 700; cursor: pointer; transition: all 0.2s; letter-spacing: 0.03em;
+            font-synthesis: none; font-family: var(--font-smooth);
+        }
+        .btn-run { background: linear-gradient(135deg,#4fc3f7,#29b6f6); color: #070a12; }
+        .btn-run:hover:not(:disabled) { box-shadow: 0 0 20px rgba(79,195,247,0.55); transform: translateY(-2px); }
+        .btn-run:disabled { opacity: 0.35; cursor: not-allowed; filter: grayscale(30%); }
+        .btn-evolve { background: transparent; border: 2px solid var(--accent-purple); color: var(--accent-purple); }
+        .btn-evolve:hover:not(:disabled) { background: rgba(206,147,216,0.1); box-shadow: 0 0 16px rgba(206,147,216,0.35); }
+        .btn-result { background: transparent; border: 2px solid var(--accent-gold); color: var(--accent-gold); font-size: 0.76rem; padding: 9px 16px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-weight: 600; }
+        .btn-result:hover:not(:disabled) { background: rgba(255,213,79,0.1); }
+        .optimizer-progress { display: none; margin-top: 12px; padding: 12px 16px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); }
+        .optimizer-progress.active { display: block; }
+        .progress-track { height: 7px; background: var(--border-subtle); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+        .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg,var(--accent-blue),var(--accent-green),var(--accent-gold)); border-radius: 4px; transition: width 0.5s; box-shadow: 0 0 8px rgba(79,195,247,0.4); }
+        .progress-stage { font-size: 0.72rem; color: var(--text-secondary); font-weight: 500; }
+        .optimize-result { display: none; margin-top: 12px; padding: 14px 16px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--accent-green); }
+        .optimize-result.active { display: block; }
+        .gene-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 0.7rem; }
+        .gene-bar-label { width: 85px; color: var(--text-secondary); flex-shrink: 0; font-weight: 600; font-size: 0.68rem; }
+        .gene-bar-track { flex: 1; height: 16px; background: var(--border-subtle); border-radius: 4px; position: relative; overflow: hidden; }
+        .gene-bar-fill-before { position: absolute; left: 0; top: 0; height: 100%; background: rgba(239,83,80,0.35); border-radius: 4px 0 0 4px; }
+        .gene-bar-fill-after { position: absolute; left: 0; top: 0; height: 100%; background: rgba(105,240,174,0.55); border-radius: 0 4px 4px 0; border-right: 2px solid var(--accent-green); }
+        .decision-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; font-size: 0.78rem; }
+        .decision-item { padding: 10px 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-subtle); }
+        .decision-label { color: var(--text-muted); font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; font-synthesis: none; }
+        .decision-value { color: var(--text-primary); font-weight: 700; font-size: 0.82rem; margin-top: 3px; }
+        .add-stock-form { display: flex; gap: 8px; margin-bottom: 10px; }
+        .add-stock-form input {
+            flex: 1; padding: 8px 12px; border-radius: 8px; background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle); color: var(--text-primary); font-size: 0.76rem;
+            font-family: var(--font-smooth); outline: none; transition: border-color 0.2s;
+        }
+        .add-stock-form input:focus { border-color: var(--accent-blue); }
+        .btn-add-stock {
+            padding: 8px 18px; border: none; border-radius: 8px;
+            background: var(--accent-blue); color: #070a12; font-size: 0.78rem;
+            font-weight: 700; cursor: pointer; font-family: var(--font-smooth);
+        }
+        #stock-list, #trade-list { max-height: 200px; overflow-y: auto; font-size: 0.76rem; }
+        .stock-item { padding: 6px 10px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; }
+        .trade-item { padding: 5px 8px; border-bottom: 1px solid var(--border-subtle); font-size: 0.72rem; color: var(--text-secondary); }
+        @media (max-width:1200px) { .dashboard-row { grid-template-columns: repeat(2,1fr); } .charts-grid { grid-template-columns: 1fr; } .decision-grid { grid-template-columns: repeat(2,1fr); } }
+        @media (max-width:768px) { .dashboard-row { grid-template-columns: 1fr; } .indicator-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
-    <div class="dashboard container">
-        <h1 class="text-center mb-4">Aurora量化交易系统</h1>
-
-        <!-- 策略控制 -->
-        <div class="card">
-            <div class="card-header"><h3>策略控制</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label>选择策略：</label>
-                        <select id="strategy-select" class="form-select">
-                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label>初始资金：</label>
-                        <input type="number" id="initial-balance" class="form-control" value="100000">
-                    </div>
-                    <div class="col-md-5">
-                        <label>操作：</label>
-                        <div class="d-flex gap-2">
-                            <button id="start-btn" class="btn btn-success">启动策略</button>
-                            <button id="stop-btn" class="btn btn-danger">停止策略</button>
-                            <button id="backtest-btn" class="btn btn-info">运行回测</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-3" id="strategy-status">
-                    <span class="status-indicator status-stopped"></span>
-                    <span>策略状态：已停止</span>
+    <nav class='navbar-top'>
+        <div class='navbar-brand'>&#9650; Aurora &#37327;&#21270;&#20132;&#26131;&#31995;&#32479;</div>
+        <div class='sys-info'>
+            <span>&#23454;&#26102;&#20215;&#26684;&#65306;<strong id='current-price'>--</strong></span>
+            <span>&#26102;&#38388;&#65306;<strong id='current-time'>--</strong></span>
+            <span>&#25104;&#20132;&#37327;&#65306;<strong id='current-volume'>--</strong></span>
+            <span>&#27874;&#21160;&#29575;&#65306;<strong id='current-volatility'>--</strong></span>
+        </div>
+    </nav>
+    <div class='main-container'>
+        <div class='dashboard-row'>
+            <div class='stat-card'><div class='stat-label'>&#24635;&#25910;&#30410;&#29575;</div><div class='stat-value' id='total-return' style='color:var(--accent-green);'>--</div></div>
+            <div class='stat-card'><div class='stat-label'>&#24403;&#21069;&#20313;&#39069;</div><div class='stat-value' id='current-balance'>--</div></div>
+            <div class='stat-card'><div class='stat-label'>&#24403;&#21069;&#20179;&#20301;</div><div class='stat-value' id='current-position'>--</div></div>
+            <div class='stat-card'><div class='stat-label'>&#24635;&#20132;&#26131;&#27425;&#25968;</div><div class='stat-value' id='total-trades'>--</div></div>
+        </div>
+        <div class='charts-grid'>
+            <div class='chart-panel'><div class='chart-box' id='price-chart'></div></div>
+            <div class='chart-panel'><div class='chart-box' id='performance-chart'></div></div>
+        </div>
+        <div class='indicator-grid'>
+            <div class='indicator-panel'><div class='indicator-box' id='rsi-chart'></div></div>
+            <div class='indicator-panel'><div class='indicator-box' id='macd-chart'></div></div>
+        </div>
+        <div class='strategy-section' style='box-shadow: 0 0 30px rgba(79,195,247,0.08);'>
+            <div class='section-title'>&#9879; &#31574;&#30053;&#20999;&#25442;&#20013;&#24515;</div>
+            <div class='strategy-sub-title'><span class='market-icon'>&#128295;</span> &#36890;&#29992;&#22411;&#26680;&#24515;&#31574;&#30053;&#27169;&#22359;</div>
+            <div class='strategy-chips' id='core-strategies'></div>
+            <div class='strategy-sub-title' style='margin-top:12px;'><span class='market-icon'>&#128200;</span> &#31867;&#22411;&#31574;&#30053;&#27169;&#22359; &#183; &#19978;&#28072;&#24066;&#22330;</div>
+            <div class='strategy-chips' id='uptrend-strategies'></div>
+            <div class='strategy-sub-title'><span class='market-icon'>&#128201;</span> &#31867;&#22411;&#31574;&#30053;&#27169;&#22359; &#183; &#19979;&#36300;&#24066;&#22330;</div>
+            <div class='strategy-chips' id='downtrend-strategies'></div>
+            <div class='strategy-sub-title'><span class='market-icon'>&#8596;&#65039;</span> &#31867;&#22411;&#31574;&#30053;&#27169;&#22359; &#183; &#27178;&#30424;&#24066;&#22330;</div>
+            <div class='strategy-chips' id='sideways-strategies'></div>
+            <div class='strategy-sub-title'><span class='market-icon'>&#127752;</span> &#31867;&#22411;&#31574;&#30053;&#27169;&#22359; &#183; &#38663;&#33633;/&#27874;&#21160;&#24066;&#22330;</div>
+            <div class='strategy-chips' id='volatile-strategies'></div>
+            <div class='active-strategy-bar'>
+                <span class='active-strategy-label'>&#24403;&#21069;&#31574;&#30053;&#65306;</span>
+                <span class='active-strategy-name' id='active-strategy-display'>&#26410;&#36873;&#25321;</span>
+                <span style='font-size:0.65rem;color:var(--text-muted);margin-left:4px;' id='active-strategy-category'></span>
+                <div class='link-indicator'>
+                    <div class='link-dot' id='link-indicator'></div>
+                    <span id='link-status-text'>&#26410;&#32852;&#36890;&#20248;&#21270;&#22120;</span>
                 </div>
             </div>
         </div>
-
-        <!-- 市场数据 -->
-        <div class="card">
-            <div class="card-header"><h3>市场数据</h3></div>
-            <div class="card-body">
-                <div class="chart-container" id="price-chart"></div>
-                <div class="row mt-3">
-                    <div class="col-md-3"><strong>当前价格：</strong><span id="current-price">0.00</span></div>
-                    <div class="col-md-3"><strong>时间：</strong><span id="current-time">--</span></div>
-                    <div class="col-md-3"><strong>交易量：</strong><span id="current-volume">0</span></div>
-                    <div class="col-md-3"><strong>波动率：</strong><span id="current-volatility">--</span></div>
-                </div>
+        <div class='optimizer-section' style='box-shadow: 0 0 30px rgba(105,240,174,0.06);'>
+            <div class='section-title'>&#9878; &#31574;&#30053;&#20248;&#21270;&#22120; &#8212; &#29287;&#32650;&#20154;&#26234;&#33021;&#20307;</div>
+            <div class='optimizer-target'>&#127919; &#30446;&#26631;&#31574;&#30053;&#65306;<strong id='optimizer-target-strategy'>&#35831;&#22312;&#31574;&#30053;&#20999;&#25442;&#20013;&#28857;&#20987;&#36873;&#25321;&#31574;&#30053;</strong></div>
+            <div class='optimizer-options' id='optimizer-options'></div>
+            <div class='optimizer-actions'>
+                <button class='btn-optimize btn-run' id='btn-run-optimize' disabled>&#9654; &#36816;&#34892;&#20248;&#21270;</button>
+                <button class='btn-optimize btn-evolve' id='btn-evolve' disabled>&#129521; &#33258;&#28436;&#36827;</button>
+                <button class='btn-result' id='btn-view-result' disabled>&#128203; &#26597;&#30475;&#21382;&#21490;&#32467;&#26524;</button>
+            </div>
+            <div class='optimizer-progress' id='optimizer-progress'>
+                <div class='progress-track'><div class='progress-bar-fill' id='progress-bar'></div></div>
+                <div class='progress-stage' id='progress-stage'>&#20934;&#22791;&#20013;...</div>
+            </div>
+            <div class='optimize-result' id='optimize-result'>
+                <div id='optimize-result-content'></div>
             </div>
         </div>
-
-        <!-- 双维度市场状态 -->
-        <div class="card">
-            <div class="card-header"><h3>双维度市场状态</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>HMM状态：</strong><span id="hmm-state">--</span></div>
-                        <div class="market-state"><strong>趋势类型：</strong><span id="trend-type">--</span></div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>推荐信号：</strong><span id="recommended-signal">--</span></div>
-                        <div class="market-state"><strong>推荐仓位：</strong><span id="recommended-position">--</span></div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>推荐策略：</strong><span id="recommended-strategy">--</span></div>
-                        <div class="market-state"><strong>决策描述：</strong><span id="decision-description">--</span></div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="market-state"><strong>风险评分：</strong><span id="risk-score">--</span></div>
-                        <div class="market-state"><strong>市场状态：</strong><span id="regime-label">--</span></div>
-                    </div>
-                </div>
+        <div class='decision-section'>
+            <div class='section-title'>&#128270; &#26234;&#33021;&#20915;&#31574;&#24314;&#35758;</div>
+            <div class='decision-grid'>
+                <div class='decision-item'><div class='decision-label'>HMM &#29366;&#24577;</div><div class='decision-value' id='hmm-state'>--</div></div>
+                <div class='decision-item'><div class='decision-label'>&#36235;&#21183;&#31867;&#22411;</div><div class='decision-value' id='trend-type'>--</div></div>
+                <div class='decision-item'><div class='decision-label'>&#25512;&#33616;&#20449;&#21495;</div><div class='decision-value' id='recommended-signal'>--</div></div>
+                <div class='decision-item'><div class='decision-label'>&#25512;&#33616;&#20179;&#20301;</div><div class='decision-value' id='recommended-position'>--</div></div>
+                <div class='decision-item'><div class='decision-label'>&#25512;&#33616;&#31574;&#30053;</div><div class='decision-value' id='recommended-strategy'>--</div></div>
+                <div class='decision-item'><div class='decision-label'>&#39118;&#38505;&#35780;&#20998;</div><div class='decision-value' id='risk-score'>--</div></div>
+                <div class='decision-item' style='grid-column:span 2;'><div class='decision-label'>&#20915;&#31574;&#25551;&#36848;</div><div class='decision-value' id='decision-description'>--</div></div>
+                <div class='decision-item'><div class='decision-label'>&#24066;&#22330;&#29366;&#24577;</div><div class='decision-value' id='regime-label'>--</div></div>
             </div>
         </div>
-
-        <!-- 策略性能 -->
-        <div class="card">
-            <div class="card-header"><h3>策略性能</h3></div>
-            <div class="card-body">
-                <div class="chart-container" id="performance-chart"></div>
-                <div class="row mt-3">
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="total-return">0.00%</div>
-                        <div class="text-muted">总收益率</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="current-balance">0.00</div>
-                        <div class="text-muted">当前余额</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="current-position">0</div>
-                        <div class="text-muted">当前持仓</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="performance-metric" id="total-trades">0</div>
-                        <div class="text-muted">总交易次数</div>
-                    </div>
-                </div>
+        <div class='stock-section'>
+            <div class='section-title'>&#128194; &#32929;&#31080;&#27744;&#31649;&#29702;</div>
+            <div class='add-stock-form'>
+                <input type='text' id='new-stock-symbol' placeholder='&#32929;&#31080;&#20195;&#30721; (&#22914; AAPL)'>
+                <input type='text' id='new-stock-name' placeholder='&#32929;&#31080;&#21517;&#31216;'>
+                <button class='btn-add-stock' id='add-stock-btn'>&#28155;&#21152;</button>
             </div>
+            <div id='stock-list'></div>
         </div>
-
-        <!-- 技术分析指标 -->
-        <div class="card">
-            <div class="card-header"><h3>技术分析指标</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="chart-container" id="rsi-chart" style="height: 200px;"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="chart-container" id="macd-chart" style="height: 200px;"></div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <div class="chart-container" id="bollinger-chart" style="height: 200px;"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="chart-container" id="kdj-chart" style="height: 200px;"></div>
-                    </div>
-                </div>
-                <div class="row mt-3" id="indicators-grid"></div>
-            </div>
-        </div>
-
-        <!-- 股票池和交易池 -->
-        <div class="card">
-            <div class="card-header"><h3>股票池与交易池</h3></div>
-            <div class="card-body">
-                <ul class="nav nav-tabs" role="tablist">
-                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#stock-pool">股票池</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#trading-pool">交易池</button></li>
-                </ul>
-                <div class="tab-content">
-                    <div class="tab-pane fade show active" id="stock-pool">
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <input type="text" id="new-stock-symbol" class="form-control" placeholder="股票代码">
-                            </div>
-                            <div class="col-md-4">
-                                <input type="text" id="new-stock-name" class="form-control" placeholder="股票名称">
-                            </div>
-                            <div class="col-md-4">
-                                <button id="add-stock-btn" class="btn btn-primary">添加股票</button>
-                            </div>
-                        </div>
-                        <div id="stock-list"></div>
-                    </div>
-                    <div class="tab-pane fade" id="trading-pool">
-                        <div id="trade-list"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 多策略对比 -->
-        <div class="card">
-            <div class="card-header"><h3>多策略对比</h3></div>
-            <div class="card-body">
-                <div class="chart-container" id="strategy-comparison-chart"></div>
-                <div class="mt-3">
-                    <label>选择周期：</label>
-                    <select id="comparison-period" class="form-select" style="width: 200px; display: inline-block;">
-                        <option value="1h">1小时</option>
-                        <option value="4h">4小时</option>
-                        <option value="1d">1天</option>
-                        <option value="7d" selected>7天</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <!-- 策略组合管理 -->
-        <div class="card">
-            <div class="card-header"><h3>策略组合管理</h3></div>
-            <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <label>初始资金：</label>
-                        <input type="number" id="combiner-balance" class="form-control" value="100000">
-                    </div>
-                    <div class="col-md-6">
-                        <label>操作：</label>
-                        <button id="create-combiner-btn" class="btn btn-primary w-100">创建策略组合</button>
-                    </div>
-                </div>
-                
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label>添加策略：</label>
-                        <select id="add-strategy-select" class="form-select">
-                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>权重：</label>
-                        <input type="number" id="strategy-weight" class="form-control" value="0.33" min="0" max="1" step="0.01">
-                    </div>
-                    <div class="col-md-4">
-                        <label>操作：</label>
-                        <button id="add-strategy-btn" class="btn btn-success w-100">添加策略</button>
-                    </div>
-                </div>
-                
-                <div class="mb-3">
-                    <h4>组合策略列表</h4>
-                    <div id="combiner-strategies-list" class="border rounded p-3"></div>
-                </div>
-                
-                <div class="d-flex gap-2">
-                    <button id="start-combiner-btn" class="btn btn-success">启动策略组合</button>
-                    <button id="stop-combiner-btn" class="btn btn-danger">停止策略组合</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 数据导出 -->
-        <div class="card">
-            <div class="card-header"><h3>数据导出</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label>导出类型：</label>
-                        <select id="export-type" class="form-select">
-                            <option value="market">市场数据</option>
-                            <option value="performance">性能数据</option>
-                            <option value="trades">交易数据</option>
-                            <option value="indicators">技术指标</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>导出格式：</label>
-                        <select id="export-format" class="form-select">
-                            <option value="csv">CSV</option>
-                            <option value="excel">Excel</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label>操作：</label>
-                        <button id="export-btn" class="btn btn-success w-100">导出数据</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 模型管理 -->
-        <div class="card">
-            <div class="card-header"><h3>模型管理</h3></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h4>版本列表</h4>
-                        <div class="version-list" id="version-list"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <h4>操作</h4>
-                        <div class="mb-3">
-                            <input type="text" id="save-description" class="form-control" placeholder="保存描述">
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button id="save-model-btn" class="btn btn-primary">保存模型</button>
-                            <button id="load-model-btn" class="btn btn-info">加载模型</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class='trade-section'>
+            <div class='section-title'>&#128223; &#20132;&#26131;&#26085;&#24535;</div>
+            <div id='trade-list'></div>
         </div>
     </div>
-
-    <script>
-        // 初始化图表
-        const priceChart = echarts.init(document.getElementById('price-chart'));
-        const performanceChart = echarts.init(document.getElementById('performance-chart'));
-        const rsiChart = echarts.init(document.getElementById('rsi-chart'));
-        const macdChart = echarts.init(document.getElementById('macd-chart'));
-        const bollingerChart = echarts.init(document.getElementById('bollinger-chart'));
-        const kdjChart = echarts.init(document.getElementById('kdj-chart'));
-        const strategyComparisonChart = echarts.init(document.getElementById('strategy-comparison-chart'));
-
-        // 图表配置
-        const priceOption = {
-            title: { text: '价格走势', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } }]
-        };
-
-        const performanceOption = {
-            title: { text: '账户余额', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } }]
-        };
-
-        const rsiOption = {
-            title: { text: 'RSI', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value', min: 0, max: 100 },
-            series: [{ data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }]
-        };
-
-        const macdOption = {
-            title: { text: 'MACD', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [{ data: [], type: 'bar', smooth: true }]
-        };
-
-        const bollingerOption = {
-            title: { text: '布林带', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value' },
-            series: [
-                { name: '上轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b', type: 'dashed' } },
-                { name: '中轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#4ecdc4' } },
-                { name: '下轨', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b', type: 'dashed' } },
-                { name: '价格', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } }
-            ],
-            legend: {
-                data: ['上轨', '中轨', '下轨', '价格'],
-                top: 30
-            }
-        };
-
-        const kdjOption = {
-            title: { text: 'KDJ', left: 'center', textStyle: { fontSize: 12 } },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value', min: 0, max: 100 },
-            series: [
-                { name: 'K', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } },
-                { name: 'D', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } },
-                { name: 'J', data: [], type: 'line', smooth: true, lineStyle: { color: '#4ecdc4' } }
-            ],
-            legend: {
-                data: ['K', 'D', 'J'],
-                top: 30
-            }
-        };
-
-        const strategyComparisonOption = {
-            title: { text: '策略收益率对比', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            legend: { data: ['傅里叶强化学习', '市场自适应网格', '机器学习网格'], top: 30 },
-            xAxis: { type: 'time', boundaryGap: false },
-            yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
-            series: [
-                { name: '傅里叶强化学习', data: [], type: 'line', smooth: true, lineStyle: { color: '#007bff' } },
-                { name: '市场自适应网格', data: [], type: 'line', smooth: true, lineStyle: { color: '#28a745' } },
-                { name: '机器学习网格', data: [], type: 'line', smooth: true, lineStyle: { color: '#ff6b6b' } }
-            ]
-        };
-
-        priceChart.setOption(priceOption);
-        performanceChart.setOption(performanceOption);
-        rsiChart.setOption(rsiOption);
-        macdChart.setOption(macdOption);
-        strategyComparisonChart.setOption(strategyComparisonOption);
-
-        // 更新市场数据
-        function updateMarketData() {
-            fetch('/api/market-data')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        const prices = data.map(item => [new Date(item.timestamp).getTime(), item.price]);
-                        priceChart.setOption({ series: [{ data: prices }] });
-
-                        const latest = data[data.length - 1];
-                        document.getElementById('current-price').textContent = latest.price;
-                        document.getElementById('current-time').textContent = new Date(latest.timestamp).toLocaleTimeString();
-                        document.getElementById('current-volume').textContent = latest.volume;
-
-                        // 计算波动率
-                        if (data.length > 20) {
-                            const recentPrices = data.slice(-20).map(d => d.price);
-                            const returns = [];
-                            for (let i = 1; i < recentPrices.length; i++) {
-                                returns.push((recentPrices[i] - recentPrices[i-1]) / recentPrices[i-1]);
-                            }
-                            const volatility = Math.sqrt(returns.reduce((sum, r) => sum + r * r, 0) / returns.length) * 100;
-                            document.getElementById('current-volatility').textContent = volatility.toFixed(2) + '%';
-                        }
-                    }
-                });
-        }
-
-        // 更新性能数据
-        function updatePerformanceData() {
-            fetch('/api/performance-data')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        const balances = data.map(item => [new Date(item.timestamp).getTime(), item.balance]);
-                        performanceChart.setOption({ series: [{ data: balances }] });
-                    }
-                });
-        }
-
-        // 更新策略状态
-        function updateStrategyStatus() {
-            fetch('/api/strategy-status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'running') {
-                        document.querySelector('.status-indicator').className = 'status-indicator status-running';
-                        document.querySelector('#strategy-status span:nth-child(2)').textContent = `策略状态：运行中 (${data.strategy})`;
-
-                        if (data.performance) {
-                            document.getElementById('total-return').textContent = `${(data.performance.total_return * 100).toFixed(2)}%`;
-                            document.getElementById('current-balance').textContent = data.performance.balance.toFixed(2);
-                            document.getElementById('total-trades').textContent = data.performance.total_trades;
-                        }
-                        document.getElementById('current-position').textContent = data.position;
-
-                        if (data.market_state && data.market_state.dual_dimension) {
-                            const dual = data.market_state.dual_dimension;
-                            document.getElementById('hmm-state').textContent = dual.hmm_label;
-                            document.getElementById('trend-type').textContent = dual.trend_label;
-                            document.getElementById('recommended-signal').textContent = dual.signal;
-                            document.getElementById('recommended-position').textContent = (dual.recommended_position_ratio * 100).toFixed(0) + '%';
-                            document.getElementById('recommended-strategy').textContent = dual.recommended_strategy;
-                            document.getElementById('decision-description').textContent = dual.description;
-                        }
-                        if (data.market_state) {
-                            document.getElementById('regime-label').textContent = data.market_state.regime_label || '--';
-                        }
-                    } else {
-                        document.querySelector('.status-indicator').className = 'status-indicator status-stopped';
-                        document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
-                    }
-                });
-        }
-
-        // 更新技术分析指标
-        function updateTechnicalIndicators() {
-            fetch('/api/technical-indicators')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.indicators) {
-                        const grid = document.getElementById('indicators-grid');
-                        grid.innerHTML = '';
-
-                        const groups = {
-                            '趋势指标': ['ma5', 'ma10', 'ma20', 'ma50', 'ema12', 'ema26'],
-                            '动量指标': ['rsi14', 'k', 'd', 'j', 'macd', 'signal'],
-                            '波动指标': ['atr14', 'upper', 'middle', 'lower'],
-                            '成交量指标': ['volume_ma5', 'volume_ma20', 'obv'],
-                            '其他指标': ['adx', 'cci', 'roc']
-                        };
-
-                        Object.entries(groups).forEach(([groupName, indicators]) => {
-                            const groupDiv = document.createElement('div');
-                            groupDiv.className = 'col-md-4 indicator-group';
-                            groupDiv.innerHTML = `<div class="indicator-group-title">${groupName}</div>`;
-
-                            indicators.forEach(ind => {
-                                if (data.indicators[ind] !== undefined) {
-                                    const val = typeof data.indicators[ind] === 'number' ? data.indicators[ind].toFixed(2) : data.indicators[ind];
-                                    const span = document.createElement('span');
-                                    span.className = 'indicator-value';
-                                    span.innerHTML = `<strong>${ind.toUpperCase()}</strong>: ${val}`;
-                                    groupDiv.appendChild(span);
-                                }
-                            });
-
-                            grid.appendChild(groupDiv);
-                        });
-
-                        // 更新RSI图表
-                        if (data.full_indicators && data.full_indicators.rsi14) {
-                            const rsiData = [];
-                            data.price_data.forEach((item, i) => {
-                                if (data.full_indicators.rsi14[i] !== null) {
-                                    rsiData.push([new Date(item.timestamp).getTime(), data.full_indicators.rsi14[i]]);
-                                }
-                            });
-                            rsiChart.setOption({
-                                series: [{
-                                    data: rsiData,
-                                    type: 'line',
-                                    smooth: true,
-                                    lineStyle: { color: '#ff6b6b' }
-                                }],
-                                yAxis: {
-                                    type: 'value',
-                                    min: 0,
-                                    max: 100,
-                                    axisLine: {
-                                        lineStyle: {
-                                            color: '#666'
-                                        }
-                                    },
-                                    splitLine: {
-                                        lineStyle: {
-                                            color: '#eee'
-                                        }
-                                    },
-                                    axisLabel: {
-                                        formatter: '{value}'
-                                    }
-                                }
-                            });
-                        }
-
-                        // 更新MACD图表
-                        if (data.full_indicators && data.full_indicators.histogram) {
-                            const macdData = [];
-                            const signalData = [];
-                            const macdLineData = [];
-                            
-                            data.price_data.forEach((item, i) => {
-                                if (data.full_indicators.histogram[i] !== null) {
-                                    macdData.push([new Date(item.timestamp).getTime(), data.full_indicators.histogram[i]]);
-                                }
-                                if (data.full_indicators.signal && data.full_indicators.signal[i] !== null) {
-                                    signalData.push([new Date(item.timestamp).getTime(), data.full_indicators.signal[i]]);
-                                }
-                                if (data.full_indicators.macd && data.full_indicators.macd[i] !== null) {
-                                    macdLineData.push([new Date(item.timestamp).getTime(), data.full_indicators.macd[i]]);
-                                }
-                            });
-                            
-                            macdChart.setOption({
-                                series: [
-                                    {
-                                        name: 'MACD',
-                                        data: macdLineData,
-                                        type: 'line',
-                                        smooth: true,
-                                        lineStyle: { color: '#007bff' }
-                                    },
-                                    {
-                                        name: 'Signal',
-                                        data: signalData,
-                                        type: 'line',
-                                        smooth: true,
-                                        lineStyle: { color: '#ff6b6b' }
-                                    },
-                                    {
-                                        name: 'Histogram',
-                                        data: macdData,
-                                        type: 'bar',
-                                        itemStyle: {
-                                            color: function(params) {
-                                                return params.value >= 0 ? '#28a745' : '#dc3545';
-                                            }
-                                        }
-                                    }
-                                ],
-                                legend: {
-                                    data: ['MACD', 'Signal', 'Histogram'],
-                                    top: 30
-                                }
-                            });
-                        }
-
-                        // 显示K线形态
-                        if (data.indicators.candlestick_patterns) {
-                            const pattern = data.indicators.candlestick_patterns[data.indicators.candlestick_patterns.length - 1];
-                            if (pattern) {
-                                document.getElementById('regime-label').textContent = `K线形态: ${pattern}`;
-                            }
-                        }
-
-                        // 更新布林带图表
-                        if (data.full_indicators && data.full_indicators.upper) {
-                            const upperData = [];
-                            const middleData = [];
-                            const lowerData = [];
-                            const priceData = [];
-                            
-                            data.price_data.forEach((item, i) => {
-                                if (data.full_indicators.upper[i] !== null) {
-                                    upperData.push([new Date(item.timestamp).getTime(), data.full_indicators.upper[i]]);
-                                    middleData.push([new Date(item.timestamp).getTime(), data.full_indicators.middle[i]]);
-                                    lowerData.push([new Date(item.timestamp).getTime(), data.full_indicators.lower[i]]);
-                                    priceData.push([new Date(item.timestamp).getTime(), item.close]);
-                                }
-                            });
-                            
-                            bollingerChart.setOption({
-                                series: [
-                                    { data: upperData },
-                                    { data: middleData },
-                                    { data: lowerData },
-                                    { data: priceData }
-                                ]
-                            });
-                        }
-
-                        // 更新KDJ图表
-                        if (data.full_indicators && data.full_indicators.k) {
-                            const kData = [];
-                            const dData = [];
-                            const jData = [];
-                            
-                            data.price_data.forEach((item, i) => {
-                                if (data.full_indicators.k[i] !== null) {
-                                    kData.push([new Date(item.timestamp).getTime(), data.full_indicators.k[i]]);
-                                    dData.push([new Date(item.timestamp).getTime(), data.full_indicators.d[i]]);
-                                    if (data.full_indicators.j && data.full_indicators.j[i] !== null) {
-                                        jData.push([new Date(item.timestamp).getTime(), data.full_indicators.j[i]]);
-                                    }
-                                }
-                            });
-                            
-                            kdjChart.setOption({
-                                series: [
-                                    { data: kData },
-                                    { data: dData },
-                                    { data: jData }
-                                ]
-                            });
-                        }
-                    }
-                });
-        }
-
-        // 更新股票池
-        function updateStockPool() {
-            fetch('/api/stock-pool')
-                .then(response => response.json())
-                .then(data => {
-                    const list = document.getElementById('stock-list');
-                    list.innerHTML = '';
-                    data.stocks.forEach(stock => {
-                        const div = document.createElement('div');
-                        div.className = 'stock-item d-flex justify-content-between align-items-center';
-                        div.innerHTML = `
-                            <div>
-                                <strong>${stock.symbol}</strong> - ${stock.name}
-                                <div class="text-muted">${stock.status} | 添加时间: ${new Date(stock.added_time).toLocaleString()}</div>
-                            </div>
-                            <div class="btn-group">
-                                <button class="btn btn-sm btn-success" onclick="moveToTrading('${stock.symbol}')">加入交易</button>
-                                <button class="btn btn-sm btn-danger" onclick="removeStock('${stock.symbol}')">移除</button>
-                            </div>
-                        `;
-                        list.appendChild(div);
-                    });
-                });
-        }
-
-        // 更新交易池
-        function updateTradingPool() {
-            fetch('/api/trading-pool')
-                .then(response => response.json())
-                .then(data => {
-                    const list = document.getElementById('trade-list');
-                    list.innerHTML = '';
-                    data.open_trades.forEach(trade => {
-                        const pnlClass = trade.pnl >= 0 ? 'trade-profit' : 'trade-loss';
-                        const div = document.createElement('div');
-                        div.className = 'trade-item d-flex justify-content-between align-items-center';
-                        div.innerHTML = `
-                            <div>
-                                <strong>${trade.symbol}</strong> - ${trade.strategy_type}
-                                <div class="text-muted">开仓价: ${trade.entry_price} | 数量: ${trade.quantity}</div>
-                            </div>
-                            <div>
-                                <span class="${pnlClass}">${(trade.pnl * 100).toFixed(2)}%</span>
-                                <button class="btn btn-sm btn-warning ms-2" onclick="closeTrade('${trade.symbol}')">平仓</button>
-                            </div>
-                        `;
-                        list.appendChild(div);
-                    });
-                });
-        }
-
-        // 移动到交易池
-        function moveToTrading(symbol) {
-            fetch('/api/stock-pool/move-to-trading', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol, strategy_type: 'default' })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    updateStockPool();
-                    updateTradingPool();
-                }
-            });
-        }
-
-        // 移除股票
-        function removeStock(symbol) {
-            fetch('/api/stock-pool/remove', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updateStockPool();
-                }
-            });
-        }
-
-        // 平仓
-        function closeTrade(symbol) {
-            fetch('/api/trading-pool/close', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updateTradingPool();
-                }
-            });
-        }
-
-        // 导出数据
-        document.getElementById('export-btn').addEventListener('click', function() {
-            const exportType = document.getElementById('export-type').value;
-            const exportFormat = document.getElementById('export-format').value;
-
-            fetch('/api/export-data', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: exportType, format: exportFormat })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('导出失败');
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${exportType}_data.${exportFormat === 'excel' ? 'xlsx' : 'csv'}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                alert('数据导出成功！');
-            })
-            .catch(error => {
-                console.error('导出失败:', error);
-                alert('导出失败，请稍后重试');
-            });
-        });
-
-        // 策略组合管理
-        document.getElementById('create-combiner-btn').addEventListener('click', function() {
-            const initialBalance = parseFloat(document.getElementById('combiner-balance').value);
-            
-            fetch('/api/strategy-combiner/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initial_balance: initialBalance })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    updateCombinerStatus();
-                } else {
-                    alert(data.error);
-                }
-            });
-        });
-
-        document.getElementById('add-strategy-btn').addEventListener('click', function() {
-            const strategyName = document.getElementById('add-strategy-select').value;
-            const weight = parseFloat(document.getElementById('strategy-weight').value);
-            
-            fetch('/api/strategy-combiner/add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategyName, weight: weight })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    updateCombinerStatus();
-                } else {
-                    alert(data.error);
-                }
-            });
-        });
-
-        document.getElementById('start-combiner-btn').addEventListener('click', function() {
-            fetch('/api/strategy-combiner/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                } else {
-                    alert(data.error);
-                }
-            });
-        });
-
-        document.getElementById('stop-combiner-btn').addEventListener('click', function() {
-            fetch('/api/stop-strategy')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(data.message);
-                    }
-                });
-        });
-
-        function updateCombinerStatus() {
-            fetch('/api/strategy-combiner/status')
-                .then(response => response.json())
-                .then(data => {
-                    const strategiesList = document.getElementById('combiner-strategies-list');
-                    if (data.status === 'not_created') {
-                        strategiesList.innerHTML = '<p>策略组合尚未创建</p>';
-                    } else {
-                        let html = `<p>总资金: ${data.performance.total_balance.toFixed(2)}</p>`;
-                        html += `<p>总收益率: ${(data.performance.total_return * 100).toFixed(2)}%</p>`;
-                        html += '<h5>策略列表:</h5><ul>';
-                        
-                        data.strategies.forEach(strategy => {
-                            html += `<li>${strategy.name} - 权重: ${(strategy.weight * 100).toFixed(0)}% - 分配: ${strategy.allocation.toFixed(2)} - 余额: ${strategy.balance.toFixed(2)}</li>`;
-                        });
-                        
-                        html += '</ul>';
-                        strategiesList.innerHTML = html;
-                    }
-                });
-        }
-
-        // 定期更新策略组合状态
-        setInterval(updateCombinerStatus, 5000);
-
-        // 添加股票
-        document.getElementById('add-stock-btn').addEventListener('click', function() {
-            const symbol = document.getElementById('new-stock-symbol').value;
-            const name = document.getElementById('new-stock-name').value;
-
-            fetch('/api/stock-pool/add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol, name: name })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('new-stock-symbol').value = '';
-                    document.getElementById('new-stock-name').value = '';
-                    updateStockPool();
-                } else {
-                    alert(data.error);
-                }
-            });
-        });
-
-        // 加载模型版本
-        function loadModelVersions() {
-            fetch('/api/model-versions')
-                .then(response => response.json())
-                .then(versions => {
-                    const list = document.getElementById('version-list');
-                    list.innerHTML = '';
-                    versions.forEach(version => {
-                        const div = document.createElement('div');
-                        div.className = 'p-2 border-bottom';
-                        div.innerHTML = `
-                            <div><strong>${version.version_id}</strong></div>
-                            <div class="text-sm text-muted">${version.timestamp}</div>
-                            <div class="text-sm">${version.description || ''}</div>
-                        `;
-                        div.onclick = () => {
-                            document.querySelectorAll('.version-list > div').forEach(el => el.classList.remove('bg-primary', 'text-white'));
-                            div.classList.add('bg-primary', 'text-white');
-                            selectedVersionId = version.version_id;
-                        };
-                        list.appendChild(div);
-                    });
-                });
-        }
-
-        // 事件绑定
-        document.getElementById('start-btn').addEventListener('click', function() {
-            const strategy = document.getElementById('strategy-select').value;
-            const balance = parseFloat(document.getElementById('initial-balance').value);
-
-            fetch('/api/start-strategy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) alert(data.message);
-                else alert('启动失败: ' + data.error);
-            });
-        });
-
-        document.getElementById('stop-btn').addEventListener('click', function() {
-            fetch('/api/stop-strategy')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) alert(data.message);
-                });
-        });
-
-        document.getElementById('backtest-btn').addEventListener('click', function() {
-            const strategy = document.getElementById('strategy-select').value;
-            const balance = parseFloat(document.getElementById('initial-balance').value);
-
-            alert('开始回测，请稍候...');
-            fetch('/api/backtest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance, days: 30 })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`回测完成！收益率: ${(data.performance.total_return * 100).toFixed(2)}%`);
-                    updateStrategyStatus();
-                }
-            });
-        });
-
-        let selectedVersionId = null;
-
-        document.getElementById('save-model-btn').addEventListener('click', function() {
-            const description = document.getElementById('save-description').value;
-            fetch('/api/save-model', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description: description })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    loadModelVersions();
-                }
-            });
-        });
-
-        document.getElementById('load-model-btn').addEventListener('click', function() {
-            if (selectedVersionId) {
-                fetch('/api/load-model', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ version_id: selectedVersionId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) alert(data.message);
-                });
-            } else {
-                alert('请先选择一个模型版本');
-            }
-        });
-
-        // 定期更新
-        setInterval(updateMarketData, 1000);
-        setInterval(updatePerformanceData, 2000);
-        setInterval(updateStrategyStatus, 1000);
-        setInterval(updateTechnicalIndicators, 5000);
-        setInterval(updateStockPool, 5000);
-        setInterval(updateTradingPool, 5000);
-
-        // 更新多策略对比
-        function updateStrategyComparison() {
-            const now = new Date();
-            const data = [];
-            for (let i = 7; i >= 0; i--) {
-                const date = new Date(now);
-                date.setDate(date.getDate() - i);
-                data.push({
-                    timestamp: date.getTime(),
-                    fourier: Math.random() * 10 - 2,
-                    market: Math.random() * 8 - 1,
-                    ml: Math.random() * 12 - 3
-                });
-            }
-
-            strategyComparisonChart.setOption({
-                series: [
-                    { data: data.map(item => [item.timestamp, item.fourier]) },
-                    { data: data.map(item => [item.timestamp, item.market]) },
-                    { data: data.map(item => [item.timestamp, item.ml]) }
-                ]
-            });
-        }
-        setInterval(updateStrategyComparison, 10000);
-
-        // 响应式
-        window.addEventListener('resize', function() {
-            priceChart.resize();
-            performanceChart.resize();
-            rsiChart.resize();
-            macdChart.resize();
-            strategyComparisonChart.resize();
-        });
-
-        // 初始加载
-        updateMarketData();
-        updatePerformanceData();
-        updateStrategyStatus();
-        updateTechnicalIndicators();
-        updateStockPool();
-        updateTradingPool();
-        loadModelVersions();
-        updateStrategyComparison();
-    </script>
-</body>
-</html>
+    <script src="app.js"></script>

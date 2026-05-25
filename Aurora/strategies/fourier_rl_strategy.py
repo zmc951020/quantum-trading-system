@@ -642,3 +642,55 @@ class FourierRLStrategy(StrategyBase):
                 'description': dual_decision['description']
             }
         }
+
+    @staticmethod
+    def get_optimizable_params() -> Dict[str, Dict[str, Any]]:
+        """
+        获取可优化迭代的参数配置。
+        供牧羊人优化器(ShepherdOptimizer)和策略优化器(StrategyOptimizer)调用，
+        实现策略参数的自动优化迭代。
+
+        Returns:
+            参数字典，格式:
+            {
+                '参数名': {
+                    'current': 当前值,
+                    'range': [最小值, 最大值],
+                    'step': 步长,
+                    'description': '参数说明'
+                },
+                ...
+            }
+        """
+        return {
+            'stop_loss_pct': {
+                'current': 0.05,
+                'range': [0.01, 0.10],
+                'step': 0.01,
+                'description': '止损比例'
+            },
+            'take_profit_pct': {
+                'current': 0.15,
+                'range': [0.05, 0.25],
+                'step': 0.02,
+                'description': '止盈比例'
+            },
+            'max_position_pct': {
+                'current': 0.95,
+                'range': [0.50, 0.99],
+                'step': 0.05,
+                'description': '最大仓位比例'
+            },
+            'commission_rate': {
+                'current': 0.0003,
+                'range': [0.0001, 0.0010],
+                'step': 0.0001,
+                'description': '手续费率'
+            },
+            'slippage': {
+                'current': 0.0001,
+                'range': [0.00005, 0.0005],
+                'step': 0.00005,
+                'description': '滑点率'
+            },
+        }

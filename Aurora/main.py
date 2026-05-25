@@ -36,7 +36,7 @@ try:
     from strategies.fund_allocation import DCAStrategy, MLFundAllocator
     from strategies.strategy_base import StrategyManager
     from strategies.fourier_rl_strategy import FourierRLStrategy
-    from strategies.huijin_value_strategy import HuijinValueStrategyAdapter
+    from strategies.huijin_value_strategy import HuijinValueStrategy
     from ml.trend_prediction import TrendPredictor
     from risk.risk_management import RiskManager
     
@@ -67,8 +67,8 @@ except Exception as e:
     logger.warning(f"[WARNING] monitoring_scheduler import failed: {e}")
 
 try:
-    from utils.database_manager import get_database_manager
-    database_manager = get_database_manager()
+    from utils.database_manager import get_db_manager
+    database_manager = get_db_manager()
     logger.info("[OK] database_manager imported successfully")
 except Exception as e:
     logger.warning(f"[WARNING] database_manager import failed: {e}")
@@ -150,8 +150,7 @@ class AuroraSystem:
             )
 
             # 初始化汇金价值AI轮动策略
-            self.strategies['huijin_value'] = HuijinValueStrategyAdapter(
-                base_price=base_price,
+            self.strategies['huijin_value'] = HuijinValueStrategy(
                 initial_balance=max(self.initial_balance, 3000000)
             )
 

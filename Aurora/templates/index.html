@@ -9,7 +9,7 @@
     <style>
         :root {
             --primary-color: #00d4ff;
-            --success-color: #00ff88;
+            --success-color: #4ade80;
             --warning-color: #ffaa00;
             --danger-color: #ff4757;
             --bg-dark: #0d1117;
@@ -168,9 +168,13 @@
         }
         
         /* ===== 表格 ===== */
-        .table-custom {
-            color: var(--text-primary);
-            margin-bottom: 0;
+        .table-custom,
+        .table-custom > thead > tr > th,
+        .table-custom > tbody > tr > td,
+        .table-custom > tbody > tr {
+            background-color: var(--bg-card) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
         }
         .table-custom thead th {
             border-bottom: 2px solid var(--border-color);
@@ -287,10 +291,13 @@
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
         
         /* ===== 徽章 ===== */
-        .badge-running { background-color: rgba(0,255,136,0.15); color: var(--success-color); }
-        .badge-paused { background-color: rgba(255,170,0,0.15); color: var(--warning-color); }
-        .badge-stopped { background-color: rgba(255,71,87,0.15); color: var(--danger-color); }
-        .badge-waiting { background-color: rgba(139,148,158,0.15); color: var(--text-muted); }
+        .badge-running { border: 1px solid #4ade80; color: #4ade80; font-weight: 700; }
+        .badge-paused { border: 1px solid #fbbf24; color: #fbbf24; font-weight: 700; }
+        .badge-stopped { border: 1px solid #f87171; color: #f87171; font-weight: 700; }
+        .badge-waiting { border: 1px solid #9ca3af; color: #9ca3af; font-weight: 700; }
+        .alert-item { color: #8b949e; }
+        .alert-item span:not([style*="color"]) { color: #8b949e; }
+        .text-muted { color: #6e7681 !important; }
     </style>
 </head>
 <body>
@@ -320,6 +327,9 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link-custom" href="/security-config">⚙️ 安全配置</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link-custom" href="/maintenance">🔧 系统维护</a>
                 </li>
             </ul>
             <div class="user-info-bar">

@@ -34,8 +34,10 @@ class TradeSecurityValidator:
         # 默认极致安全配置
         return {
             'trading_hours': {
-                'start': '09:00',
-                'end': '15:00'
+                'morning_start': '09:30',
+                'morning_end': '11:30',
+                'afternoon_start': '13:00',
+                'afternoon_end': '15:00'
             },
             'ip_whitelist': [],  # 交易服务器IP白名单
             'api_keys': [],  # 有效API Key列表
@@ -121,28 +123,39 @@ class TradeSecurityValidator:
         }
     
     def _check_trading_time(self) -> Dict[str, Any]:
-        """检查交易时间窗口"""
+        """检查交易时间窗口
+        A股交易时间：上午 09:30-11:30，下午 13:00-15:00
+        午休时间（11:30-13:00）和收盘后不允许交易
+        """
         now = datetime.now()
         current_time = now.time()
-        
+
         # 解析交易时间
-        start_time = dt_time.fromisoformat(self.config['trading_hours']['start'])
-        end_time = dt_time.fromisoformat(self.config['trading_hours']['end'])
-        
-        # 检查是否在交易时间内
-        if not (start_time <= current_time <= end_time):
+        morning_start = dt_time.fromisoformat(self.config.get('trading_hours', {}).get('morning_start', '09:30'))
+        morning_end = dt_time.fromisoformat(self.config.get('trading_hours', {}).get('morning_end', '11:30'))
+        afternoon_start = dt_time.fromisoformat(self.config.get('trading_hours', {}).get('afternoon_start', '13:00'))
+        afternoon_end = dt_time.fromisoformat(self.config.get('trading_hours', {}).get('afternoon_end', '15:00'))
+
+        # 检查是否在上午或下午交易时段内
+        in_morning = morning_start <= current_time <= morning_end
+        in_afternoon = afternoon_start <= current_time <= afternoon_end
+
+        if not (in_morning or in_afternoon):
             return {
                 'allowed': False,
-                'reason': f'不在交易时间内！允许时间：{start_time.strftime("%H:%M")}-{end_time.strftime("%H:%M")}，当前时间：{current_time.strftime("%H:%M")}'
+                'reason': f'不在交易时间内！'
+                          f'上午：{morning_start.strftime("%H:%M")}-{morning_end.strftime("%H:%M")}，'
+                          f'下午：{afternoon_start.strftime("%H:%M")}-{afternoon_end.strftime("%H:%M")}，'
+                          f'当前时间：{current_time.strftime("%H:%M")}'
             }
-        
+
         # 检查是否是交易日（周一到周五）
         if now.weekday() >= 5:  # 5=周六, 6=周日
             return {
                 'allowed': False,
                 'reason': '周末休市！'
             }
-        
+
         # 检查是否是节假日
         date_str = now.strftime('%Y-%m-%d')
         if date_str in self.config.get('holidays', []):
@@ -150,7 +163,7 @@ class TradeSecurityValidator:
                 'allowed': False,
                 'reason': '节假日休市！'
             }
-        
+
         return {'allowed': True, 'reason': '交易时间验证通过'}
     
     def _check_ip_whitelist(self, ip: Optional[str]) -> Dict[str, Any]:
@@ -353,8 +366,10 @@ class CriticalPathValidator:
         # 预加载到内存的白名单，用于毫秒级检查
         self.trusted_ips = set()
         self.trusted_api_keys = set()
-        self.trading_start = None
-        self.trading_end = None
+        self.morning_start = None
+        self.morning_end = None
+        self.afternoon_start = None
+        self.afternoon_end = None
         self._load_from_config()
     
     def _load_from_config(self):
@@ -378,10 +393,12 @@ class CriticalPathValidator:
                     elif isinstance(item, str):
                         self.trusted_api_keys.add(item)
                 
-                # 预加载交易时间
+                # 预加载交易时间（分段时段：上午09:30-11:30 / 下午13:00-15:00）
                 hours = config.get('trading_hours', {})
-                self.trading_start = dt_time.fromisoformat(hours.get('start', '09:00'))
-                self.trading_end = dt_time.fromisoformat(hours.get('end', '15:00'))
+                self.morning_start = dt_time.fromisoformat(hours.get('morning_start', '09:30'))
+                self.morning_end = dt_time.fromisoformat(hours.get('morning_end', '11:30'))
+                self.afternoon_start = dt_time.fromisoformat(hours.get('afternoon_start', '13:00'))
+                self.afternoon_end = dt_time.fromisoformat(hours.get('afternoon_end', '15:00'))
         except:
             pass
     
@@ -404,10 +421,12 @@ class CriticalPathValidator:
         if self.trusted_api_keys and api_key not in self.trusted_api_keys:
             return False, "CRITICAL: 无效交易API Key"
         
-        # 检查3: 时间窗口 (可选但建议)
-        if check_time and self.trading_start and self.trading_end:
+        # 检查3: 时间窗口 (可选但建议) - 分段判断上午/下午
+        if check_time and self.morning_start and self.afternoon_end:
             now = datetime.now().time()
-            if not (self.trading_start <= now <= self.trading_end):
+            in_morning = self.morning_start <= now <= self.morning_end
+            in_afternoon = self.afternoon_start <= now <= self.afternoon_end
+            if not (in_morning or in_afternoon):
                 return False, f"CRITICAL: 非交易时间 {now.strftime('%H:%M')}"
         
         # 所有检查通过

@@ -3,6 +3,7 @@
 增强型傅里叶特征提取器
 """
 
+import math
 import numpy as np
 from scipy.fft import fft, fftfreq
 from scipy.signal import find_peaks, welch
@@ -194,7 +195,7 @@ class EnhancedFourierExtractor:
         k = int(1 / g)
         p_value = 0
         for j in range(1, k + 1):
-            term = (-1)**(j-1) * np.math.comb(n, j) * (1 - j*g)**(n-1)
+            term = (-1)**(j-1) * math.comb(n, j) * (1 - j*g)**(n-1)
             p_value += term
         return min(p_value, 1.0)
     

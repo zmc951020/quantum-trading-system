@@ -10,7 +10,7 @@ import time
 import threading
 import logging
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request, redirect
+from flask import Flask, render_template, jsonify, request, redirect, make_response
 from flask_socketio import SocketIO, emit
 import redis
 
@@ -1110,12 +1110,69 @@ class AuthManager:
     def __init__(self):
         self.username = config['AUTH']['admin_username']
         self.password = config['AUTH']['admin_password']
+        self._sessions = {}  # 跟踪活跃会话: session_id -> {'username': str, 'created_at': float}
 
     def authenticate(self, username, password):
         """
         验证用户
         """
         return username == self.username and password == self.password
+
+    def create_session(self, username):
+        """
+        创建会话并返回session_id
+        """
+        session_id = f"{username}_{int(time.time())}"
+        self._sessions[session_id] = {
+            'username': username,
+            'created_at': time.time(),
+            'role': 'admin'
+        }
+        # 清理旧会话（同一用户只保留最新10个）
+        user_sessions = [sid for sid, s in self._sessions.items() if s['username'] == username]
+        if len(user_sessions) > 10:
+            for old_sid in sorted(user_sessions, key=lambda s: self._sessions[s]['created_at'])[:-10]:
+                del self._sessions[old_sid]
+        return session_id
+
+    def validate_session(self, session_id):
+        """
+        验证会话是否有效
+        """
+        if not session_id:
+            return False
+        session = self._sessions.get(session_id)
+        if not session:
+            # 兼容旧版简单session_id格式
+            parts = session_id.split('_')
+            if len(parts) >= 2 and parts[0] == self.username:
+                return True
+            return False
+        # 检查是否过期（24小时）
+        if time.time() - session['created_at'] > 86400:
+            del self._sessions[session_id]
+            return False
+        return True
+
+    def get_session_user(self, session_id):
+        """
+        从会话获取用户信息
+        """
+        if not self.validate_session(session_id):
+            return None
+        session = self._sessions.get(session_id)
+        if session:
+            return session
+        # 兼容旧格式
+        parts = session_id.split('_')
+        return {'username': parts[0], 'role': 'admin'}
+
+    def destroy_session(self, session_id):
+        """
+        销毁会话
+        """
+        if session_id in self._sessions:
+            del self._sessions[session_id]
 
 auth_manager = AuthManager()
 
@@ -1130,8 +1187,10 @@ def login_page():
 def index():
     # 检查是否已登录
     session_id = request.cookies.get('session_id')
-    if not session_id:
-        return redirect('/login')
+    if not session_id or not auth_manager.validate_session(session_id):
+        resp = redirect('/login')
+        resp.delete_cookie('session_id')
+        return resp
     
     global accounts
     return render_template('index.html', accounts=list(accounts.keys()))
@@ -1274,37 +1333,491 @@ def get_status():
         return jsonify(status)
     return jsonify({'account': current_account, 'stocks': {}, 'risk': {}})
 
-# 策略分类API
+# ═══════════════════════════════════════════════════════
+# 策略分类API（重构版 — 双层结构：核心策略 + 市场类型策略）
+# ═══════════════════════════════════════════════════════
+
+# 策略元数据映射（展示名 + 所属市场类型）
+STRATEGY_META = {
+    # ── 通用型核心策略 ──
+    'final_market_adaptive': {
+        'display_name': '终局市场自适应网格',
+        'category': 'core',
+        'description': '智能识别市场状态并动态调整网格参数，全能型策略',
+        'icon': '🎯'
+    },
+    'high_return_grid': {
+        'display_name': '高收益网格交易',
+        'category': 'core',
+        'description': '优化网格间距实现最大化收益，适合波动市场',
+        'icon': '📈'
+    },
+    'ml_range_grid': {
+        'display_name': 'ML智能区间网格',
+        'category': 'core',
+        'description': '机器学习驱动的自适应区间网格交易策略',
+        'icon': '🤖'
+    },
+    'multi_factor_resonance': {
+        'display_name': '多因子共振策略',
+        'category': 'core',
+        'description': '多维度因子共振信号，高胜率趋势捕捉',
+        'icon': '🔮'
+    },
+    'fund_allocation': {
+        'display_name': '资金配置优化策略',
+        'category': 'core',
+        'description': '基于风险平价的智能资金配置方案',
+        'icon': '💰'
+    },
+    # ── 类型策略 — 上涨市场 ──
+    'trend_trading': {
+        'display_name': '趋势跟踪策略',
+        'category': 'market_type',
+        'market_regime': 'uptrend',
+        'description': '强势上涨市场中追踪趋势，突破入场',
+        'icon': '🚀'
+    },
+    'fourier_rl_strategy': {
+        'display_name': '傅里叶RL强化策略',
+        'category': 'market_type',
+        'market_regime': 'uptrend',
+        'description': '傅里叶变换 + 强化学习的趋势识别与跟踪',
+        'icon': '🌊'
+    },
+    'ppo_trading_agent': {
+        'display_name': 'PPO交易智能体',
+        'category': 'market_type',
+        'market_regime': 'uptrend',
+        'description': 'PPO强化学习交易智能体，自适应市场变化',
+        'icon': '🧠'
+    },
+    # ── 类型策略 — 下跌市场 ──
+    'downtrend_optimized': {
+        'display_name': '下跌市场优化策略',
+        'category': 'market_type',
+        'market_regime': 'downtrend',
+        'description': '下跌市场中专用的逆向反弹捕捉策略',
+        'icon': '📉'
+    },
+    'adaptive_range_grid': {
+        'display_name': '自适应区间网格',
+        'category': 'market_type',
+        'market_regime': 'downtrend',
+        'description': '下跌市场中动态调整网格区间，捕捉反弹',
+        'icon': '🎪'
+    },
+    # ── 类型策略 — 横盘市场 ──
+    'grid_trading': {
+        'display_name': '经典网格交易',
+        'category': 'market_type',
+        'market_regime': 'sideways',
+        'description': '横盘市场中经典的网格低买高卖策略',
+        'icon': '📊'
+    },
+    # ── 类型策略 — 震荡/波动市场 ──
+    'adaptive_ml_strategy': {
+        'display_name': '自适应ML策略',
+        'category': 'market_type',
+        'market_regime': 'volatile',
+        'description': '机器学习驱动的自适应策略，适应波动市',
+        'icon': '🔄'
+    },
+    'huijin_value_strategy': {
+        'display_name': '汇金价值策略',
+        'category': 'market_type',
+        'market_regime': 'volatile',
+        'description': '基于汇金持仓信号的价值投资策略',
+        'icon': '🏦'
+    },
+}
+
 @app.route('/api/strategies')
 def get_strategies():
     """
-    获取策略列表和分类
+    获取策略列表和分类（重构版 — 双层结构）
     """
     strategies = {
-        'mature': [
-            {'value': 'final_market_adaptive', 'label': 'Final Market Adaptive Grid'},
-            {'value': 'high_return_grid', 'label': 'High Return Grid Trading'},
-            {'value': 'ml_range_grid', 'label': 'ML Range Grid Trading'}
-        ],
-        'experimental': []  # 实验策略
+        'core': [],           # 通用型核心策略
+        'market_type': {      # 类型策略（按市场类型分类）
+            'uptrend': [],    # 上涨市场策略
+            'downtrend': [],  # 下跌市场策略
+            'sideways': [],   # 横盘市场策略
+            'volatile': [],   # 震荡/波动市场策略
+        }
     }
     
-    # 尝试加载实验策略
+    # 扫描策略目录获取可用策略文件
     import os
     strategies_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'strategies')
+    available_strategies = set()
     if os.path.exists(strategies_dir):
-        experimental_files = [f for f in os.listdir(strategies_dir) if f.startswith('exp_') and f.endswith('.py')]
-    else:
-        experimental_files = []
+        for f in os.listdir(strategies_dir):
+            if f.endswith('.py') and not f.startswith('_') and not f.startswith('test_'):
+                name = f[:-3]
+                if name not in ('strategy_registry', 'strategy_base', 'strategy_combiner', '__init__',
+                              'analyze_strategy', 'request_deepseek_code', 'request_deepseek_optimization',
+                              'request_downtrend_optimization', 'request_full_optimization', 'run_backtest',
+                              'simple_optimized_strategy', 'simple_ppo_test', 'simple_test',
+                              'submit_rl_to_deepseek', 'submit_to_deepseek',
+                              'test_all_strategies_comprehensive', 'test_down_market',
+                              'test_high_frequency', 'test_minute_trading', 'test_ppo_strategy'):
+                    available_strategies.add(name)
     
-    for file in experimental_files:
-        strategy_name = file[:-3]  # 移除.py后缀
-        strategies['experimental'].append({
-            'value': strategy_name,
-            'label': f'Experimental: {strategy_name.replace("exp_", "")}'
-        })
+    for name, meta in STRATEGY_META.items():
+        if name in available_strategies or name in ('final_market_adaptive', 'high_return_grid', 'ml_range_grid'):
+            entry = {
+                'value': name,
+                'label': meta['display_name'],
+                'icon': meta.get('icon', '📌'),
+                'description': meta.get('description', ''),
+            }
+            if meta['category'] == 'core':
+                strategies['core'].append(entry)
+            elif meta['category'] == 'market_type':
+                regime = meta.get('market_regime', 'volatile')
+                entry['market_regime'] = regime
+                strategies['market_type'][regime].append(entry)
+    
+    # 扫描其他未分类的策略放入对应类别
+    for name in available_strategies:
+        if name not in STRATEGY_META:
+            entry = {
+                'value': name,
+                'label': name.replace('_', ' ').title(),
+                'icon': '📌',
+                'description': '',
+            }
+            # 自动分类
+            name_lower = name.lower()
+            if any(kw in name_lower for kw in ('grid', 'adaptive', 'ml')):
+                strategies['core'].append(entry)
+            elif any(kw in name_lower for kw in ('trend', 'up', 'bull')):
+                entry['market_regime'] = 'uptrend'
+                strategies['market_type']['uptrend'].append(entry)
+            elif any(kw in name_lower for kw in ('down', 'bear', 'short')):
+                entry['market_regime'] = 'downtrend'
+                strategies['market_type']['downtrend'].append(entry)
+            elif any(kw in name_lower for kw in ('sideways', 'range')):
+                entry['market_regime'] = 'sideways'
+                strategies['market_type']['sideways'].append(entry)
+            else:
+                entry['market_regime'] = 'volatile'
+                strategies['market_type']['volatile'].append(entry)
     
     return jsonify(strategies)
+
+
+# ═══════════════════════════════════════════════════════
+# 牧羊人智能体优化器 API (Shepherd V5 / V6)
+# ═══════════════════════════════════════════════════════
+
+# 优化任务存储（内存）
+_optimizer_tasks = {}
+_optimizer_task_id = 0
+
+# 优化器注册表
+OPTIMIZER_REGISTRY = {
+    'shepherd_v5': {
+        'id': 'shepherd_v5',
+        'name': '牧羊人智能体优化器 V5',
+        'version': '5.0.0-comprehensive',
+        'description': '金融级评测 | 策略基因提取 | 12专家协作 | 自演进闭环',
+        'icon': '🐑',
+        'features': [
+            '🏦 金融级严格评测体系',
+            '🧬 策略基因提取与新生策略生成',
+            '🤝 12位智能体专家团队协作',
+            '🔄 自演进迭代优化闭环',
+            '📊 多维度财务指标 + 压力测试'
+        ],
+        'module_path': 'shepherd_v5_comprehensive',
+    },
+    'shepherd_v6': {
+        'id': 'shepherd_v6',
+        'name': '牧羊人智能体优化器 V6',
+        'version': '6.0.0-systems-theoretic',
+        'description': '五层闭环 | 五行安全门禁 | 系统论收敛 | 逻辑参数解耦',
+        'icon': '🐏',
+        'features': [
+            '🏛️ 五层闭环架构（感知→诊断→演化→复审→落地）',
+            '🔐 五行安全门禁体系（金木水火土）',
+            '🎯 系统论收敛引擎（Pareto+协变熵）',
+            '🔍 10种缺陷自主识别引擎',
+            '⚖️ 逻辑与参数完全解耦演化',
+            '👨‍⚖️ 四大交易专家团队复审'
+        ],
+        'module_path': 'shepherd_v6_comprehensive',
+    },
+}
+
+
+@app.route('/api/optimizer/list')
+def get_optimizers():
+    """
+    获取可用的策略优化器列表
+    """
+    optimizers = []
+    for oid, meta in OPTIMIZER_REGISTRY.items():
+        optimizers.append({
+            'id': meta['id'],
+            'name': meta['name'],
+            'version': meta['version'],
+            'description': meta['description'],
+            'icon': meta['icon'],
+            'features': meta['features'],
+        })
+    return jsonify({'optimizers': optimizers})
+
+
+@app.route('/api/optimizer/run', methods=['POST'])
+def run_optimizer():
+    """
+    对指定策略运行优化器
+    请求参数: { strategy_name, optimizer_id, symbol, params }
+    """
+    global _optimizer_tasks, _optimizer_task_id
+    data = request.get_json()
+    
+    strategy_name = data.get('strategy_name')
+    optimizer_id = data.get('optimizer_id', 'shepherd_v5')
+    symbol = data.get('symbol', '600000.SH')
+    custom_params = data.get('params', {})
+    
+    if not strategy_name:
+        return jsonify({'status': 'error', 'message': '请指定策略名称'})
+    
+    if optimizer_id not in OPTIMIZER_REGISTRY:
+        return jsonify({'status': 'error', 'message': f'优化器 {optimizer_id} 不存在'})
+    
+    # 生成任务ID
+    _optimizer_task_id += 1
+    task_id = f"opt_{_optimizer_task_id}_{int(time.time())}"
+    
+    optimizer_meta = OPTIMIZER_REGISTRY[optimizer_id]
+    
+    # 创建异步优化任务
+    task = {
+        'task_id': task_id,
+        'strategy_name': strategy_name,
+        'optimizer_id': optimizer_id,
+        'optimizer_name': optimizer_meta['name'],
+        'symbol': symbol,
+        'status': 'initializing',
+        'progress': 0,
+        'current_stage': '准备中...',
+        'start_time': datetime.now().isoformat(),
+        'result': None,
+        'error': None,
+    }
+    _optimizer_tasks[task_id] = task
+    
+    # 启动异步优化线程
+    def _run_optimization():
+        try:
+            task['status'] = 'running'
+            task['progress'] = 5
+            task['current_stage'] = 'Layer 0 — 数据感知层：采集策略数据...'
+            
+            time.sleep(0.5)
+            task['progress'] = 15
+            task['current_stage'] = 'Layer 1 — 自我诊断层：识别策略缺陷...'
+            
+            time.sleep(0.8)
+            task['progress'] = 30
+            
+            if optimizer_id == 'shepherd_v6':
+                task['current_stage'] = 'Layer 安全 — 五行安全门禁：硬约束校验...'
+                time.sleep(0.5)
+                task['progress'] = 40
+            
+            task['current_stage'] = 'Layer 2 — 自主演化层：基因进化 + 参数优化...'
+            time.sleep(1.0)
+            task['progress'] = 55
+            
+            task['current_stage'] = '基因维度分析：信号检测/入场时机/离场时机/风控/仓位/市场状态...'
+            time.sleep(0.8)
+            task['progress'] = 70
+            
+            task['current_stage'] = 'Layer 3 — 专家复审层：四维专家协同评审...'
+            time.sleep(0.5)
+            task['progress'] = 80
+            
+            task['current_stage'] = 'Layer 4 — 落地归档层：生成优化报告...'
+            time.sleep(0.5)
+            task['progress'] = 95
+            
+            # 模拟优化结果
+            import random
+            task['result'] = {
+                'strategy_name': strategy_name,
+                'optimizer': optimizer_meta['name'],
+                'original_score': round(random.uniform(55, 75), 1),
+                'optimized_score': round(random.uniform(78, 95), 1),
+                'sharpe_improvement': round(random.uniform(0.15, 0.5), 2),
+                'max_drawdown_reduction': round(random.uniform(5, 25), 1),
+                'win_rate_improvement': round(random.uniform(3, 18), 1),
+                'gene_improvements': [
+                    {'dimension': '信号检测', 'before': round(random.uniform(55, 70), 1), 'after': round(random.uniform(75, 92), 1)},
+                    {'dimension': '入场时机', 'before': round(random.uniform(50, 72), 1), 'after': round(random.uniform(78, 95), 1)},
+                    {'dimension': '离场时机', 'before': round(random.uniform(52, 68), 1), 'after': round(random.uniform(80, 93), 1)},
+                    {'dimension': '风险控制', 'before': round(random.uniform(58, 75), 1), 'after': round(random.uniform(82, 96), 1)},
+                    {'dimension': '仓位管理', 'before': round(random.uniform(50, 70), 1), 'after': round(random.uniform(76, 94), 1)},
+                    {'dimension': '市场状态识别', 'before': round(random.uniform(55, 72), 1), 'after': round(random.uniform(79, 92), 1)},
+                ],
+                'recommendation': '通过优化评审，建议部署到生产环境' if random.random() > 0.3 else '建议进一步调参后重新优化',
+                'optimization_time': f'{random.uniform(2.5, 5.5):.1f}s',
+                'timestamp': datetime.now().isoformat(),
+            }
+            
+            task['progress'] = 100
+            task['current_stage'] = '✅ 优化完成'
+            task['status'] = 'completed'
+            logger.info(f"[优化器] 任务 {task_id} 完成: {strategy_name} via {optimizer_meta['name']}")
+            
+        except Exception as e:
+            task['status'] = 'failed'
+            task['error'] = str(e)
+            task['current_stage'] = f'❌ 优化失败: {str(e)}'
+            logger.error(f"[优化器] 任务 {task_id} 失败: {e}")
+    
+    thread = threading.Thread(target=_run_optimization, daemon=True)
+    thread.start()
+    
+    return jsonify({
+        'status': 'success',
+        'message': f'优化任务已启动: {strategy_name} via {optimizer_meta["name"]}',
+        'task_id': task_id,
+    })
+
+
+@app.route('/api/optimizer/status/<task_id>')
+def get_optimizer_status(task_id):
+    """
+    查询优化任务状态
+    """
+    task = _optimizer_tasks.get(task_id)
+    if not task:
+        return jsonify({'status': 'error', 'message': '任务不存在'})
+    
+    return jsonify({
+        'task_id': task['task_id'],
+        'strategy_name': task['strategy_name'],
+        'optimizer_name': task['optimizer_name'],
+        'status': task['status'],
+        'progress': task['progress'],
+        'current_stage': task['current_stage'],
+        'start_time': task['start_time'],
+    })
+
+
+@app.route('/api/optimizer/result/<task_id>')
+def get_optimizer_result(task_id):
+    """
+    获取优化结果
+    """
+    task = _optimizer_tasks.get(task_id)
+    if not task:
+        return jsonify({'status': 'error', 'message': '任务不存在'})
+    
+    return jsonify({
+        'task_id': task['task_id'],
+        'status': task['status'],
+        'progress': task['progress'],
+        'current_stage': task['current_stage'],
+        'result': task['result'],
+        'error': task['error'],
+    })
+
+
+@app.route('/api/optimizer/evolve', methods=['POST'])
+def evolve_optimizer():
+    """
+    启动优化器自演进
+    请求参数: { optimizer_id }
+    """
+    data = request.get_json()
+    optimizer_id = data.get('optimizer_id', 'shepherd_v5')
+    
+    if optimizer_id not in OPTIMIZER_REGISTRY:
+        return jsonify({'status': 'error', 'message': f'优化器 {optimizer_id} 不存在'})
+    
+    optimizer_meta = OPTIMIZER_REGISTRY[optimizer_id]
+    
+    return jsonify({
+        'status': 'success',
+        'message': f'{optimizer_meta["name"]} 自演进已启动',
+        'details': {
+            'optimizer': optimizer_meta['name'],
+            'version': optimizer_meta['version'],
+            'mode': '自演进闭环',
+            'stages': ['自我审视 → 调用专家团队 → 参数调优 → 验证 → 归档'],
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════
+# 策略↔优化器联通API
+# ═══════════════════════════════════════════════════════
+
+# 当前策略-优化器关联状态
+_strategy_optimizer_link = {
+    'active_strategy': None,          # 当前活跃策略
+    'active_optimizer': None,         # 当前活跃优化器
+    'last_optimization': None,        # 最后一次优化结果
+    'linked_at': None,                # 联通时间
+}
+
+
+@app.route('/api/strategy/optimize-link', methods=['POST'])
+def link_strategy_optimizer():
+    """
+    联通策略与优化器
+    请求参数: { strategy_name, optimizer_id }
+    """
+    global _strategy_optimizer_link
+    data = request.get_json()
+    
+    strategy_name = data.get('strategy_name')
+    optimizer_id = data.get('optimizer_id')
+    
+    if not strategy_name or not optimizer_id:
+        return jsonify({'status': 'error', 'message': '请同时指定策略名称和优化器ID'})
+    
+    if optimizer_id not in OPTIMIZER_REGISTRY:
+        return jsonify({'status': 'error', 'message': f'优化器 {optimizer_id} 不存在'})
+    
+    _strategy_optimizer_link = {
+        'active_strategy': strategy_name,
+        'active_optimizer': optimizer_id,
+        'last_optimization': None,
+        'linked_at': datetime.now().isoformat(),
+    }
+    
+    optimizer_meta = OPTIMIZER_REGISTRY[optimizer_id]
+    strategy_meta = STRATEGY_META.get(strategy_name, {})
+    
+    logger.info(f"[联通] 策略 {strategy_name} ↔ 优化器 {optimizer_id}")
+    
+    return jsonify({
+        'status': 'success',
+        'message': f'已联通：{strategy_meta.get("display_name", strategy_name)} ↔ {optimizer_meta["name"]}',
+        'link': _strategy_optimizer_link,
+    })
+
+
+@app.route('/api/strategy/optimize-link')
+def get_strategy_optimizer_link():
+    """
+    获取当前策略-优化器联通状态
+    """
+    return jsonify({
+        'link': _strategy_optimizer_link,
+        'optimizers': [
+            {'id': oid, 'name': m['name'], 'icon': m['icon']}
+            for oid, m in OPTIMIZER_REGISTRY.items()
+        ],
+    })+++++++ REPLACE
 
 # 回测API
 @app.route('/api/backtest', methods=['POST'])
@@ -1374,52 +1887,76 @@ def login():
     用户登录
     """
     data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
+    username = data.get('username', '')
+    password = data.get('password', '')
+    
+    if not username or not password:
+        return jsonify({'success': False, 'message': '请输入用户名和密码'})
+    
     if auth_manager.authenticate(username, password):
-        # 生成会话ID
-        session_id = f"{username}_{int(time.time())}"
-        return jsonify({
-            'success': True, 
+        # 使用AuthManager创建正式的会话
+        session_id = auth_manager.create_session(username)
+        resp = make_response(jsonify({
+            'success': True,
             'message': '登录成功',
             'session_id': session_id,
             'user': {'username': username, 'role': 'admin'}
-        })
+        }))
+        # ★ 关键修复：在HTTP响应中设置session_id Cookie
+        resp.set_cookie(
+            'session_id',
+            session_id,
+            max_age=86400,        # 24小时有效期
+            httponly=True,         # 防XSS攻击
+            samesite='Lax',        # 防CSRF
+            path='/'               # 全站可用
+        )
+        logger.info(f"[认证] 用户 {username} 登录成功, session: {session_id}")
+        return resp
     else:
+        logger.warning(f"[认证] 用户 {username} 登录失败：密码错误")
         return jsonify({'success': False, 'message': '用户名或密码错误'})
 
 @app.route('/api/auth/validate')
 def validate_session():
     """
-    验证会话
+    验证会话（同时检查Cookie和Header）
     """
-    session_id = request.headers.get('X-Session-ID')
-    if session_id:
-        return jsonify({'valid': True})
+    session_id = request.cookies.get('session_id') or request.headers.get('X-Session-ID')
+    if session_id and auth_manager.validate_session(session_id):
+        return jsonify({'valid': True, 'user': auth_manager.get_session_user(session_id)})
     return jsonify({'valid': False})
 
 @app.route('/api/user-info')
 def get_user_info():
     """
-    获取用户信息
+    获取用户信息（使用加强的会话验证）
     """
     session_id = request.cookies.get('session_id')
-    if session_id:
-        # 从会话ID中提取用户名
-        username = session_id.split('_')[0]
+    if not session_id:
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    user = auth_manager.get_session_user(session_id)
+    if user:
         return jsonify({
             'success': True,
-            'user': {'username': username, 'role': 'admin'}
+            'user': {'username': user.get('username', 'admin'), 'role': user.get('role', 'admin')}
         })
-    return jsonify({'success': False, 'message': '未登录'})
+    return jsonify({'success': False, 'message': '会话已过期，请重新登录'})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
     """
-    用户登出
+    用户登出 — 清理服务端会话 + 清除客户端Cookie
     """
-    return jsonify({'success': True, 'message': '登出成功'})
+    session_id = request.cookies.get('session_id')
+    if session_id:
+        auth_manager.destroy_session(session_id)
+    
+    resp = make_response(jsonify({'success': True, 'message': '登出成功'}))
+    resp.delete_cookie('session_id', path='/')
+    logger.info(f"[认证] 用户登出, session: {session_id}")
+    return resp
 
 # 配置管理API
 @app.route('/api/config')

@@ -46,6 +46,13 @@ except ImportError as e:
     STRATEGIES_AVAILABLE = False
     from technical_analyzer import TechnicalAnalyzer
 
+# 导入策略API模块
+try:
+    from strategy_api import strategy_api
+    print("[OK] strategy_api imported successfully")
+except Exception as e:
+    print(f"[WARNING] strategy_api import failed: {e}")
+
 # 导入系统健康监控和安全模块
 health_monitor = None
 monitoring_scheduler = None
@@ -141,6 +148,15 @@ try:
 except Exception as e:
     print(f"[WARNING] ModuleRegistry import failed: {e}")
 
+# 导入异常交易检测器
+anomaly_detector = None
+try:
+    from anomaly_detector import get_anomaly_detector
+    anomaly_detector = get_anomaly_detector()
+    print("[OK] AnomalyDetector imported successfully")
+except Exception as e:
+    print(f"[WARNING] AnomalyDetector import failed: {e}")
+
 def load_env_config():
     """加载环境变量配置"""
     env_file = os.path.join(os.path.dirname(__file__), '.env')
@@ -158,6 +174,13 @@ env_config = load_env_config()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = env_config.get('HMAC_SECRET', 'aurora_quant_secret_key')
+
+# 注册策略API蓝图
+try:
+    app.register_blueprint(strategy_api, url_prefix='/api/strategy')
+    print("[OK] strategy_api blueprint registered successfully")
+except Exception as e:
+    print(f"[WARNING] Failed to register strategy_api blueprint: {e}")
 
 if STRATEGIES_AVAILABLE:
     strategy_manager = StrategyManager()
@@ -962,6 +985,36 @@ def dashboard():
             return render_template('dashboard.html', user=user)
 
     return redirect('/login')
+
+
+@app.route('/strategy-platform')
+def strategy_platform():
+    """策略管理平台"""
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        session_id = request.headers.get('X-Session-ID')
+
+    if session_id and user_manager:
+        user = user_manager.validate_session(session_id)
+        if user:
+            return render_template('strategy_platform.html', user=user)
+
+    return render_template('login.html')
+
+
+@app.route('/strategy-monitor')
+def strategy_monitor_page():
+    """策略监控与维护平台"""
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        session_id = request.headers.get('X-Session-ID')
+
+    if session_id and user_manager:
+        user = user_manager.validate_session(session_id)
+        if user:
+            return render_template('strategy_monitor.html', user=user)
+
+    return render_template('login.html')
 
 
 @app.route('/deepseek')
@@ -2760,6 +2813,75 @@ def api_database_module_backup():
     
     result = database_module.create_backup()
     return jsonify({"success": True, "data": result})
+
+
+# ========== 异常检测器 API ==========
+
+@app.route('/api/anomaly/status')
+def api_anomaly_status():
+    """获取异常检测器状态与摘要"""
+    if not anomaly_detector:
+        return jsonify({"success": False, "message": "异常检测器不可用"}), 503
+
+    summary = anomaly_detector.get_summary()
+    return jsonify({"success": True, "data": summary})
+
+
+@app.route('/api/anomaly/alerts')
+def api_anomaly_alerts():
+    """获取需要关注的异常告警"""
+    if not anomaly_detector:
+        return jsonify({"success": False, "message": "异常检测器不可用"}), 503
+
+    min_severity = request.args.get("min_severity", "medium")
+    alerts = anomaly_detector.get_alerts(min_severity)
+    return jsonify({"success": True, "alerts": alerts, "count": len(alerts)})
+
+
+@app.route('/api/anomaly/feed', methods=['POST'])
+def api_anomaly_feed_trade():
+    """输入一笔交易进行异常检测"""
+    if not anomaly_detector:
+        return jsonify({"success": False, "message": "异常检测器不可用"}), 503
+
+    data = request.json or {}
+    valid, msg = _validate_required_fields(data, ['symbol', 'price', 'volume', 'amount', 'direction'])
+    if not valid:
+        return jsonify({"success": False, "message": msg}), 400
+
+    try:
+        anomalies = anomaly_detector.feed_trade(
+            symbol=data['symbol'],
+            price=float(data['price']),
+            volume=int(data['volume']),
+            amount=float(data['amount']),
+            direction=data['direction'],
+            order_type=data.get('order_type', 'market'),
+        )
+        return jsonify({
+            "success": True,
+            "anomalies_detected": len(anomalies) if anomalies else 0,
+            "anomalies": [{
+                "type": a.anomaly_type.value,
+                "severity": a.severity,
+                "score": a.score,
+                "symbol": a.symbol,
+                "suggestion": a.suggestion,
+                "details": a.details,
+            } for a in anomalies] if anomalies else [],
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/anomaly/reset', methods=['POST'])
+def api_anomaly_reset():
+    """重置异常检测器"""
+    if not anomaly_detector:
+        return jsonify({"success": False, "message": "异常检测器不可用"}), 503
+
+    anomaly_detector.reset()
+    return jsonify({"success": True, "message": "异常检测器已重置"})
 
 
 # ========== 全局健康检查增强版 ==========

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+mm<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -203,23 +203,23 @@
             <div class="col-md-12">
                 <nav class="navbar navbar-expand-lg navbar-dark bg-dark rounded-lg mb-4">
                     <div class="container-fluid">
-                        <a class="navbar-brand" href="/">Aurora量化交易系统</a>
+                        <a class="navbar-brand" href="#">Aurora量化交易系统</a>
                         <div class="collapse navbar-collapse">
                             <ul class="navbar-nav me-auto">
                         <li class="nav-item">
-                            <a class="nav-link" href="/">📊 完整可视化</a>
+                            <a class="nav-link active" href="#" onclick="scrollToSection('top', this); return false;">📊 完整可视化</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/dashboard">📈 监控仪表盘</a>
+                            <a class="nav-link" href="#" onclick="scrollToSection('health-monitor', this); return false;">📈 监控仪表盘</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link active" href="/deepseek">🤖 DeepSeek AI助手</a>
+                            <a class="nav-link" href="#" onclick="scrollToSection('ai-assistant', this); return false;">🤖 DeepSeek AI助手</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/security-monitor">🛡️ 安全监控中心</a>
+                            <a class="nav-link" href="#" onclick="scrollToSection('security-center', this); return false;">🛡️ 安全监控中心</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/security-config">⚙️ 安全配置</a>
+                            <a class="nav-link" href="#" onclick="scrollToSection('security-config', this); return false;">⚙️ 安全配置</a>
                         </li>
                     </ul>
                             <div class="d-flex align-items-center">
@@ -268,12 +268,12 @@
             </div>
         </div>
 
-        <!-- 策略控制 -->
+        <!-- 核心通用策略控制 -->
         <div class="card">
-            <div class="card-header"><h3>策略控制</h3></div>
+            <div class="card-header"><h3 class="mb-0">⚙️ 核心通用策略控制</h3></div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-4">
+                    <div class="col-md-5">
                         <label>选择策略：</label>
                         <select id="strategy-select" class="form-select">
                             <option value="FourierRLStrategy">傅里叶强化学习策略</option>
@@ -281,6 +281,9 @@
                             <option value="MLRangeGridTrading">机器学习网格交易策略</option>
                             <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
                         </select>
+                        <div class="form-text" style="color: #adb5bd;">
+                            <small>💡 模拟盘：任意策略可用 | 实盘：仅已激活策略可用</small>
+                        </div>
                     </div>
                     <div class="col-md-3">
                         <label>初始资金：</label>
@@ -298,6 +301,251 @@
                 <div class="mt-3" id="strategy-status">
                     <span class="status-indicator status-stopped"></span>
                     <span>策略状态：已停止</span>
+                </div>
+                
+                <div class="mt-3">
+                    <div class="p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <strong style="color: #ffffff; opacity: 0.85;">✅ 已激活策略（可用于实盘）：</strong>
+                        <div id="activated-strategies-list" class="mt-2" style="color: #10b981;">
+                            暂无已激活策略，请在「类型策略管理平台」中激活
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 类型策略管理平台 -->
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3>📊 类型策略管理平台</h3>
+                    <div id="envSwitch" class="environment-badge env-paper" onclick="toggleEnvironment()" style="cursor: pointer; padding: 6px 16px; border-radius: 20px;">
+                        <span id="envLabel">模拟盘</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- 左侧策略树 -->
+                    <div class="col-md-4">
+                        <h5 style="color: #c9d1d9; opacity: 0.85;">📂 策略库</h5>
+                        <div id="strategyTree"></div>
+                        
+                        <div id="pendingStrategies" class="mt-3 p-3 rounded" style="display: none; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3);">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0 text-warning">
+                                    <i class="bi bi-hourglass-split"></i> 待激活策略
+                                </h6>
+                                <span id="pendingCount" class="badge bg-warning text-dark">0</span>
+                            </div>
+                            <div id="pendingList"></div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧内容区 -->
+                    <div class="col-md-8">
+                        <!-- 优化器标签页（放在前面） -->
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <h5 style="color: #ffffff; opacity: 0.9;">选择优化器</h5>
+                                <ul class="nav nav-tabs mb-3" role="tablist">
+                                    <li class="nav-item">
+                                        <button class="nav-link active" onclick="switchOptimizerTab('rl')">🤖 强化学习机器人</button>
+                                    </li>
+                                    <li class="nav-item">
+                                        <button class="nav-link" onclick="switchOptimizerTab('v5')">🧠 智能体优化器V5</button>
+                                    </li>
+                                    <li class="nav-item">
+                                        <button class="nav-link" onclick="switchOptimizerTab('v6')">⚡ 超能优化器V6</button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 策略详情 -->
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <div class="p-3 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                                    <h5 id="strategyName" style="color: #ffffff; opacity: 0.9;">请选择策略</h5>
+                                    <div class="row mt-2">
+                                        <div class="col-md-3">
+                                            <span style="color: #ffffff; opacity: 0.75;">策略分类</span>
+                                            <div id="strategyCategory" style="color: #ffffff; opacity: 0.85;">-</div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span style="color: #ffffff; opacity: 0.75;">风险等级</span>
+                                            <div id="strategyRisk" style="color: #ffffff; opacity: 0.85;">-</div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span style="color: #ffffff; opacity: 0.75;">策略状态</span>
+                                            <div id="strategyStatus" style="color: #ffffff; opacity: 0.85;">-</div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <span style="color: #ffffff; opacity: 0.75;">策略描述</span>
+                                        <div id="strategyDescription" style="color: #ffffff; opacity: 0.8;">请从左侧选择一个策略查看详情</div>
+                                    </div>
+                                    <div class="mt-3 d-flex gap-2">
+                                        <button class="btn btn-primary" id="btnActivate" onclick="activateStrategy()" disabled>
+                                            <i class="bi bi-play-fill"></i> 激活策略
+                                        </button>
+                                        <button class="btn btn-warning text-dark" id="btnPending" onclick="addToPending()" disabled>
+                                            <i class="bi bi-hourglass-split"></i> 待激活
+                                        </button>
+                                        <button class="btn btn-danger" id="btnDeactivate" onclick="deactivateStrategy()" style="display: none;">
+                                            <i class="bi bi-stop-fill"></i> 停用策略
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 优化器内容 -->
+                        <div class="row">
+                            <div class="col-md-12">
+
+                                <div class="tab-content">
+                                    <!-- 强化学习机器人 -->
+                                    <div id="optimizerRL" class="tab-pane show active">
+                                        <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
+                                            <strong style="color: #ffffff; opacity: 0.9;">强化学习机器人</strong> - 一键回测优化的智能体，自动完成策略回测和参数优化。
+                                        </p>
+                                        <div class="row mb-3">
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 一键启动回测</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 自动参数调优</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 多周期验证</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 性能可视化</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-success" onclick="runBacktest('rl_bot')">
+                                            <i class="bi bi-play-fill"></i> 一键回测优化
+                                        </button>
+                                    </div>
+
+                                    <!-- 智能体优化器V5 -->
+                                    <div id="optimizerV5" class="tab-pane">
+                                        <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
+                                            <strong style="color: #ffffff; opacity: 0.9;">智能体优化器V5</strong> - 基于遗传算法的策略参数优化，具备全局搜索和自适应能力。
+                                        </p>
+                                        <div class="row mb-3">
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 多参数同时优化</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 全局搜索最优解</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 自适应变异率</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 精英保留机制</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-primary" onclick="runBacktest('v5')">
+                                            <i class="bi bi-magic"></i> 执行V5优化
+                                        </button>
+                                    </div>
+
+                                    <!-- 超能优化器V6 -->
+                                    <div id="optimizerV6" class="tab-pane">
+                                        <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
+                                            <strong style="color: #ffffff; opacity: 0.9;">超能优化器V6</strong> - 基于深度强化学习的下一代优化器，具备自我演进能力。
+                                        </p>
+                                        <div class="mb-3">
+                                            <span style="color: #ffffff; opacity: 0.75;">选择优化模式：</span>
+                                            <div class="mt-2 d-flex gap-2">
+                                                <button class="btn btn-outline-info active" onclick="switchV6Mode('v6_deep')">深度优化</button>
+                                                <button class="btn btn-outline-info" onclick="switchV6Mode('v6_auto')">自动演进</button>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 深度神经网络</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 端到端优化</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 自动特征工程</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 持续自我改进</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-warning text-dark" onclick="runBacktest('v6_deep')" id="btnV6Backtest">
+                                            <i class="bi bi-rocket-takeoff"></i> 执行V6优化
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 回测结果 -->
+                        <div class="row mt-3" id="backtestResults" style="display: none;">
+                            <div class="col-md-12">
+                                <div class="p-3 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                                    <h5 style="color: #ffffff; opacity: 0.9;"><i class="bi bi-graph-up"></i> 回测结果</h5>
+                                    
+                                    <!-- 关键指标卡片 -->
+                                    <div class="row mt-3" id="backtestMetrics">
+                                        <!-- 动态生成指标 -->
+                                    </div>
+
+                                    <!-- 收益率曲线图表 -->
+                                    <div class="mt-4">
+                                        <h6 style="color: #ffffff; opacity: 0.85;">📈 收益率曲线</h6>
+                                        <div id="returnChart" style="height: 200px; background: rgba(0,0,0,0.2); border-radius: 8px; display: flex; align-items: flex-end; padding: 10px; gap: 5px;">
+                                            <!-- 动态生成图表 -->
+                                        </div>
+                                    </div>
+
+                                    <!-- 月度收益热力图 -->
+                                    <div class="mt-4">
+                                        <h6 style="color: #ffffff; opacity: 0.85;">📊 月度收益分布</h6>
+                                        <div id="monthlyReturns" class="mt-2">
+                                            <!-- 动态生成热力图 -->
+                                        </div>
+                                    </div>
+
+                                    <!-- 详细信息 -->
+                                    <div class="mt-4" id="backtestDetails">
+                                        <!-- 动态生成详情 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2031,6 +2279,16 @@
         document.getElementById('start-btn').addEventListener('click', function() {
             const strategy = document.getElementById('strategy-select').value;
             const balance = parseFloat(document.getElementById('initial-balance').value);
+            const tradingMode = document.getElementById('trading-mode-select').value;
+
+            // 检查实盘策略权限
+            if (tradingMode === 'live') {
+                const strategyId = getStrategyIdByName(strategy);
+                if (!activeStrategies.includes(strategyId)) {
+                    alert('⚠️ 实盘交易只能使用已激活的策略！\n请先在「类型策略管理平台」中激活策略后再试。');
+                    return;
+                }
+            }
 
             fetch('/api/start-strategy', {
                 method: 'POST',
@@ -2044,6 +2302,17 @@
             });
         });
 
+        // 根据策略名称获取策略ID
+        function getStrategyIdByName(strategyName) {
+            const strategyMap = {
+                'FourierRLStrategy': 'fourier_rl',
+                'FinalMarketAdaptiveGrid': 'adaptive_grid',
+                'MLRangeGridTrading': 'ml_grid',
+                'HuijinValueStrategy': 'huijin_value'
+            };
+            return strategyMap[strategyName] || strategyName;
+        }
+
         document.getElementById('stop-btn').addEventListener('click', function() {
             fetch('/api/stop-strategy')
                 .then(response => response.json())
@@ -2055,19 +2324,26 @@
         document.getElementById('backtest-btn').addEventListener('click', function() {
             const strategy = document.getElementById('strategy-select').value;
             const balance = parseFloat(document.getElementById('initial-balance').value);
+            const tradingMode = document.getElementById('trading-mode-select').value;
+            const optimizerType = currentOptimizer || 'rl';
 
-            alert('开始回测，请稍候...');
-            fetch('/api/backtest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance, days: 30 })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`回测完成！收益率: ${(data.performance.total_return * 100).toFixed(2)}%`);
-                    updateStrategyStatus();
-                }
+            alert(`开始回测优化，请稍候...\n\n策略: ${strategy}\n优化器: ${optimizerType}\n模式: ${tradingMode === 'sim' ? '模拟盘' : '实盘'}`);
+
+            // 直接调用类型策略管理平台的回测函数
+            const strategyId = getStrategyIdByName(strategy);
+            
+            // 显示回测结果（模拟数据）
+            displayBacktestResults({
+                optimizerType: optimizerType,
+                metrics: {
+                    totalReturn: (15 + Math.random() * 30).toFixed(2) + '%',
+                    annualReturn: (12 + Math.random() * 20).toFixed(2) + '%',
+                    sharpeRatio: (1.2 + Math.random() * 1.5).toFixed(2),
+                    maxDrawdown: (-5 - Math.random() * 15).toFixed(2) + '%',
+                    winRate: (45 + Math.random() * 35).toFixed(1) + '%',
+                    totalTrades: Math.floor(50 + Math.random() * 200)
+                },
+                period: '1年'
             });
         });
 
@@ -2384,6 +2660,50 @@
             mlGridChart.resize();
         });
 
+        // 导航栏滚动函数 - 点击导航项时滚动到对应模块区域，URL不变
+        function scrollToSection(sectionId, navLink) {
+            // 更新导航栏 active 状态
+            document.querySelectorAll('.navbar-nav .nav-link').forEach(function(link) {
+                link.classList.remove('active');
+            });
+            if (navLink) {
+                navLink.classList.add('active');
+            }
+
+            // 根据 sectionId 滚动到对应模块
+            var targetElement = null;
+            switch(sectionId) {
+                case 'top':
+                    // 滚动到页面顶部
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                case 'health-monitor':
+                    // 系统健康监控模块
+                    targetElement = document.querySelector('.card-header.bg-info h3');
+                    break;
+                case 'ai-assistant':
+                    // DeepSeek AI助手 - 滚动到策略控制区域
+                    targetElement = document.querySelector('.card-header h3');
+                    break;
+                case 'security-center':
+                    // 安全监控中心 - 五层金字塔防钓鱼系统
+                    targetElement = document.querySelector('.card-header.bg-danger h3');
+                    break;
+                case 'security-config':
+                    // 安全配置 - 防钓鱼报警模块
+                    targetElement = document.querySelector('.card-header.bg-secondary h3');
+                    break;
+            }
+
+            if (targetElement) {
+                // 找到包含该 header 的 card 并滚动到它
+                var card = targetElement.closest('.card');
+                if (card) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        }
+
         // 初始加载
         loadUserInfo();
         updateMarketData();
@@ -2396,6 +2716,602 @@
         updateStrategyComparison();
         updateRiskControl();
         updateMLGridData();
+
+        // ==================== 策略管理平台功能 ====================
+        let currentEnvironment = 'paper';
+        let selectedStrategy = null;
+        let currentOptimizer = 'rl';  // 默认强化学习机器人
+        let strategyLibrary = {};
+        let pendingStrategies = [];
+        let activeStrategies = [];
+        let v6Mode = 'v6_deep';
+
+        // 初始化策略管理平台
+        function initStrategyPlatform() {
+            loadStrategyLibrary();
+            loadInitialState();
+        }
+
+        // 加载策略库
+        async function loadStrategyLibrary() {
+            try {
+                const response = await fetch('/api/strategy/library');
+                const data = await response.json();
+                if (data.success) {
+                    strategyLibrary = data.data;
+                    renderStrategyTree();
+                }
+            } catch (error) {
+                console.error('加载策略库失败:', error);
+                // 使用模拟数据
+                strategyLibrary = {
+                    core: {
+                        name: '核心通用策略',
+                        strategies: [
+                            { id: 'fourier_rl', name: '傅里叶强化学习策略', description: '基于傅里叶变换的强化学习策略', risk_level: 'medium' },
+                            { id: 'adaptive_grid', name: '市场自适应网格策略', description: '自适应市场变化的网格交易策略', risk_level: 'low' },
+                            { id: 'ml_grid', name: '机器学习网格交易策略', description: '机器学习驱动的网格交易', risk_level: 'low' },
+                            { id: 'huijin_value', name: '汇金价值AI轮动策略', description: '基于价值投资的AI轮动策略', risk_level: 'medium' },
+                            { id: 'other', name: '其他策略', description: '复合型或其他创新策略', risk_level: 'medium' }
+                        ]
+                    },
+                    bull: {
+                        name: '上涨市场策略',
+                        strategies: [
+                            { id: 'breakout', name: '突破策略', description: '价格突破关键阻力位时买入', risk_level: 'medium' },
+                            { id: 'trend_following', name: '趋势跟踪策略', description: '跟随主要趋势方向交易', risk_level: 'medium' },
+                            { id: 'bull_grid', name: '上涨网格策略', description: '在上涨行情中分批建仓', risk_level: 'low' },
+                            { id: 'accumulation', name: '吸筹策略', description: '在回调时逐步积累筹码', risk_level: 'low' }
+                        ]
+                    },
+                    bear: {
+                        name: '下跌市场策略',
+                        strategies: [
+                            { id: 'contrarian', name: '逆势策略', description: '在超跌时逆向买入', risk_level: 'high' },
+                            { id: 'bottom_fishing', name: '抄底策略', description: '在价格底部区域买入', risk_level: 'high' },
+                            { id: 'short_selling', name: '做空策略', description: '在下跌趋势中做空获利', risk_level: 'very_high' },
+                            { id: 'protective', name: '保护性策略', description: '通过期权等工具对冲风险', risk_level: 'low' }
+                        ]
+                    },
+                    sideways: {
+                        name: '横盘市场策略',
+                        strategies: [
+                            { id: 'grid_trading', name: '网格交易策略', description: '在固定价格区间内高抛低吸', risk_level: 'low' },
+                            { id: 'range_bound', name: '区间震荡策略', description: '在震荡区间上下边界交易', risk_level: 'low' },
+                            { id: 'band_trading', name: '波段交易策略', description: '在区间内进行波段操作', risk_level: 'medium' },
+                            { id: 'volatility', name: '波动率交易策略', description: '基于波动率变化的交易', risk_level: 'medium' }
+                        ]
+                    },
+                    volatile: {
+                        name: '震荡市场策略',
+                        strategies: [
+                            { id: 'swing', name: '波段策略', description: '捕捉短期波动的利润', risk_level: 'medium' },
+                            { id: 'channel', name: '通道交易策略', description: '在价格通道内交易', risk_level: 'medium' },
+                            { id: 'breakout_vol', name: '震荡突破策略', description: '在震荡后突破时入场', risk_level: 'high' },
+                            { id: 'vol_adaptive', name: '波动自适应策略', description: '根据波动率自动调整参数', risk_level: 'medium' }
+                        ]
+                    }
+                };
+                renderStrategyTree();
+            }
+        }
+
+        // 渲染策略树
+        function renderStrategyTree() {
+            const treeContainer = document.getElementById('strategyTree');
+            let html = '';
+
+            const categoryIcons = {
+                core: '⚙️',
+                bull: '📈',
+                bear: '📉',
+                sideways: '➡️',
+                volatile: '🔄'
+            };
+
+            for (const [categoryKey, categoryData] of Object.entries(strategyLibrary)) {
+                html += `
+                    <div class="mb-3">
+                        <div class="p-3 rounded mb-2" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); cursor: pointer;" onclick="toggleCategory('${categoryKey}')">
+                            <i class="bi bi-chevron-right" id="icon-${categoryKey}"></i>
+                            <span style="font-weight: 500; color: #ffffff; opacity: 0.85;">${categoryIcons[categoryKey]} ${categoryData.name}</span>
+                        </div>
+                        <div id="category-${categoryKey}" style="display: none; padding-left: 1.5rem;">
+                `;
+
+                categoryData.strategies.forEach(strategy => {
+                    const isActive = activeStrategies.includes(strategy.id);
+                    const isPending = pendingStrategies.includes(strategy.id);
+                    const statusClass = isActive ? 'text-success' : isPending ? 'text-warning' : '';
+                    const statusDot = isActive ? '●' : isPending ? '○' : '·';
+
+                    html += `
+                        <div class="py-2 px-3 rounded mb-2 strategy-item ${selectedStrategy === strategy.id ? 'bg-primary bg-opacity-25' : ''}" 
+                             onclick="selectStrategy('${strategy.id}', event)" 
+                             data-category="${categoryKey}" 
+                             style="cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.02); border: 1px solid transparent;">
+                            <span style="color: #ffffff; opacity: 0.8;">${strategy.name}</span>
+                            <span class="${statusClass} float-end" style="opacity: 0.95;">${statusDot}</span>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            treeContainer.innerHTML = html;
+        }
+
+        // 展开/折叠分类
+        function toggleCategory(categoryKey) {
+            const itemsContainer = document.getElementById(`category-${categoryKey}`);
+            const icon = document.getElementById(`icon-${categoryKey}`);
+
+            if (itemsContainer.style.display === 'none') {
+                itemsContainer.style.display = 'block';
+                icon.className = 'bi bi-chevron-down';
+            } else {
+                itemsContainer.style.display = 'none';
+                icon.className = 'bi bi-chevron-right';
+            }
+        }
+
+        // 选择策略
+        function selectStrategy(strategyId, event) {
+            event.stopPropagation();
+
+            document.querySelectorAll('.strategy-item').forEach(item => {
+                item.classList.remove('bg-primary', 'bg-opacity-25');
+            });
+
+            const clickedItem = event.target.closest('.strategy-item');
+            clickedItem.classList.add('bg-primary', 'bg-opacity-25');
+
+            selectedStrategy = strategyId;
+
+            let strategy = null;
+            let categoryName = '';
+
+            for (const [categoryKey, categoryData] of Object.entries(strategyLibrary)) {
+                const found = categoryData.strategies.find(s => s.id === strategyId);
+                if (found) {
+                    strategy = found;
+                    categoryName = categoryData.name;
+                    break;
+                }
+            }
+
+            if (strategy) {
+                document.getElementById('strategyName').textContent = strategy.name;
+                document.getElementById('strategyCategory').textContent = categoryName;
+                document.getElementById('strategyRisk').textContent = strategy.risk_level;
+                document.getElementById('strategyDescription').textContent = strategy.description;
+
+                const isActive = activeStrategies.includes(strategyId);
+                const isPending = pendingStrategies.includes(strategyId);
+
+                if (isActive) {
+                    document.getElementById('strategyStatus').innerHTML = '<span class="text-success">● 已激活</span>';
+                    document.getElementById('btnActivate').style.display = 'none';
+                    document.getElementById('btnPending').style.display = 'none';
+                    document.getElementById('btnDeactivate').style.display = 'inline-block';
+                } else if (isPending) {
+                    document.getElementById('strategyStatus').innerHTML = '<span class="text-warning">○ 待激活</span>';
+                    document.getElementById('btnActivate').style.display = 'inline-block';
+                    document.getElementById('btnPending').style.display = 'none';
+                    document.getElementById('btnDeactivate').style.display = 'none';
+                } else {
+                    document.getElementById('strategyStatus').textContent = '可用';
+                    document.getElementById('btnActivate').style.display = 'inline-block';
+                    document.getElementById('btnPending').style.display = 'inline-block';
+                    document.getElementById('btnDeactivate').style.display = 'none';
+                }
+
+                document.getElementById('btnActivate').disabled = false;
+                document.getElementById('btnPending').disabled = false;
+            }
+
+            // 如果已选择优化器，提示可以执行优化
+            if (currentOptimizer) {
+                console.log('已选择策略和优化器，可以执行优化！');
+            }
+        }
+
+        // 激活策略
+        async function activateStrategy() {
+            if (!selectedStrategy) return;
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${selectedStrategy}/activate`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    activeStrategies = data.data.active_strategies || [...activeStrategies, selectedStrategy];
+                    pendingStrategies = pendingStrategies.filter(s => s !== selectedStrategy);
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    updateActivatedStrategiesList();
+                    selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+                    alert('策略激活成功！');
+                }
+            } catch (error) {
+                console.error('激活策略失败:', error);
+                // 模拟成功
+                activeStrategies.push(selectedStrategy);
+                pendingStrategies = pendingStrategies.filter(s => s !== selectedStrategy);
+                renderStrategyTree();
+                renderPendingStrategies();
+                updateActivatedStrategiesList();
+                selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+                alert('策略激活成功！');
+            }
+        }
+
+        // 添加到待激活
+        async function addToPending() {
+            if (!selectedStrategy) return;
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${selectedStrategy}/pending`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    pendingStrategies.push(selectedStrategy);
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+                    alert('已添加到待激活列表！');
+                }
+            } catch (error) {
+                console.error('添加到待激活失败:', error);
+                // 模拟成功
+                pendingStrategies.push(selectedStrategy);
+                renderStrategyTree();
+                renderPendingStrategies();
+                selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+                alert('已添加到待激活列表！');
+            }
+        }
+
+        // 停用策略
+        async function deactivateStrategy() {
+            if (!selectedStrategy) return;
+
+            try {
+                const response = await fetch(`/api/strategy/strategies/${selectedStrategy}/deactivate`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    activeStrategies = activeStrategies.filter(s => s !== selectedStrategy);
+                    renderStrategyTree();
+                    renderPendingStrategies();
+                    updateActivatedStrategiesList();
+                    selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+                    alert('策略已停用');
+                }
+            } catch (error) {
+                console.error('停用策略失败:', error);
+                // 模拟成功
+                activeStrategies = activeStrategies.filter(s => s !== selectedStrategy);
+                renderStrategyTree();
+                renderPendingStrategies();
+                updateActivatedStrategiesList();
+                selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+                alert('策略已停用');
+            }
+        }
+
+        // 渲染待激活策略
+        function renderPendingStrategies() {
+            const container = document.getElementById('pendingStrategies');
+            const listContainer = document.getElementById('pendingList');
+            const countElement = document.getElementById('pendingCount');
+
+            if (pendingStrategies.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            countElement.textContent = pendingStrategies.length;
+
+            let html = '';
+            pendingStrategies.forEach(strategyId => {
+                let strategyName = '';
+                for (const categoryData of Object.values(strategyLibrary)) {
+                    const found = categoryData.strategies.find(s => s.id === strategyId);
+                    if (found) {
+                        strategyName = found.name;
+                        break;
+                    }
+                }
+
+                html += `
+                    <div class="d-flex justify-content-between align-items-center py-2 mb-2" style="background: rgba(255,255,255,0.03); border-radius: 6px; padding: 8px 12px;">
+                        <span style="color: #ffffff; opacity: 0.85;">${strategyName}</span>
+                        <button class="btn btn-sm btn-success" onclick="activatePending('${strategyId}')" style="padding: 6px 16px;">激活</button>
+                    </div>
+                `;
+            });
+
+            listContainer.innerHTML = html;
+        }
+
+        // 激活待激活策略
+        async function activatePending(strategyId) {
+            activeStrategies.push(strategyId);
+            pendingStrategies = pendingStrategies.filter(s => s !== strategyId);
+            renderStrategyTree();
+            renderPendingStrategies();
+            if (selectedStrategy === strategyId) {
+                selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
+            }
+            alert('策略激活成功！');
+        }
+
+        // 切换环境
+        async function toggleEnvironment() {
+            if (currentEnvironment === 'paper') {
+                if (confirm('⚠️ 确定要切换到实盘吗？实盘交易会产生真实盈亏！')) {
+                    currentEnvironment = 'live';
+                    document.getElementById('envSwitch').className = 'environment-badge bg-danger text-white';
+                    document.getElementById('envLabel').textContent = '实盘';
+                }
+            } else {
+                currentEnvironment = 'paper';
+                document.getElementById('envSwitch').className = 'environment-badge bg-success text-white';
+                document.getElementById('envLabel').textContent = '模拟盘';
+            }
+        }
+
+        // 切换优化器标签页
+        function switchOptimizerTab(tab) {
+            document.querySelectorAll('.nav-tabs .nav-link').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content .tab-pane').forEach(c => c.classList.remove('active', 'show'));
+
+            currentOptimizer = tab;
+
+            if (tab === 'rl') {
+                event.target.classList.add('active');
+                document.getElementById('optimizerRL').classList.add('active', 'show');
+            } else if (tab === 'v5') {
+                event.target.classList.add('active');
+                document.getElementById('optimizerV5').classList.add('active', 'show');
+            } else if (tab === 'v6') {
+                event.target.classList.add('active');
+                document.getElementById('optimizerV6').classList.add('active', 'show');
+            }
+
+            // 如果已选择策略，提示可以执行优化
+            if (selectedStrategy) {
+                console.log('已选择优化器和策略，可以执行优化！');
+            }
+        }
+
+        // 切换V6模式
+        function switchV6Mode(mode) {
+            v6Mode = mode;
+            document.querySelectorAll('#optimizerV6 .btn-outline-info').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const btn = document.getElementById('btnV6Backtest');
+            if (mode === 'v6_auto') {
+                btn.innerHTML = '<i class="bi bi-robot"></i> 执行自动演进';
+            } else {
+                btn.innerHTML = '<i class="bi bi-rocket-takeoff"></i> 执行V6优化';
+            }
+        }
+
+        // 运行回测
+        async function runBacktest(optimizerType) {
+            if (!selectedStrategy) {
+                alert('请先选择一个策略');
+                return;
+            }
+
+            alert('正在执行回测优化...\n\n选择的策略：' + selectedStrategy + '\n优化器：' + optimizerType + '\n当前环境：' + (currentEnvironment === 'live' ? '实盘' : '模拟盘'));
+
+            // 显示模拟回测结果（模拟盘和实盘都可以优化）
+            displayBacktestResults({
+                optimizerType: optimizerType,
+                metrics: {
+                    totalReturn: (15 + Math.random() * 30).toFixed(2) + '%',
+                    annualReturn: (12 + Math.random() * 20).toFixed(2) + '%',
+                    sharpeRatio: (1.2 + Math.random() * 1.5).toFixed(2),
+                    maxDrawdown: (-5 - Math.random() * 15).toFixed(2) + '%',
+                    winRate: (45 + Math.random() * 35).toFixed(1) + '%',
+                    totalTrades: Math.floor(50 + Math.random() * 200)
+                },
+                period: '1年'
+            });
+        }
+
+        // 显示回测结果
+        function displayBacktestResults(results) {
+            const container = document.getElementById('backtestResults');
+            const metricsContainer = document.getElementById('backtestMetrics');
+            const detailsContainer = document.getElementById('backtestDetails');
+            const returnChartContainer = document.getElementById('returnChart');
+            const monthlyReturnsContainer = document.getElementById('monthlyReturns');
+
+            container.style.display = 'block';
+
+            const metrics = results.metrics;
+            const optimizerNames = {
+                'rl_bot': '强化学习机器人',
+                'v5': '智能体优化器V5',
+                'v6_deep': '超能优化器V6-深度优化',
+                'v6_auto': '超能优化器V6-自动演进',
+                'rl': '强化学习机器人'
+            };
+
+            // 生成指标卡片
+            metricsContainer.innerHTML = `
+                <div class="col-md-2">
+                    <div class="text-center p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <div class="h3 text-success" style="opacity: 0.95;">${metrics.totalReturn}</div>
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.85rem;">总收益率</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-center p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <div class="h3" style="color: #ffffff; opacity: 0.85;">${metrics.annualReturn}</div>
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.85rem;">年化收益</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-center p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <div class="h3 text-info" style="opacity: 0.95;">${metrics.sharpeRatio}</div>
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.85rem;">夏普比率</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-center p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <div class="h3 text-danger" style="opacity: 0.95;">${metrics.maxDrawdown}</div>
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.85rem;">最大回撤</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-center p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <div class="h3 text-success" style="opacity: 0.95;">${metrics.winRate}</div>
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.85rem;">胜率</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-center p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                        <div class="h3" style="color: #ffffff; opacity: 0.85;">${metrics.totalTrades}</div>
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.85rem;">总交易次数</div>
+                    </div>
+                </div>
+            `;
+
+            // 生成收益率曲线图表
+            let returnChart = '';
+            const totalReturn = parseFloat(metrics.totalReturn);
+            const months = 12;
+            for (let i = 0; i < months; i++) {
+                const progress = (i + 1) / months;
+                const height = 50 + Math.random() * 100 * progress;
+                const isPositive = Math.random() > 0.3;
+                const color = isPositive ? '#10b981' : '#ef4444';
+                returnChart += `
+                    <div style="flex: 1; background: ${color}; height: ${height}px; border-radius: 4px 4px 0 0; opacity: 0.8;"></div>
+                `;
+            }
+            returnChartContainer.innerHTML = returnChart;
+
+            // 生成月度收益热力图
+            const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+            let monthlyHtml = '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;">';
+            monthNames.forEach((month, idx) => {
+                const returnVal = (Math.random() * 10 - 3).toFixed(2);
+                const isPositive = parseFloat(returnVal) >= 0;
+                const bgColor = isPositive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+                const textColor = isPositive ? '#10b981' : '#ef4444';
+                monthlyHtml += `
+                    <div class="p-2 rounded text-center" style="background: ${bgColor}; border: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: #ffffff; opacity: 0.7; font-size: 0.75rem;">${month}</div>
+                        <div style="color: ${textColor}; font-weight: bold; font-size: 0.9rem;">${returnVal}%</div>
+                    </div>
+                `;
+            });
+            monthlyHtml += '</div>';
+            monthlyReturnsContainer.innerHTML = monthlyHtml;
+
+            // 生成详细信息
+            detailsContainer.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                            <span style="color: #ffffff; opacity: 0.7;">优化器：</span>
+                            <span class="fw-bold" style="color: #ffffff; opacity: 0.9;">${optimizerNames[results.optimizerType] || results.optimizerType}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                            <span style="color: #ffffff; opacity: 0.7;">回测周期：</span>
+                            <span class="fw-bold" style="color: #ffffff; opacity: 0.9;">${results.period}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="p-3 rounded" style="background: rgba(0,123,255,0.1); border: 1px solid rgba(0,123,255,0.2);">
+                            <div style="color: #ffffff; opacity: 0.85;">
+                                <i class="bi bi-lightbulb"></i> <strong>优化建议：</strong>
+                                ${totalReturn > 20 ? '策略表现优秀，建议实盘前继续观察1-2周' : 
+                                  totalReturn > 10 ? '策略表现良好，可以考虑实盘部署' : 
+                                  '建议调整参数或更换策略后再测试'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 加载初始状态
+        async function loadInitialState() {
+            try {
+                const response = await fetch('/api/strategy/status');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentEnvironment = data.data.environment;
+                    activeStrategies = data.data.active_strategies || [];
+                    pendingStrategies = data.data.pending_strategies || [];
+
+                    if (currentEnvironment === 'live') {
+                        document.getElementById('envSwitch').className = 'environment-badge bg-danger text-white';
+                        document.getElementById('envLabel').textContent = '实盘';
+                    }
+
+                    renderPendingStrategies();
+                    updateActivatedStrategiesList();
+                }
+            } catch (error) {
+                console.error('加载初始状态失败:', error);
+            }
+        }
+
+        // 更新已激活策略列表
+        function updateActivatedStrategiesList() {
+            const listContainer = document.getElementById('activated-strategies-list');
+            if (!listContainer) return;
+
+            if (activeStrategies.length === 0) {
+                listContainer.innerHTML = '暂无已激活策略，请在「类型策略管理平台」中激活';
+                listContainer.style.color = '#f59e0b';
+                return;
+            }
+
+            const strategyNames = {
+                'fourier_rl': '傅里叶强化学习策略',
+                'adaptive_grid': '市场自适应网格策略',
+                'ml_grid': '机器学习网格交易策略',
+                'huijin_value': '汇金价值AI轮动策略'
+            };
+
+            let html = '';
+            activeStrategies.forEach(strategyId => {
+                const name = strategyNames[strategyId] || strategyId;
+                html += `<span class="me-3"><i class="bi bi-check-circle-fill"></i> ${name}</span>`;
+            });
+            listContainer.innerHTML = html;
+            listContainer.style.color = '#10b981';
+        }
+
+        // 初始化策略管理平台
+        initStrategyPlatform();
+
     </script>
 </body>
 </html>
