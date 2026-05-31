@@ -1,4 +1,4 @@
-ch<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -272,12 +272,87 @@ ch<!DOCTYPE html>
         .indicator-label { color: var(--text-muted); font-size: 14px; }
         .indicator-value { font-weight: 600; font-size: 14px; }
         
+        /* ===== QS Robot 浮动按钮 ===== */
+        .qbot-float-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #238636, #2ea043);
+            border: 2px solid rgba(63, 185, 80, 0.5);
+            box-shadow: 0 4px 20px rgba(63, 185, 80, 0.4), 0 0 30px rgba(0, 212, 255, 0.15);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: #fff;
+            z-index: 9999;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            animation: qbot-pulse 2s infinite;
+        }
+        .qbot-float-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 30px rgba(63, 185, 80, 0.6), 0 0 40px rgba(0, 212, 255, 0.3);
+            background: linear-gradient(135deg, #2ea043, #3fb950);
+        }
+        .qbot-float-btn .tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            right: 70px;
+            background: #161b22;
+            color: #c9d1d9;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            white-space: nowrap;
+            border: 1px solid #30363d;
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+        .qbot-float-btn:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        .qbot-float-btn .status-dot-float {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #0d1117;
+        }
+        .qbot-float-btn .status-dot-float.online {
+            background: #3fb950;
+            box-shadow: 0 0 8px #3fb950;
+        }
+        .qbot-float-btn .status-dot-float.offline {
+            background: #f85149;
+            box-shadow: 0 0 8px #f85149;
+        }
+        @keyframes qbot-pulse {
+            0%, 100% { box-shadow: 0 4px 20px rgba(63, 185, 80, 0.4), 0 0 30px rgba(0, 212, 255, 0.15); }
+            50% { box-shadow: 0 4px 28px rgba(63, 185, 80, 0.7), 0 0 45px rgba(0, 212, 255, 0.35); }
+        }
+
         /* ===== 响应式 ===== */
         @media (max-width: 768px) {
             .stat-value { font-size: 1.6rem; }
             .chart-container { height: 220px; }
             .chart-container-sm { height: 200px; }
             .navbar-custom .navbar-brand { font-size: 1rem; }
+            .qbot-float-btn {
+                width: 48px;
+                height: 48px;
+                bottom: 20px;
+                right: 20px;
+                font-size: 22px;
+            }
         }
         
         /* ===== 滚动条 ===== */
@@ -400,6 +475,11 @@ ch<!DOCTYPE html>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link-custom" href="/maintenance">🔧 系统维护</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link-custom" href="http://localhost:5001" target="_blank" title="QS Robot 量化交易控制台">
+                        🤖 QS Robot <small style="color:#3fb950;">●</small>
+                    </a>
                 </li>
             </ul>
             <div class="user-info-bar">
@@ -1574,6 +1654,49 @@ async function loadMarketData() {
 
 // ===== 股票池加载 =====
 async function loadStockPool() {
+    try {
+        const resp = await fetch('/api/stock-pool');
+        if (resp.ok) {
+            const data = await resp.json();
+            const stocks = data.stocks || [];
+            const tbody = document.getElementById('stockPoolTable');
+            
+            if (stocks.length === 0) {
+                // 如果股票池为空，显示默认数据
+                const defaultPool = [
+                    { code: '600519', name: '贵州茅台', score: 92, status: '持仓' },
+                    { code: '000858', name: '五粮液', score: 88, status: '持仓' },
+                    { code: '300750', name: '宁德时代', score: 85, status: '关注' },
+                    { code: '601318', name: '中国平安', score: 82, status: '关注' },
+                ];
+                tbody.innerHTML = defaultPool.map(item => `
+                    <tr>
+                        <td>${item.code}</td>
+                        <td>${item.name}</td>
+                        <td><span class="badge" style="background:${item.score >= 85 ? 'rgba(0,255,136,0.15)' : item.score >= 80 ? 'rgba(255,170,0,0.15)' : 'rgba(139,148,158,0.15)'};color:${item.score >= 85 ? 'var(--success-color)' : item.score >= 80 ? 'var(--warning-color)' : 'var(--text-muted)'}">${item.score}</span></td>
+                        <td>${item.status}</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = stocks.map(item => `
+                    <tr>
+                        <td>${item.symbol || item.code || '--'}</td>
+                        <td>${item.name || item.symbol || '--'}</td>
+                        <td><span class="badge" style="background:${(item.score || 80) >= 85 ? 'rgba(0,255,136,0.15)' : (item.score || 80) >= 80 ? 'rgba(255,170,0,0.15)' : 'rgba(139,148,158,0.15)'};color:${(item.score || 80) >= 85 ? 'var(--success-color)' : (item.score || 80) >= 80 ? 'var(--warning-color)' : 'var(--text-muted)'}">${item.score || 80}</span></td>
+                        <td>${item.status || '关注'}</td>
+                    </tr>
+                `).join('');
+            }
+        } else {
+            loadMockStockPool();
+        }
+    } catch (e) {
+        console.error('加载股票池失败:', e);
+        loadMockStockPool();
+    }
+}
+
+function loadMockStockPool() {
     const mockPool = [
         { code: '600519', name: '贵州茅台', score: 92, status: '持仓' },
         { code: '000858', name: '五粮液', score: 88, status: '持仓' },
@@ -1839,7 +1962,7 @@ async function startShepherdOptimization() {
     btn.disabled = true;
     btn.textContent = '⏳ 启动中...';
     try {
-        const response = await fetch('/api/shepherd/start', { method: 'POST' });
+        const response = await fetch('/api/shepherd/run', { method: 'POST' });
         const data = await response.json();
         if (data.success) {
             btn.textContent = '⏳ 运行中...';
@@ -1856,12 +1979,17 @@ async function startShepherdOptimization() {
     }
 }
 
+let shepherdAutoRefresh = false;
+let shepherdRefreshInterval = null;
+
 function toggleShepherdAutoRefresh(enabled) {
-    fetch('/api/shepherd/auto-refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: enabled })
-    }).catch(e => console.error('切换牧羊人自动刷新失败:', e));
+    shepherdAutoRefresh = enabled;
+    if (enabled) {
+        shepherdRefreshInterval = setInterval(loadShepherdStatus, 5000);
+    } else if (shepherdRefreshInterval) {
+        clearInterval(shepherdRefreshInterval);
+        shepherdRefreshInterval = null;
+    }
 }
 
 // ===== 初始化 =====
@@ -1885,6 +2013,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 10000);
 });
 
+</script>
+
+<!-- ===== QS Robot 浮动按钮 ===== -->
+<a href="http://localhost:5001" target="_blank" class="qbot-float-btn" title="QS Robot 量化交易控制台">
+    <span class="tooltip-text">🤖 QS Robot 控制台</span>
+    <span class="status-dot-float offline" id="qbot-status-dot"></span>
+    🤖
+</a>
+
+<script>
+// 检测 QS Robot 是否在线
+(async function checkQBotStatus() {
+    const dot = document.getElementById('qbot-status-dot');
+    try {
+        const resp = await fetch('http://localhost:5001/api/qbot/ping');
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.success && data.online) {
+                dot.className = 'status-dot-float online';
+                return;
+            }
+        }
+    } catch(e) {}
+    dot.className = 'status-dot-float offline';
+    // 每30秒重试
+    setTimeout(checkQBotStatus, 30000);
+})();
 </script>
 </body>
 </html>
