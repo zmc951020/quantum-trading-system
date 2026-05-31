@@ -636,37 +636,7 @@
                                 <th>操作</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr>
-                                <td>趋势跟踪策略</td>
-                                <td><span class="badge badge-running">运行中</span></td>
-                                <td style="color:var(--success-color);">+2.35%</td>
-                                <td><button class="btn btn-sm btn-outline-danger">停止</button></td>
-                            </tr>
-                            <tr>
-                                <td>均值回归策略</td>
-                                <td><span class="badge badge-running">运行中</span></td>
-                                <td style="color:var(--success-color);">+1.82%</td>
-                                <td><button class="btn btn-sm btn-outline-danger">停止</button></td>
-                            </tr>
-                            <tr>
-                                <td>套利策略</td>
-                                <td><span class="badge badge-waiting">等待中</span></td>
-                                <td class="text-muted">--</td>
-                                <td><button class="btn btn-sm btn-outline-primary">启动</button></td>
-                            </tr>
-                            <tr>
-                                <td>高频交易策略</td>
-                                <td><span class="badge badge-running">运行中</span></td>
-                                <td style="color:var(--success-color);">+3.12%</td>
-                                <td><button class="btn btn-sm btn-outline-danger">停止</button></td>
-                            </tr>
-                            <tr>
-                                <td>事件驱动策略</td>
-                                <td><span class="badge badge-paused">暂停</span></td>
-                                <td style="color:var(--warning-color);">+0.45%</td>
-                                <td><button class="btn btn-sm btn-outline-primary">启动</button></td>
-                            </tr>
+                        <tbody id="strategyStatusTable">
                         </tbody>
                     </table>
                 </div>
@@ -1999,6 +1969,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     loadMarketData();
     loadStockPool();
+    loadStrategyList();
     updateSecurityLogs();
     updateMockData();
     loadGainStatus();
@@ -2012,6 +1983,84 @@ document.addEventListener('DOMContentLoaded', () => {
         loadGainTrend();
     }, 10000);
 });
+
+// ===== 加载策略列表 =====
+async function loadStrategyList() {
+    try {
+        const response = await fetch('/api/strategy-list');
+        const strategies = await response.json();
+        
+        // 更新策略数量
+        document.getElementById('strategyCount').textContent = strategies.length;
+        
+        // 更新策略状态表格（显示前5个策略）
+        const tbody = document.getElementById('strategyStatusTable');
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        const displayStrategies = strategies.slice(0, 5);
+        
+        displayStrategies.forEach(s => {
+            const statusClass = s.status === 'running' ? 'badge-running' : 
+                               s.status === 'paused' ? 'badge-paused' : 'badge-waiting';
+            const statusText = s.status === 'running' ? '运行中' : 
+                              s.status === 'paused' ? '暂停' : '待测试';
+            const returnVal = s.annual_return ? (s.annual_return * 100).toFixed(2) + '%' : '--';
+            const returnColor = s.annual_return > 0 ? 'var(--success-color)' : 
+                               s.annual_return < 0 ? 'var(--danger-color)' : 'var(--text-muted)';
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${s.display_name || s.name}</td>
+                <td><span class="badge ${statusClass}">${statusText}</span></td>
+                <td style="color:${returnColor};">${returnVal}</td>
+                <td><button class="btn btn-sm btn-outline-primary" onclick="startStrategy('${s.name}')">启动</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        
+        // 更新策略图表
+        updateStrategyChart(strategies);
+    } catch (e) {
+        console.error('加载策略列表失败:', e);
+    }
+}
+
+function updateStrategyChart(strategies) {
+    if (!strategyChart) return;
+    
+    const typeCount = {};
+    strategies.forEach(s => {
+        const type = s.strategy_type || 'general';
+        typeCount[type] = (typeCount[type] || 0) + 1;
+    });
+    
+    const types = Object.keys(typeCount);
+    const counts = Object.values(typeCount);
+    
+    strategyChart.setOption({
+        xAxis: { data: types.map(t => t.toUpperCase()) },
+        series: [{ data: counts }]
+    });
+}
+
+async function startStrategy(strategyName) {
+    try {
+        const response = await fetch('/api/start-strategy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strategy: strategyName })
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadStrategyList();
+        } else {
+            console.error('启动策略失败:', data.message);
+        }
+    } catch (e) {
+        console.error('启动策略失败:', e);
+    }
+}
 
 </script>
 
