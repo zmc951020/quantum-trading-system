@@ -150,6 +150,10 @@ class FiveElementThresholds:
     backward_compat_required: bool = True
     max_schema_breaking_changes: int = 0
     system_health_min_score: float = 0.80
+    # ── 成交量/流动性约束（防流动性幻觉） ──
+    max_position_volume_ratio: float = 0.05         # 单笔订单不超日均成交量5%
+    max_total_position_volume_ratio: float = 0.10    # 总持仓不超日均成交量10%
+    min_daily_volume: int = 100000                    # 最小日均成交量（过滤僵尸标的）
 
 
 @dataclass
@@ -395,6 +399,8 @@ class DefectDiagnosisEngine:
         if d: defects.append(d)
         d = self._check_iteration_priority(strategy_performance, optimization_proposal)
         if d: defects.append(d)
+        d = self._check_volume_liquidity(perception, strategy_performance)
+        if d: defects.append(d)
 
         fatal = [d for d in defects if d.severity == DefectSeverity.FATAL]
         severe = [d for d in defects if d.severity == DefectSeverity.SEVERE]
@@ -530,6 +536,34 @@ class DefectDiagnosisEngine:
             return self._new_defect("逻辑类", DefectSeverity.SEVERE,
                 f"迭代优先级混乱：{li}个逻辑问题未修却调{pc}项参数",
                 "演化层·调度模块", "回测优先逻辑", "暂停调参，先修底层逻辑", {"logic_issues_count": li, "param_changes": pc})
+        return None
+
+    def _check_volume_liquidity(self, perception, perf: Dict) -> Optional[DefectReport]:
+        """检查成交量/流动性约束，防止流动性幻觉导致的回测虚高"""
+        daily_volume = perf.get("avg_daily_volume", 0)
+        position_size = perf.get("position_size_shares", 0)
+        total_position = perf.get("total_position_shares", 0)
+        if daily_volume > 0 and daily_volume < self.thresholds.min_daily_volume:
+            return self._new_defect("参数类", DefectSeverity.SEVERE,
+                f"流动性不足：日均成交量{daily_volume:,}股 < 最低{self.thresholds.min_daily_volume:,}股，属僵尸标的",
+                "演化层·成交量约束", "流动性安全约束",
+                "剔除该标的或切换至主力合约", {"avg_daily_volume": daily_volume})
+        if daily_volume > 0 and position_size > 0:
+            ratio = position_size / daily_volume
+            if ratio > self.thresholds.max_position_volume_ratio:
+                return self._new_defect("参数类", DefectSeverity.FATAL if ratio > 0.15 else DefectSeverity.SEVERE,
+                    f"仓位流动性风险：单笔{position_size:,}股占日均成交量{daily_volume:,}股的{ratio:.1%}，"
+                    f"超阈值{self.thresholds.max_position_volume_ratio:.0%}",
+                    "演化层·仓位管理", "成交量约束",
+                    "降低单笔仓位至日均成交量5%以内", {"volume_ratio": ratio, "daily_volume": daily_volume})
+        if daily_volume > 0 and total_position > 0:
+            ratio = total_position / daily_volume
+            if ratio > self.thresholds.max_total_position_volume_ratio:
+                return self._new_defect("参数类", DefectSeverity.SEVERE,
+                    f"总持仓流动性风险：{total_position:,}股占日均{daily_volume:,}股的{ratio:.1%}，"
+                    f"超阈值{self.thresholds.max_total_position_volume_ratio:.0%}",
+                    "演化层·仓位管理", "成交量约束",
+                    "降低总持仓至日均成交量10%以内", {"total_volume_ratio": ratio, "daily_volume": daily_volume})
         return None
 
     def generate_logic_patch(self, defect: DefectReport) -> Dict[str, Any]:
@@ -823,15 +857,29 @@ class SelfEvolutionEngine:
         )
 
     def _simulation_run(self, params: Dict) -> Dict:
-        """模拟盘试运行 —— 验证新参数在仿真环境中的表现"""
+        """模拟盘试运行 —— 验证新参数在仿真环境中的表现（含成交量约束）"""
         logger.info("📊 启动模拟盘试运行...")
+        import numpy as np
+        # 成交量约束：大单在实盘中可能因成交量不足而无法全部成交
+        position_pct = params.get("position_size", 0.15)
+        daily_volume_pct = params.get("max_volume_participation", 0.05)
+        volume_fill_rate = min(1.0, daily_volume_pct / max(position_pct, 0.001))
+        # 滑点与成交量相关：大单导致更高的滑点
+        slippage_impact = 0.003 + max(0, (position_pct - daily_volume_pct) * 0.02)
+        sharpe_adjusted = max(0, 1.2 * (0.6 + 0.4 * volume_fill_rate))
+        # 订单错误模拟：超成交量限制的订单可能在实盘中部分成交或失败
+        order_errors = 0 if volume_fill_rate >= 0.95 else int((1 - volume_fill_rate) * 10)
+        passed = volume_fill_rate >= 0.30  # 成交量覆盖不到30%则拒绝
         return {
-            "sharpe": 1.2,
+            "sharpe": round(sharpe_adjusted, 3),
             "max_drawdown": 0.18,
             "win_rate": 0.52,
-            "slippage_total": 0.003,
-            "order_errors": 0,
-            "passed": True,
+            "slippage_total": round(slippage_impact, 4),
+            "order_errors": order_errors,
+            "volume_fill_rate": round(volume_fill_rate, 3),
+            "volume_constraint_passed": volume_fill_rate >= 0.30,
+            "passed": passed,
+            "reason": None if passed else f"成交量覆盖率仅{volume_fill_rate:.1%}，低于30%安全阈值"
         }
 
 

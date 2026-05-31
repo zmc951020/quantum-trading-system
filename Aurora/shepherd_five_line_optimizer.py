@@ -587,6 +587,70 @@ def self_test():
     return results["failed"] == 0, results
 
 
+# ═══════════ 桥接函数：为 visualization.py 提供 full_strategy_optimize ═══════════
+def full_strategy_optimize(strategy_name: str, max_loop: int = 10, target_score: float = 0.75):
+    """
+    🐑 牧羊人全策略优化桥接函数
+    供 visualization.py 的 /api/shepherd/run 端点调用。
+    委托给 ShepherdV5Comprehensive 执行完整演进管线。
+    
+    Args:
+        strategy_name: 策略名称
+        max_loop: 最大迭代循环次数
+        target_score: 目标评分阈值
+    
+    Returns:
+        str: 格式化结果报告（含当前评分、最优评分、累计迭代等）
+    """
+    logger.info(f"🐑 full_strategy_optimize 启动: {strategy_name}, max_loop={max_loop}, target={target_score}")
+    
+    try:
+        from shepherd_v5_comprehensive import ShepherdV5Comprehensive
+        v5 = ShepherdV5Comprehensive()
+        result = v5.run_full_pipeline(n_cycles=max_loop, n_generations=5)
+        
+        best_score = result.get("best_score", 0.0)
+        avg_score = result.get("avg_fitness", 0.0)
+        generations = result.get("total_generations", max_loop * 5)
+        grade = result.get("final_grade", "N/A")
+        
+        # 生成 visualization.py 期望的格式化报告
+        report_lines = [
+            f"策略优化完成: {strategy_name}",
+            f"当前评分: {best_score:.4f}",
+            f"最优评分: {best_score:.4f}",
+            f"平均评分: {avg_score:.4f}",
+            f"最终等级: {grade}",
+            f"累计迭代: {generations}",
+            f"{'🎉 优化完成！策略已达标' if best_score >= target_score else '⏹️ 优化未达目标，可继续迭代'}",
+        ]
+        return "\n".join(report_lines)
+        
+    except ImportError:
+        logger.warning("ShepherdV5Comprehensive 不可用，使用本地基础优化")
+        # 降级方案：使用本地 run_dry_run_test
+        res = run_dry_run_test(strategy_name)
+        score = res.get("score", 0.0)
+        grade = res.get("grade", "N/A")
+        return (
+            f"策略优化完成: {strategy_name} (基础模式)\n"
+            f"当前评分: {score:.4f}\n"
+            f"最优评分: {score:.4f}\n"
+            f"最终等级: {grade}\n"
+            f"累计迭代: 1\n"
+            f"{'🎉 优化完成！' if score >= target_score else '⏹️ 基础优化完成'}"
+        )
+    except Exception as e:
+        logger.error(f"full_strategy_optimize 异常: {e}")
+        return (
+            f"策略优化异常: {strategy_name}\n"
+            f"当前评分: 0.0000\n"
+            f"最优评分: 0.0000\n"
+            f"累计迭代: 0\n"
+            f"⚠️ 优化引擎出错: {str(e)[:100]}"
+        )
+
+
 # ═══════════ CLI入口 ═══════════
 def main():
     args = sys.argv[1:]

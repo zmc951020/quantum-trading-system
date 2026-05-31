@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurora K线图表 - 量化交易可视化</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6/dist/axios.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Microsoft YaHei',sans-serif; background:#0a0e27; color:#e0e6ed; }
+.header { background:linear-gradient(135deg,#1a1f3a,#0d1128); padding:12px 20px;
+  border-bottom:2px solid #2a3a6a; display:flex; align-items:center; justify-content:space-between; }
+.header h1 { font-size:20px; background:linear-gradient(90deg,#4fc3f7,#29b6f6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.header .status { display:flex; gap:15px; align-items:center; }
+.status-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.status-dot.online { background:#4caf50; box-shadow:0 0 8px #4caf50; }
+.status-dot.offline { background:#f44336; }
+.toolbar { display:flex; gap:10px; padding:10px 20px; background:#121636; border-bottom:1px solid #1e2a4a; flex-wrap:wrap; }
+.toolbar select,.toolbar button,.toolbar input { padding:6px 14px; background:#1a2548; color:#e0e6ed;
+  border:1px solid #2a3a6a; border-radius:4px; font-size:13px; cursor:pointer; }
+.toolbar button:hover { background:#2a3a6a; border-color:#4fc3f7; }
+.main-content { display:flex; height:calc(100vh - 120px); }
+.chart-panel { flex:1; padding:10px; }
+#klineChart { width:100%; height:100%; }
+.signal-panel { width:320px; background:#0d1128; border-left:2px solid #1e2a4a; padding:15px; overflow-y:auto; }
+.signal-panel h3 { color:#4fc3f7; margin-bottom:12px; font-size:16px; }
+.signal-card { background:#121636; border:1px solid #1e2a4a; border-radius:6px; padding:12px; margin-bottom:10px; }
+.signal-card.buy { border-left:3px solid #00e676; }
+.signal-card.sell { border-left:3px solid #ff1744; }
+.signal-card.hold { border-left:3px solid #ffab40; }
+.signal-model { font-size:12px; color:#8899aa; }
+.signal-direction { font-size:18px; font-weight:bold; margin:6px 0; }
+.signal-confidence { font-size:12px; color:#8899aa; }
+.anomaly-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; margin:4px 0; }
+.anomaly-badge.normal { background:#1b5e20; color:#66bb6a; }
+.anomaly-badge.warning { background:#e65100; color:#ffb74d; }
+.anomaly-badge.critical { background:#b71c1c; color:#ef5350; }
+.anomaly-badge.black_swan { background:#4a148c; color:#ce93d8; }
+.consensus { margin-top:15px; padding:12px; background:#1a2548; border-radius:8px; text-align:center; }
+.consensus .direction { font-size:28px; font-weight:bold; }
+.consensus .recommendation { font-size:18px; margin:5px 0; }
+.consensus .confidence { font-size:13px; color:#8899aa; }
+.buy-text { color:#00e676; }
+.sell-text { color:#ff1744; }
+.hold-text { color:#ffab40; }
+@media (max-width:768px) { .main-content { flex-direction:column; } .signal-panel { width:100%; height:40%; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📈 Aurora K线图表分析系统</h1>
+  <div class="status">
+    <span id="dataStatus"><span class="status-dot online"></span> 数据在线</span>
+    <span id="mlStatus"><span class="status-dot online"></span> ML在线</span>
+    <span id="tradeStatus"><span class="status-dot offline"></span> 交易待机</span>
+  </div>
+</div>
+<div class="toolbar">
+  <select id="symbolSelect" onchange="switchSymbol()">
+    <option value="000001.SZ">平安银行 (000001)</option>
+    <option value="600519.SH">贵州茅台 (600519)</option>
+    <option value="000858.SZ">五粮液 (000858)</option>
+    <option value="300750.SZ">宁德时代 (300750)</option>
+    <option value="601318.SH">中国平安 (601318)</option>
+  </select>
+  <select id="intervalSelect" onchange="switchInterval()">
+    <option value="1d">日线</option>
+    <option value="60m">60分钟</option>
+    <option value="30m">30分钟</option>
+    <option value="15m">15分钟</option>
+    <option value="5m">5分钟</option>
+  </select>
+  <button onclick="loadChart()">刷新数据</button>
+  <button onclick="loadMLSignals()">ML信号</button>
+  <button onclick="loadAnomalyCheck()">异常检测</button>
+  <button id="autoRefreshBtn" onclick="toggleAutoRefresh()">自动刷新: 关</button>
+  <span style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+    <input type="date" id="startDate" style="width:130px;">
+    <span>至</span>
+    <input type="date" id="endDate" style="width:130px;">
+  </span>
+</div>
+<div class="main-content">
+  <div class="chart-panel"><div id="klineChart"></div></div>
+  <div class="signal-panel" id="signalPanel">
+    <h3>🔮 模型信号矩阵</h3>
+    <div id="signalsContainer"><p style="color:#8899aa;">点击"ML信号"加载模型预测</p></div>
+  </div>
+</div>
+
+<script>
+let klineChart = null;
+let autoRefresh = false;
+let refreshTimer = null;
+const SYMBOL = '000001.SZ';
+
+function initChart() {
+  klineChart = echarts.init(document.getElementById('klineChart'));
+  window.addEventListener('resize', () => klineChart?.resize());
+  setDefaultDates();
+  loadChart();
+}
+
+function setDefaultDates() {
+  const end = new Date();
+  const start = new Date(); start.setMonth(start.getMonth() - 3);
+  document.getElementById('endDate').value = end.toISOString().split('T')[0];
+  document.getElementById('startDate').value = start.toISOString().split('T')[0];
+}
+
+async function loadChart() {
+  const symbol = document.getElementById('symbolSelect').value;
+  const interval = document.getElementById('intervalSelect').value;
+  const start = document.getElementById('startDate').value;
+  const end = document.getElementById('endDate').value;
+  try {
+    const resp = await axios.get(`/api/v1/market/kline?symbol=${symbol}&interval=${interval}&start=${start}&end=${end}`);
+    if (resp.data && resp.data.data) {
+      updateChart(resp.data.data, symbol);
+      document.getElementById('dataStatus').innerHTML = '<span class="status-dot online"></span> 数据在线';
+    }
+  } catch(e) {
+    console.log('API未连接，使用模拟数据');
+    document.getElementById('dataStatus').innerHTML = '<span class="status-dot offline"></span> 模拟数据';
+    generateMockData(symbol);
+  }
+}
+
+function generateMockData(symbol) {
+  const data = { dates:[], klines:[], volumes:[], ma5:[], ma20:[], signals:[] };
+  const basePrice = symbol.includes('600519') ? 1800 : symbol.includes('000858') ? 160 : 12;
+  let price = basePrice * (0.9 + Math.random() * 0.2);
+  const now = new Date();
+  for (let i = 250; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    data.dates.push(d.toISOString().split('T')[0]);
+    const change = (Math.random() - 0.48) * price * 0.03;
+    const open = price + change * 0.3; const close = price + change;
+    const high = Math.max(open, close) * (1 + Math.random() * 0.015);
+    const low = Math.min(open, close) * (1 - Math.random() * 0.015);
+    data.klines.push([open.toFixed(2), close.toFixed(2), low.toFixed(2), high.toFixed(2)]);
+    data.volumes.push(Math.floor(Math.random() * 1000000 + 200000));
+    price = close;
+    if(data.klines.length >= 5) {
+      const ma5 = data.klines.slice(-5).reduce((s,k) => s+parseFloat(k[1]),0) / 5;
+      data.ma5.push(ma5.toFixed(2));
+    } else data.ma5.push(null);
+    if(data.klines.length >= 20) {
+      const ma20 = data.klines.slice(-20).reduce((s,k) => s+parseFloat(k[1]),0) / 20;
+      data.ma20.push(ma20.toFixed(2));
+    } else data.ma20.push(null);
+    if(i % 15 === 0) data.signals.push({ idx:i, type:Math.random()>0.5?'buy':'sell', price:close.toFixed(2), model:'deep_ensemble' });
+  }
+  updateChart(data, symbol);
+}
+
+function updateChart(data, symbol) {
+  const categoryData = data.dates;
+  const klineData = data.klines.map((k,i) => [parseFloat(k[0]), parseFloat(k[1]), parseFloat(k[2]), parseFloat(k[3])]);
+
+  const buySignals = (data.signals||[]).filter(s=>s.type==='buy').map(s=>[categoryData[s.idx]||categoryData[categoryData.length-1-s.idx], parseFloat(s.price)]);
+  const sellSignals = (data.signals||[]).filter(s=>s.type==='sell').map(s=>[categoryData[s.idx]||categoryData[categoryData.length-1-s.idx], parseFloat(s.price)]);
+
+  const option = {
+    backgroundColor: '#0a0e27',
+    title:{ text:`${symbol} K线图`, left:'center', textStyle:{color:'#4fc3f7',fontSize:16} },
+    tooltip:{ trigger:'axis', axisPointer:{type:'cross'}, backgroundColor:'rgba(10,14,39,0.95)', borderColor:'#2a3a6a' },
+    legend:{ data:['K线','MA5','MA20','成交量'], top:30, textStyle:{color:'#8899aa'} },
+    grid:[ {left:'3%',right:'1%',top:80,height:'55%'}, {left:'3%',right:'1%',top:'78%',height:'15%'} ],
+    xAxis:[
+      { type:'category', data:categoryData, gridIndex:0, axisLine:{lineStyle:{color:'#1e2a4a'}}, axisLabel:{color:'#8899aa',fontSize:10}, scale:true },
+      { type:'category', data:categoryData, gridIndex:1, axisLabel:{show:false}, axisLine:{show:false}, axisTick:{show:false} }
+    ],
+    yAxis:[
+      { gridIndex:0, scale:true, splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}, axisLabel:{color:'#8899aa'} },
+      { gridIndex:1, splitLine:{show:false}, axisLabel:{color:'#8899aa',fontSize:10} }
+    ],
+    dataZoom:[ {type:'inside',xAxisIndex:[0,1],start:50,end:100}, {type:'slider',xAxisIndex:[0,1],start:50,end:100,bottom:5} ],
+    series:[
+      { name:'K线', type:'candlestick', data:klineData, itemStyle:{color:'#ef5350',color0:'#00e676',borderColor:'#ef5350',borderColor0:'#00e676'} },
+      { name:'MA5', type:'line', data:data.ma5, smooth:true, lineStyle:{width:1.5,color:'#ffab40'}, symbol:'none' },
+      { name:'MA20', type:'line', data:data.ma20, smooth:true, lineStyle:{width:1.5,color:'#ce93d8'}, symbol:'none' },
+      { name:'成交量', type:'bar', xAxisIndex:1, yAxisIndex:1, data:data.volumes,
+        itemStyle:{ color: params => params.dataIndex>0 && data.klines[params.dataIndex]&&parseFloat(data.klines[params.dataIndex][1])>=parseFloat(data.klines[params.dataIndex][0]) ? '#ef535080' : '#00e67680' } },
+      { name:'买入信号', type:'scatter', data:buySignals, symbol:'arrow', symbolSize:16, symbolRotate:180, itemStyle:{color:'#00e676'}, z:10 },
+      { name:'卖出信号', type:'scatter', data:sellSignals, symbol:'arrow', symbolSize:16, itemStyle:{color:'#ff1744'}, z:10 }
+    ]
+  };
+  klineChart.setOption(option, true);
+}
+
+async function loadMLSignals() {
+  try {
+    const resp = await axios.post('/api/v1/ml/consensus', { symbol:document.getElementById('symbolSelect').value, features:{volatility:0.02,trend_strength:0.1} });
+    renderSignals(resp.data);
+    document.getElementById('mlStatus').innerHTML = '<span class="status-dot online"></span> ML在线';
+  } catch(e) {
+    document.getElementById('mlStatus').innerHTML = '<span class="status-dot offline"></span> ML离线';
+    renderMockSignals();
+  }
+}
+
+function renderMockSignals() {
+  const models = [
+    {model:'deep_ensemble',direction:1,confidence:0.72,pred_return:0.015},
+    {model:'mamba_ts',direction:0,confidence:0.45,pred_return:0.003},
+    {model:'tft',direction:1,confidence:0.68,pred_return:0.012},
+    {model:'rl_ensemble',direction:1,confidence:0.55,pred_return:0.0},
+    {model:'gaussian_process',direction:0,confidence:0.41,pred_return:0.001,uncertainty:0.03}
+  ];
+  const anomaly = {is_anomaly:false,score:0.3,level:'normal'};
+  renderSignalData(models, anomaly, {direction:1,confidence:0.62,recommendation:'买入'});
+}
+
+function renderSignalData(models, anomaly, consensus) {
+  let html = '';
+  models.forEach(s => {
+    const cls = s.direction===1?'buy':(s.direction===-1?'sell':'hold');
+    const dirText = s.direction===1?'买入':(s.direction===-1?'卖出':'持仓');
+    html += `<div class="signal-card ${cls}">
+      <div class="signal-model">${s.model}</div>
+      <div class="signal-direction ${cls}-text">${dirText}</div>
+      <div class="signal-confidence">信心: ${(s.confidence*100).toFixed(0)}% | 预测: ${(s.pred_return*100).toFixed(2)}%</div>
+      ${s.uncertainty!==undefined ? `<div class="signal-confidence">不确定性: ${s.uncertainty.toFixed(3)}</div>` : ''}
+    </div>`;
+  });
+  const anomalyCls = anomaly.level || 'normal';
+  html += `<div style="margin-top:10px;">
+    <span>异常检测: </span>
+    <span class="anomaly-badge ${anomalyCls}">${anomaly.level} | 分数:${(anomaly.score||0).toFixed(2)}</span>
+  </div>`;
+  const dirCls = consensus.direction===1?'buy-text':(consensus.direction===-1?'sell-text':'hold-text');
+  html += `<div class="consensus">
+    <div class="direction ${dirCls}">${consensus.direction===1?'🟢':(consensus.direction===-1?'🔴':'🟡')}</div>
+    <div class="recommendation ${dirCls}">${consensus.recommendation||'观望'}</div>
+    <div class="confidence">综合信心: ${(consensus.confidence*100).toFixed(0)}%</div>
+  </div>`;
+  document.getElementById('signalsContainer').innerHTML = html;
+}
+
+async function loadAnomalyCheck() { await loadMLSignals(); }
+
+function switchSymbol() { loadChart(); loadMLSignals(); }
+function switchInterval() { loadChart(); }
+function toggleAutoRefresh() {
+  autoRefresh = !autoRefresh;
+  document.getElementById('autoRefreshBtn').textContent = `自动刷新: ${autoRefresh?'开':'关'}`;
+  if(autoRefresh) { refreshTimer = setInterval(()=>{loadChart();loadMLSignals();}, 30000); }
+  else { clearInterval(refreshTimer); }
+}
+
+initChart();
+</script>
+</body>
+</html>

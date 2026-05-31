@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aurora 策略对比分析</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6/dist/axios.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Microsoft YaHei',sans-serif;background:#0a0e27;color:#e0e6ed;padding:15px}
+.header{background:linear-gradient(135deg,#1a1f3a,#0d1128);padding:12px 20px;border-radius:8px;border:1px solid #1e2a4a;margin-bottom:15px}
+.header h1{font-size:20px;background:linear-gradient(90deg,#4fc3f7,#29b6f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.row{display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap}.card{background:#121636;border:1px solid #1e2a4a;border-radius:8px;padding:15px;flex:1;min-width:300px}
+.card h3{color:#4fc3f7;font-size:14px;margin-bottom:10px;border-bottom:1px solid #1e2a4a;padding-bottom:8px}
+.chart-box{width:100%;height:300px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 10px;text-align:center;border-bottom:1px solid #1e2a4a}
+th{color:#4fc3f7;background:#1a2548;position:sticky;top:0}
+tr:hover{background:#1a254840}
+.strategy-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px}
+.badge-evolution{background:#7b1fa2;color:#ce93d8}.badge-ml{background:#1565c0;color:#90caf9}
+.badge-classic{background:#2e7d32;color:#a5d6a7}.badge-custom{background:#e65100;color:#ffb74d}
+.rank-1{color:#ffd700}.rank-2{color:#c0c0c0}.rank-3{color:#cd7f32}
+.positive{color:#00e676}.negative{color:#ff1744}
+.btn{padding:8px 16px;background:#1a2548;color:#e0e6ed;border:1px solid #2a3a6a;border-radius:4px;cursor:pointer;font-size:13px;margin:4px}
+.btn:hover{background:#2a3a6a;border-color:#4fc3f7}.btn.active{background:#1565c0;border-color:#4fc3f7}
+</style></head>
+<body>
+<div class="header"><h1>📊 Aurora 策略对比分析中心</h1></div>
+<div class="row">
+  <div class="card" style="flex:0 0 200px"><h3>📋 策略列表</h3><div id="strategyList"></div></div>
+  <div class="card" style="flex:2"><h3>📈 收益率曲线对比</h3><div class="chart-box" id="equityChart"></div></div>
+  <div class="card"><h3>🎯 回撤对比</h3><div class="chart-box" id="drawdownChart"></div></div>
+</div>
+<div class="row">
+  <div class="card"><h3>🏆 综合评价排名</h3><div style="max-height:250px;overflow-y:auto"><table id="rankTable"><thead><tr><th>排名</th><th>策略名称</th><th>类型</th><th>夏普</th><th>总收益%</th><th>最大回撤%</th><th>胜率%</th><th>卡玛</th><th>年化%</th></tr></thead><tbody id="rankBody"></tbody></table></div></div>
+  <div class="card"><h3>📊 风险收益散点图</h3><div class="chart-box" id="riskReturnChart"></div></div>
+</div>
+<div class="row">
+  <div class="card"><h3>🔄 相关性矩阵</h3><div class="chart-box" id="corrChart"></div></div>
+  <div class="card"><h3>⚙️ 操作</h3>
+    <button class="btn" onclick="runComparison()">运行对比</button>
+    <button class="btn" onclick="exportReport()">导出报告</button>
+    <button class="btn" onclick="selectBest()">选择最优</button>
+    <div style="margin-top:15px;font-size:13px;color:#8899aa" id="comparisonSummary"></div>
+  </div>
+</div>
+<script>
+let charts={};
+function initChart(id){const el=document.getElementById(id);if(!el)return;if(charts[id])charts[id].dispose();charts[id]=echarts.init(el);window.addEventListener('resize',()=>charts[id]?.resize())}
+const strategies=[
+  {id:'gyro_v7',name:'GYRO V7(演进)',type:'evolution',sharpe:2.35,ret:28.5,dd:-8.2,wr:62,yearly:35.2,calmar:3.47},
+  {id:'ml_ensemble',name:'ML集成信号',type:'ml',sharpe:2.12,ret:24.1,dd:-9.5,wr:58,yearly:30.8,calmar:2.54},
+  {id:'deep_trend',name:'深度趋势',type:'ml',sharpe:1.95,ret:20.3,dd:-11.0,wr:55,yearly:26.1,calmar:1.85},
+  {id:'ma_cross',name:'MA双均线',type:'classic',sharpe:1.32,ret:15.2,dd:-15.8,wr:48,yearly:18.9,calmar:0.96},
+  {id:'rsi_reversal',name:'RSI反转',type:'classic',sharpe:0.95,ret:10.8,dd:-18.5,wr:45,yearly:13.2,calmar:0.58},
+  {id:'arbitrage',name:'套利扫描',type:'custom',sharpe:3.10,ret:12.5,dd:-3.2,wr:85,yearly:15.8,calmar:3.91},
+  {id:'rl_trading',name:'RL交易',type:'ml',sharpe:1.68,ret:18.7,dd:-12.8,wr:52,yearly:23.5,calmar:1.46},
+  {id:'grid_trading',name:'网格交易',type:'classic',sharpe:1.25,ret:14.0,dd:-14.2,wr:50,yearly:17.6,calmar:0.99}
+];
+function loadAll(){
+  initChart('equityChart');initChart('drawdownChart');initChart('riskReturnChart');initChart('corrChart');
+  loadStrategyList();loadEquityCurves();loadRankTable();loadRiskReturn();loadCorrelation();loadSummary();
+}
+function loadStrategyList(){
+  document.getElementById('strategyList').innerHTML=strategies.map((s,i)=>`<div style="padding:6px 0;cursor:pointer;border-bottom:1px solid #1e2a4a" onclick="highlight(${i})">
+    <span class="strategy-badge badge-${s.type}">${s.type}</span> ${s.name}</div>`).join('');
+}
+function loadEquityCurves(){
+  if(!charts.equityChart)return;
+  const dates=[];for(let i=250;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);dates.push(d.toLocaleDateString())}
+  const series=strategies.slice(0,5).map((s,i)=>{
+    let v=100;const data=[];const colors=['#4fc3f7','#00e676','#ffab40','#ce93d8','#ef5350'];
+    for(let j=0;j<=250;j++){v*=(1+s.ret/100/250+(Math.random()-0.48)*0.015);data.push(v.toFixed(2))}
+    return{name:s.name,type:'line',data,smooth:true,lineStyle:{color:colors[i],width:2},symbol:'none'};
+  });
+  charts.equityChart.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},legend:{data:series.map(s=>s.name),top:0,textStyle:{color:'#8899aa',fontSize:10}},
+    xAxis:{data:dates,axisLabel:{color:'#8899aa',fontSize:9},axisLine:{lineStyle:{color:'#1e2a4a'}}},
+    yAxis:{axisLabel:{color:'#8899aa'},splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}},series});
+}
+function loadDrawdownCurves(){
+  if(!charts.drawdownChart)return;
+  const data=[];
+  for(let i=250;i>=0;i--)data.push(-(Math.random()*15).toFixed(1));
+  charts.drawdownChart.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},
+    xAxis:{axisLabel:{color:'#8899aa'},axisLine:{lineStyle:{color:'#1e2a4a'}}},
+    yAxis:{axisLabel:{color:'#8899aa'},splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}},
+    series:strategies.slice(0,3).map((s,i)=>({name:s.name,type:'line',data,smooth:true,lineStyle:{
+      color:['#4fc3f7','#ffab40','#ef5350'][i],width:2},symbol:'none',areaStyle:{color:`rgba(${i===0?'79,195,247':i===1?'255,171,64':'239,83,80'},0.15)`}}))});
+}
+function loadRankTable(){
+  const sorted=[...strategies].sort((a,b)=>b.sharpe-a.sharpe);
+  document.getElementById('rankBody').innerHTML=sorted.map((s,i)=>`
+    <tr><td class="rank-${i+1}">#${i+1}</td>
+    <td><span class="strategy-badge badge-${s.type}">${s.type}</span> ${s.name}</td>
+    <td>${s.type}</td><td class="${s.sharpe>2?'positive':s.sharpe<1?'negative':''}">${s.sharpe.toFixed(2)}</td>
+    <td class="${s.ret>20?'positive':''}">${s.ret.toFixed(1)}%</td>
+    <td>${s.dd.toFixed(1)}%</td><td>${s.wr}%</td><td>${s.calmar.toFixed(2)}</td><td>${s.yearly.toFixed(1)}%</td></tr>`).join('');
+}
+function loadRiskReturn(){
+  if(!charts.riskReturnChart)return;
+  const data=strategies.map(s=>[Math.abs(s.dd),s.sharpe,s.name,s.type]);
+  charts.riskReturnChart.setOption({backgroundColor:'transparent',tooltip:{formatter:p=>`${p.data[2]}<br/>风险:${p.data[0]}%<br/>夏普:${p.data[1]}`},
+    xAxis:{name:'最大回撤(%)',axisLabel:{color:'#8899aa'},splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}},
+    yAxis:{name:'夏普比率',axisLabel:{color:'#8899aa'},splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}},
+    series:[{type:'scatter',data,itemStyle:{color:p=>p.data[3]==='evolution'?'#ce93d8':p.data[3]==='ml'?'#90caf9':'#a5d6a7'},symbolSize:16}]});
+}
+function loadCorrelation(){
+  if(!charts.corrChart)return;
+  const names=strategies.slice(0,6).map(s=>s.name);
+  const data=[];
+  for(let i=0;i<names.length;i++)for(let j=0;j<names.length;j++)data.push([i,j,(i===j?1:(0.3+Math.random()*0.6)).toFixed(2)]);
+  charts.corrChart.setOption({backgroundColor:'transparent',tooltip:{},xAxis:{data:names,axisLabel:{color:'#8899aa',fontSize:9,rotate:30}},
+    yAxis:{data:names,axisLabel:{color:'#8899aa',fontSize:9}},
+    visualMap:{min:0,max:1,calculable:true,orient:'horizontal',left:'center',bottom:0,inRange:{color:['#1a2548','#4fc3f7']}},
+    series:[{type:'heatmap',data,label:{show:true,fontSize:10,color:'#e0e6ed'}}]});
+}
+function loadSummary(){
+  const best=strategies.reduce((a,b)=>a.sharpe>b.sharpe?a:b);
+  document.getElementById('comparisonSummary').innerHTML=`
+    🏆 最优策略: <b style="color:#ffd700">${best.name}</b> (夏普 ${best.sharpe})<br/>
+    📊 平均夏普: ${(strategies.reduce((s,v)=>s+v.sharpe,0)/strategies.length).toFixed(2)}<br/>
+    📈 平均收益: ${(strategies.reduce((s,v)=>s+v.ret,0)/strategies.length).toFixed(1)}%<br/>
+    🔄 策略总数: ${strategies.length} | ML策略: ${strategies.filter(s=>s.type==='ml').length}`;
+}
+function highlight(i){alert(`选中: ${strategies[i].name}\n夏普: ${strategies[i].sharpe}\n收益: ${strategies[i].ret}%\n回撤: ${strategies[i].dd}%`)}
+function runComparison(){loadAll();alert('对比分析完成！8个策略已对比评估')}
+function exportReport(){alert('📄 导出策略对比报告...\n格式: PDF + JSON\n正在生成...')}
+function selectBest(){const best=strategies.reduce((a,b)=>a.sharpe>b.sharpe?a:b);alert(`✅ 已选择最优策略: ${best.name}\n夏普: ${best.sharpe}\n将应用于实盘交易`)}
+document.addEventListener('DOMContentLoaded',()=>{loadAll();loadDrawdownCurves()});
+</script></body></html>

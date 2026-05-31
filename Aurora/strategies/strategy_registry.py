@@ -44,7 +44,7 @@ class StrategyMeta:
     display_name: str = ""                 # 显示名称
     file_path: str = ""                    # 策略文件路径
     module_path: str = ""                  # Python 模块路径
-    strategy_type: str = "general"         # 策略类型：trend/grid/ml/rl/fourier/composite
+    strategy_type: str = "general"         # 策略类型：trend/grid/ml/rl/fourier/composite/physics
     description: str = ""                  # 策略描述
     version: str = "1.0.0"                # 版本号
     author: str = ""                       # 作者
@@ -212,14 +212,14 @@ class StrategyRegistry:
         except Exception:
             docstring = ""
 
-        # 从模块名推断类型
+        # 从模块名推断类型 (增强：支持物理建模/rl_optimized策略)
         strategy_type = "general"
         name_lower = module_name.lower()
         if "grid" in name_lower:
             strategy_type = "grid"
         elif any(kw in name_lower for kw in ("ml", "machine", "adaptive_ml")):
             strategy_type = "ml"
-        elif any(kw in name_lower for kw in ("rl", "ppo", "reinforcement")):
+        elif any(kw in name_lower for kw in ("rl", "ppo", "reinforcement", "rl_optimized", "rl_adaptive")):
             strategy_type = "rl"
         elif "fourier" in name_lower:
             strategy_type = "fourier"
@@ -231,6 +231,10 @@ class StrategyRegistry:
             strategy_type = "composite"
         elif "downtrend" in name_lower or "down" in name_lower:
             strategy_type = "trend"
+        elif any(kw in name_lower for kw in ("newton", "thermodynamic", "fractal", "fluid",
+                                                "physics", "entropy", "hurts", "momentum_enhanced",
+                                                "reynolds", "vortex", "laminar")):
+            strategy_type = "rl"
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -616,6 +620,174 @@ def get_strategy_names() -> List[str]:
     return STRATEGY_REGISTRY.get_names()
 
 
+def get_strategy_list_api() -> List[Dict[str, Any]]:
+    """
+    API接口：获取策略列表（用于Web前端）
+    
+    Returns:
+        List[Dict]: 策略信息字典列表
+    """
+    return STRATEGY_REGISTRY.to_dict_list()
+
+
+def create_strategy(name: str, **kwargs) -> bool:
+    """
+    创建新策略（预留接口）
+    
+    Args:
+        name: 策略名称
+        kwargs: 策略参数
+    
+    Returns:
+        bool: 是否创建成功
+    """
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        meta = StrategyMeta(
+            name=name,
+            display_name=kwargs.get('display_name', name.replace("_", " ").title()),
+            description=kwargs.get('description', ""),
+            strategy_type=kwargs.get('strategy_type', 'general'),
+            version=kwargs.get('version', '1.0.0'),
+            author=kwargs.get('author', ''),
+            created_at=now,
+            updated_at=now,
+            parameters=kwargs.get('parameters', {}),
+        )
+        STRATEGY_REGISTRY.register(meta)
+        return True
+    except Exception as e:
+        logger.error(f"[StrategyRegistry] 创建策略失败: {e}")
+        return False
+
+
+def get_strategy_info(name: str) -> Optional[Dict[str, Any]]:
+    """
+    获取策略详细信息
+    
+    Args:
+        name: 策略名称
+    
+    Returns:
+        Dict: 策略信息字典
+    """
+    meta = STRATEGY_REGISTRY.get(name)
+    if meta:
+        return meta.to_dict()
+    return None
+
+
+def get_strategies_by_category(category: str) -> List[Dict[str, Any]]:
+    """
+    按类别获取策略
+    
+    Args:
+        category: 策略类别
+    
+    Returns:
+        List[Dict]: 策略信息字典列表
+    """
+    return [m.to_dict() for m in STRATEGY_REGISTRY.list_by_type(category)]
+
+
+def get_strategies_by_regime(regime: str) -> List[Dict[str, Any]]:
+    """
+    按市场状态获取策略（预留接口）
+    
+    Args:
+        regime: 市场状态
+    
+    Returns:
+        List[Dict]: 策略信息字典列表
+    """
+    return STRATEGY_REGISTRY.to_dict_list()
+
+
+def get_recommended_strategies() -> List[Dict[str, Any]]:
+    """
+    获取推荐策略（预留接口）
+    
+    Returns:
+        List[Dict]: 策略信息字典列表
+    """
+    return [m.to_dict() for m in STRATEGY_REGISTRY.get_top_performers(10)]
+
+
+# 🏷️ 三分类API（策略增强核心）
+def get_strategy_tree() -> Dict[str, Any]:
+    """
+    三分类策略树API：按传统/ML/物理建模分类
+    
+    Returns:
+        Dict: {traditional: [...], ml_enhanced: [...], physics_based: [...]}
+    """
+    all_meta = STRATEGY_REGISTRY.list_all()
+
+    traditional = []
+    ml_enhanced = []
+    physics_based = []
+
+    for meta in all_meta:
+        d = meta.to_dict()
+        name_lower = meta.name.lower()
+
+        # 物理建模策略判定
+        is_physics = any(kw in name_lower for kw in (
+            "newton", "thermodynamic", "fractal", "fluid",
+            "physic", "entropy", "reynolds", "vortex", "laminar",
+            "momentum_enhanced", "thermo", "fluid_dynamic"
+        ))
+        # 增强判定：检查描述中是否包含物理关键词
+        if not is_physics and meta.description:
+            desc_lower = meta.description.lower()
+            is_physics = any(kw in desc_lower for kw in (
+                "牛顿", "热力学", "分形", "流体", "物理建模",
+                "newton", "thermodynamic", "fractal", "fluid"
+            ))
+
+        # ML增强策略判定
+        is_ml = any(kw in name_lower for kw in (
+            "ml_", "adaptive_ml", "rl_optimized", "rl_adaptive",
+            "machine_learn", "deep_", "neural"
+        ))
+
+        if is_physics:
+            physics_based.append(d)
+        elif is_ml:
+            ml_enhanced.append(d)
+        elif meta.strategy_type in ("ml", "rl"):
+            ml_enhanced.append(d)
+        else:
+            traditional.append(d)
+
+    return {
+        "traditional": traditional,
+        "ml_enhanced": ml_enhanced,
+        "physics_based": physics_based,
+    }
+
+
+class StrategyCategory:
+    """策略类别枚举（预留）"""
+    GENERAL = "general"
+    TREND = "trend"
+    GRID = "grid"
+    ML = "ml"
+    RL = "rl"
+    FOURIER = "fourier"
+    VALUE = "value"
+    COMPOSITE = "composite"
+    PHYSICS = "physics"
+
+
+class MarketRegime:
+    """市场状态枚举（预留）"""
+    BULL = "bull"
+    BEAR = "bear"
+    SIDEWAYS = "sideways"
+    VOLATILE = "volatile"
+
+
 # ==================== 自测 ====================
 
 if __name__ == "__main__":
@@ -670,7 +842,15 @@ if __name__ == "__main__":
         print(f"    {old_state} → {new_state}")
         registry.toggle(test_name)  # 恢复
 
-    # 7. 同步到数据库
+    # 7. 三分类测试
+    print(f"\n🏷️ 三分类策略树:")
+    tree = get_strategy_tree()
+    for cat, strategies in tree.items():
+        print(f"   {cat}: {len(strategies)} 个策略")
+        for s in strategies[:3]:
+            print(f"      - {s['name']} ({s['strategy_type']})")
+
+    # 8. 同步到数据库
     print(f"\n💾 数据库同步...")
     count = registry.sync_to_db()
     print(f"   已同步 {count} 条记录")

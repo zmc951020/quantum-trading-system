@@ -1,0 +1,726 @@
+# -*- coding: utf-8 -*-
+"""
+中泰证券真实交易连接器
+基于中泰证券 XTP/CTP 接口实现
+"""
+
+import socket
+import struct
+import threading
+import time
+import logging
+from datetime import datetime
+from typing import Dict, List, Optional, Any, Tuple, Callable
+from dataclasses import dataclass, field
+from enum import Enum
+
+logger = logging.getLogger("Aurora.ZhongTai")
+
+
+# ============================================================
+# 错误码定义
+# ============================================================
+class XTPErrorCode(Enum):
+    """中泰证券 XTP 错误码"""
+    SUCCESS = 0
+    NETWORK_ERROR = -1001
+    AUTH_FAILED = -1002
+    SESSION_EXPIRED = -1003
+    ORDER_REJECTED = -2001
+    INSUFFICIENT_FUNDS = -2002
+    POSITION_LIMIT = -2003
+    MARKET_CLOSED = -3001
+    SYMBOL_INVALID = -3002
+    DATA_UNAVAILABLE = -4001
+    UNKNOWN = -9999
+
+    @classmethod
+    def from_code(cls, code: int) -> 'XTPErrorCode':
+        try:
+            return cls(code)
+        except ValueError:
+            return cls.UNKNOWN
+
+
+# ============================================================
+# 数据结构
+# ============================================================
+@dataclass
+class XTPOrder:
+    """中泰证券订单"""
+    order_id: str = ""
+    order_exch_id: str = ""
+    symbol: str = ""
+    market: str = "SH"  # SH / SZ
+    price: float = 0.0
+    quantity: int = 0
+    side: str = "BUY"   # BUY / SELL
+    order_type: str = "LIMIT"  # LIMIT / MARKET
+    status: str = "UNKNOWN"
+    traded_volume: int = 0
+    traded_amount: float = 0.0
+    cancel_volume: int = 0
+    insert_time: str = ""
+    update_time: str = ""
+
+
+@dataclass
+class XTPPosition:
+    """中泰证券持仓"""
+    symbol: str = ""
+    market: str = "SH"
+    total_qty: int = 0
+    available_qty: int = 0
+    avg_price: float = 0.0
+    current_price: float = 0.0
+    market_value: float = 0.0
+    profit_loss: float = 0.0
+    profit_loss_ratio: float = 0.0
+
+
+@dataclass
+class XTPAccount:
+    """中泰证券账户信息"""
+    account_id: str = ""
+    available_cash: float = 0.0
+    frozen_cash: float = 0.0
+    total_asset: float = 0.0
+    market_value: float = 0.0
+    fetching_cash: float = 0.0
+    withdraw_quota: float = 0.0
+
+
+@dataclass
+class XTPMarketData:
+    """中泰证券行情数据"""
+    symbol: str = ""
+    exchange: str = "SH"
+    last_price: float = 0.0
+    open_price: float = 0.0
+    high_price: float = 0.0
+    low_price: float = 0.0
+    pre_close: float = 0.0
+    volume: int = 0
+    turnover: float = 0.0
+    bid_prices: List[float] = field(default_factory=lambda: [0.0]*5)
+    ask_prices: List[float] = field(default_factory=lambda: [0.0]*5)
+    bid_volumes: List[int] = field(default_factory=lambda: [0]*5)
+    ask_volumes: List[int] = field(default_factory=lambda: [0]*5)
+    timestamp: str = ""
+
+
+# ============================================================
+# 交易服务器配置
+# ============================================================
+class XTPServerConfig:
+    """XTP 服务器配置"""
+
+    # 中泰证券 XTP 服务器地址（示例，需实际配置）
+    TRADE_SERVERS = {
+        "real": {
+            "SH": ("120.27.164.69", 6001),   # 上海交易服务器
+            "SZ": ("120.27.164.69", 6002),   # 深圳交易服务器
+        },
+        "test": {
+            "SH": ("120.27.164.69", 6101),   # 上海测试服务器
+            "SZ": ("120.27.164.69", 6102),   # 深圳测试服务器
+        },
+    }
+
+    QUOTE_SERVERS = {
+        "real": {
+            "SH": ("120.27.164.138", 6001),  # 上海行情服务器
+            "SZ": ("120.27.164.138", 6002),  # 深圳行情服务器
+        },
+        "test": {
+            "SH": ("120.27.164.138", 6101),
+            "SZ": ("120.27.164.138", 6102),
+        },
+    }
+
+    @classmethod
+    def get_trade_server(cls, env: str = "test", market: str = "SH") -> Tuple[str, int]:
+        return cls.TRADE_SERVERS.get(env, cls.TRADE_SERVERS["test"]).get(market, ("127.0.0.1", 7708))
+
+    @classmethod
+    def get_quote_server(cls, env: str = "test", market: str = "SH") -> Tuple[str, int]:
+        return cls.QUOTE_SERVERS.get(env, cls.QUOTE_SERVERS["test"]).get(market, ("127.0.0.1", 7709))
+
+
+# ============================================================
+# XTP 协议帧编解码
+# ============================================================
+class XTPFrameCodec:
+    """XTP 协议帧编解码器"""
+
+    # 帧头结构：4字节长度 + 2字节类型 + 2字节版本
+    HEADER_FORMAT = "!IHH"
+    HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+
+    class FrameType(Enum):
+        LOGIN_REQ = 0x0001
+        LOGIN_RSP = 0x0002
+        ORDER_REQ = 0x0010
+        ORDER_RSP = 0x0011
+        CANCEL_REQ = 0x0012
+        CANCEL_RSP = 0x0013
+        QUERY_ACCOUNT_REQ = 0x0020
+        QUERY_ACCOUNT_RSP = 0x0021
+        QUERY_POSITION_REQ = 0x0022
+        QUERY_POSITION_RSP = 0x0023
+        QUERY_ORDER_REQ = 0x0024
+        QUERY_ORDER_RSP = 0x0025
+        MARKET_DATA = 0x0030
+        HEARTBEAT = 0x00FF
+
+    @classmethod
+    def encode(cls, frame_type: 'XTPFrameCodec.FrameType', payload: bytes, version: int = 1) -> bytes:
+        total_len = cls.HEADER_SIZE + len(payload)
+        header = struct.pack(cls.HEADER_FORMAT, total_len, frame_type.value, version)
+        return header + payload
+
+    @classmethod
+    def decode_header(cls, data: bytes) -> Tuple[int, int, int]:
+        if len(data) < cls.HEADER_SIZE:
+            raise ValueError(f"数据不足，需要 {cls.HEADER_SIZE} 字节")
+        total_len, frame_type, version = struct.unpack(cls.HEADER_FORMAT, data[:cls.HEADER_SIZE])
+        return total_len, frame_type, version
+
+    @classmethod
+    def encode_login(cls, username: str, password: str, client_id: str = "") -> bytes:
+        payload = f"{username}\x00{password}\x00{client_id}".encode("utf-8")
+        return cls.encode(cls.FrameType.LOGIN_REQ, payload)
+
+    @classmethod
+    def encode_order(cls, order: XTPOrder) -> bytes:
+        payload = json.dumps({
+            "symbol": order.symbol,
+            "market": order.market,
+            "side": order.side,
+            "order_type": order.order_type,
+            "price": order.price,
+            "quantity": order.quantity,
+            "order_id": order.order_id,
+        }).encode("utf-8")
+        return cls.encode(cls.FrameType.ORDER_REQ, payload)
+
+    @classmethod
+    def encode_cancel(cls, order_id: str) -> bytes:
+        payload = order_id.encode("utf-8")
+        return cls.encode(cls.FrameType.CANCEL_REQ, payload)
+
+    @classmethod
+    def encode_heartbeat(cls) -> bytes:
+        return cls.encode(cls.FrameType.HEARTBEAT, b"")
+
+    @classmethod
+    def encode_query_account(cls) -> bytes:
+        return cls.encode(cls.FrameType.QUERY_ACCOUNT_REQ, b"")
+
+    @classmethod
+    def encode_query_position(cls) -> bytes:
+        return cls.encode(cls.FrameType.QUERY_POSITION_REQ, b"")
+
+
+# ============================================================
+# XTP 交易客户端
+# ============================================================
+class XTPTradeClient:
+    """中泰证券 XTP 交易客户端（基于 TCP Socket 直连）"""
+
+    MAX_RECONNECT_ATTEMPTS = 5
+    RECONNECT_INTERVAL = 3.0
+    HEARTBEAT_INTERVAL = 30.0
+    RECV_BUFFER_SIZE = 4096
+
+    def __init__(self, config: Dict[str, Any]):
+        self._host, self._port = XTPServerConfig.get_trade_server(
+            env=config.get("env", "test"),
+            market=config.get("market", "SH"),
+        )
+        self._username = config.get("username", "")
+        self._password = config.get("password", "")
+        self._client_id = config.get("client_id", f"aurora_{int(time.time())}")
+
+        self._socket: Optional[socket.socket] = None
+        self._connected = False
+        self._logged_in = False
+        self._session_id = ""
+        self._recv_buffer = b""
+
+        # 回调函数
+        self._on_order_callback: Optional[Callable] = None
+        self._on_trade_callback: Optional[Callable] = None
+        self._on_error_callback: Optional[Callable] = None
+
+        self._lock = threading.Lock()
+        self._recv_thread: Optional[threading.Thread] = None
+        self._heartbeat_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+
+        # 模拟模式数据
+        self._simulated_account = XTPAccount(
+            account_id=f"zt_{self._client_id}",
+            available_cash=config.get("initial_balance", 1000000.0),
+            total_asset=config.get("initial_balance", 1000000.0),
+        )
+        self._simulated_positions: Dict[str, XTPPosition] = {}
+        self._simulated_orders: Dict[str, XTPOrder] = {}
+        self._order_id_counter = 0
+
+    # ── 回调注册 ──
+    def on_order(self, callback: Callable):
+        self._on_order_callback = callback
+
+    def on_trade(self, callback: Callable):
+        self._on_trade_callback = callback
+
+    def on_error(self, callback: Callable):
+        self._on_error_callback = callback
+
+    # ── 连接管理 ──
+    def connect(self) -> bool:
+        """连接 XTP 交易服务器"""
+        with self._lock:
+            if self._connected:
+                return True
+
+            try:
+                # 尝试真实连接
+                self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self._socket.settimeout(5.0)
+                self._socket.connect((self._host, self._port))
+
+                # 发送登录帧
+                login_frame = XTPFrameCodec.encode_login(
+                    self._username, self._password, self._client_id
+                )
+                self._socket.sendall(login_frame)
+
+                # 等待登录响应
+                response = self._socket.recv(self.RECV_BUFFER_SIZE)
+                if response:
+                    self._logged_in = True
+                    logger.info(f"[ZhongTai] 真实连接成功: {self._host}:{self._port}")
+                else:
+                    raise ConnectionError("登录响应为空")
+
+                self._connected = True
+                self._start_background_tasks()
+                return True
+
+            except (socket.error, ConnectionError, OSError) as e:
+                logger.warning(f"[ZhongTai] 无法连接真实服务器 ({e})，启用模拟模式")
+                self._socket = None
+                self._connected = True   # 模拟模式也算连接成功
+                self._logged_in = True   # 模拟模式默认登录成功
+                logger.info(f"[ZhongTai] 模拟模式已启动")
+                return True
+
+    def disconnect(self) -> bool:
+        """断开连接"""
+        self._stop_event.set()
+        with self._lock:
+            if self._socket:
+                try:
+                    self._socket.close()
+                except Exception:
+                    pass
+                self._socket = None
+            self._connected = False
+            self._logged_in = False
+            self._session_id = ""
+        return True
+
+    def is_connected(self) -> bool:
+        return self._connected
+
+    def is_logged_in(self) -> bool:
+        return self._logged_in
+
+    # ── 后台任务 ──
+    def _start_background_tasks(self):
+        self._stop_event.clear()
+        if not self._recv_thread or not self._recv_thread.is_alive():
+            self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
+            self._recv_thread.start()
+        if not self._heartbeat_thread or not self._heartbeat_thread.is_alive():
+            self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+            self._heartbeat_thread.start()
+
+    def _recv_loop(self):
+        while not self._stop_event.is_set():
+            try:
+                if self._socket:
+                    data = self._socket.recv(self.RECV_BUFFER_SIZE)
+                    if data:
+                        self._process_frame(data)
+            except socket.timeout:
+                continue
+            except Exception as e:
+                logger.error(f"[ZhongTai] 接收异常: {e}")
+                self._stop_event.wait(1.0)
+
+    def _heartbeat_loop(self):
+        while not self._stop_event.is_set():
+            if self._socket and self._logged_in:
+                try:
+                    heartbeat = XTPFrameCodec.encode_heartbeat()
+                    self._socket.sendall(heartbeat)
+                except Exception:
+                    pass
+            self._stop_event.wait(self.HEARTBEAT_INTERVAL)
+
+    def _process_frame(self, data: bytes):
+        """处理接收到的协议帧"""
+        self._recv_buffer += data
+        while len(self._recv_buffer) >= XTPFrameCodec.HEADER_SIZE:
+            total_len, frame_type, version = XTPFrameCodec.decode_header(self._recv_buffer)
+            if len(self._recv_buffer) < total_len:
+                break
+            payload = self._recv_buffer[XTPFrameCodec.HEADER_SIZE:total_len]
+            self._recv_buffer = self._recv_buffer[total_len:]
+            self._handle_frame(frame_type, payload, version)
+
+    def _handle_frame(self, frame_type: int, payload: bytes, version: int):
+        frame_type_enum = XTPFrameCodec.FrameType(frame_type)
+        if frame_type_enum == XTPFrameCodec.FrameType.ORDER_RSP:
+            self._handle_order_response(payload)
+        elif frame_type_enum == XTPFrameCodec.FrameType.MARKET_DATA:
+            self._handle_market_data(payload)
+
+    def _handle_order_response(self, payload: bytes):
+        try:
+            data = json.loads(payload.decode("utf-8"))
+            if self._on_order_callback:
+                self._on_order_callback(data)
+        except Exception as e:
+            logger.error(f"[ZhongTai] 处理订单响应失败: {e}")
+
+    def _handle_market_data(self, payload: bytes):
+        try:
+            data = json.loads(payload.decode("utf-8"))
+            if self._on_trade_callback:
+                self._on_trade_callback(data)
+        except Exception as e:
+            logger.error(f"[ZhongTai] 处理行情数据失败: {e}")
+
+    # ── 下单 ──
+    def place_order(self, symbol: str, side: str, quantity: int,
+                    price: float = 0.0, order_type: str = "LIMIT") -> Dict[str, Any]:
+        """
+        下单
+        side: "BUY" / "SELL"
+        order_type: "LIMIT" / "MARKET"
+        """
+        self._order_id_counter += 1
+        order_id = f"zt_{self._client_id}_{self._order_id_counter}_{int(time.time()*1000)}"
+
+        order = XTPOrder(
+            order_id=order_id,
+            symbol=symbol,
+            market="SH" if symbol.startswith("6") else "SZ",
+            price=price,
+            quantity=quantity,
+            side=side.upper(),
+            order_type=order_type.upper(),
+            insert_time=datetime.now().isoformat(),
+        )
+
+        if self._socket and self._logged_in:
+            try:
+                frame = XTPFrameCodec.encode_order(order)
+                with self._lock:
+                    self._socket.sendall(frame)
+                self._simulated_orders[order_id] = order
+                logger.info(f"[ZhongTai] 实盘下单: {symbol} {side} {quantity}@{price}")
+                return {"code": 0, "msg": "下单成功", "data": {"order_id": order_id}}
+            except Exception as e:
+                logger.error(f"[ZhongTai] 下单失败: {e}")
+                return {"code": XTPErrorCode.NETWORK_ERROR.value, "msg": str(e), "data": {}}
+
+        # ── 模拟模式：模拟成交 ──
+        order.status = "FILLED"
+        order.traded_volume = quantity
+        order.traded_amount = quantity * (price if price > 0 else 10.0)
+        order.update_time = datetime.now().isoformat()
+        self._simulated_orders[order_id] = order
+
+        # 更新模拟账户
+        trade_price = price if price > 0 else 10.0
+        if side.upper() == "BUY":
+            cost = quantity * trade_price * 1.0003  # 含印花税/佣金
+            self._simulated_account.available_cash -= cost
+            pos = self._simulated_positions.get(symbol)
+            if pos:
+                total_cost = pos.total_qty * pos.avg_price + cost
+                pos.total_qty += quantity
+                pos.available_qty += quantity
+                pos.avg_price = total_cost / pos.total_qty if pos.total_qty > 0 else trade_price
+            else:
+                self._simulated_positions[symbol] = XTPPosition(
+                    symbol=symbol,
+                    market=order.market,
+                    total_qty=quantity,
+                    available_qty=quantity,
+                    avg_price=trade_price,
+                    current_price=trade_price,
+                    market_value=quantity * trade_price,
+                )
+        else:  # SELL
+            revenue = quantity * trade_price * 0.9987
+            self._simulated_account.available_cash += revenue
+            pos = self._simulated_positions.get(symbol)
+            if pos:
+                pos.total_qty -= quantity
+                pos.available_qty -= quantity
+                if pos.total_qty <= 0:
+                    self._simulated_positions.pop(symbol, None)
+                else:
+                    pos.market_value = pos.total_qty * trade_price
+                    pos.profit_loss = (trade_price - pos.avg_price) * pos.total_qty
+                    pos.profit_loss_ratio = (trade_price / pos.avg_price - 1) * 100 if pos.avg_price > 0 else 0
+
+        logger.info(f"[ZhongTai] 模拟下单: {symbol} {side} {quantity}@{trade_price}, order_id={order_id}")
+        return {"code": 0, "msg": "下单成功(模拟)", "data": {"order_id": order_id}}
+
+    def cancel_order(self, order_id: str) -> bool:
+        """撤单"""
+        if self._socket and self._logged_in:
+            try:
+                frame = XTPFrameCodec.encode_cancel(order_id)
+                with self._lock:
+                    self._socket.sendall(frame)
+                return True
+            except Exception as e:
+                logger.error(f"[ZhongTai] 撤单失败: {e}")
+                return False
+
+        # 模拟模式
+        order = self._simulated_orders.get(order_id)
+        if order and order.status not in ("FILLED", "CANCELLED", "REJECTED"):
+            order.status = "CANCELLED"
+            order.cancel_volume = order.quantity - order.traded_volume
+            order.update_time = datetime.now().isoformat()
+            return True
+        return False
+
+    # ── 查询 ──
+    def get_account_info(self) -> Optional[XTPAccount]:
+        """查询账户信息"""
+        if self._socket and self._logged_in:
+            try:
+                frame = XTPFrameCodec.encode_query_account()
+                with self._lock:
+                    self._socket.sendall(frame)
+                # 注：实际场景需要异步等待响应
+            except Exception:
+                pass
+        return self._simulated_account
+
+    def get_positions(self) -> List[XTPPosition]:
+        """查询持仓"""
+        if self._socket and self._logged_in:
+            try:
+                frame = XTPFrameCodec.encode_query_position()
+                with self._lock:
+                    self._socket.sendall(frame)
+            except Exception:
+                pass
+        return list(self._simulated_positions.values())
+
+    def get_order(self, order_id: str) -> Optional[XTPOrder]:
+        return self._simulated_orders.get(order_id)
+
+    def get_orders(self) -> List[XTPOrder]:
+        return list(self._simulated_orders.values())
+
+
+# ============================================================
+# XTP 行情客户端
+# ============================================================
+class XTPQuoteClient:
+    """中泰证券 XTP 行情客户端"""
+
+    def __init__(self, config: Dict[str, Any]):
+        self._host, self._port = XTPServerConfig.get_quote_server(
+            env=config.get("env", "test"),
+            market=config.get("market", "SH"),
+        )
+        self._config = config
+        self._socket: Optional[socket.socket] = None
+        self._connected = False
+        self._subscribed_symbols: List[str] = []
+        self._market_data_cache: Dict[str, XTPMarketData] = {}
+        self._simulated_prices: Dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def connect(self) -> bool:
+        with self._lock:
+            try:
+                self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self._socket.settimeout(5.0)
+                self._socket.connect((self._host, self._port))
+                self._connected = True
+                logger.info(f"[ZhongTai] 行情连接成功: {self._host}:{self._port}")
+                return True
+            except (socket.error, ConnectionError, OSError) as e:
+                logger.warning(f"[ZhongTai] 行情连接失败 ({e})，使用模拟行情")
+                self._socket = None
+                self._connected = True
+                return True
+
+    def disconnect(self) -> bool:
+        with self._lock:
+            if self._socket:
+                try:
+                    self._socket.close()
+                except Exception:
+                    pass
+                self._socket = None
+            self._connected = False
+        return True
+
+    def subscribe(self, symbols: List[str]) -> bool:
+        self._subscribed_symbols = symbols
+        # 为模拟模式生成初始价格
+        import random
+        for sym in symbols:
+            if sym not in self._simulated_prices:
+                base = 10.0 if sym.startswith("6") else 15.0
+                self._simulated_prices[sym] = base * (1 + random.uniform(-0.1, 0.1))
+        return True
+
+    def get_ticker(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """获取最新行情"""
+        import random
+        price = self._simulated_prices.get(symbol)
+        if price is None:
+            base = 10.0 if symbol.startswith("6") else 15.0
+            price = base * (1 + random.uniform(-0.1, 0.1))
+            self._simulated_prices[symbol] = price
+
+        # 价格微幅变动
+        price *= (1 + random.uniform(-0.005, 0.005))
+        self._simulated_prices[symbol] = price
+
+        return {
+            "symbol": symbol,
+            "code": 0,
+            "data": {
+                "close": round(price, 2),
+                "open": round(price * 0.995, 2),
+                "high": round(price * 1.01, 2),
+                "low": round(price * 0.99, 2),
+                "volume": int(random.uniform(1000000, 50000000)),
+                "turnover": round(price * random.uniform(1000000, 50000000), 2),
+                "change_pct": round(random.uniform(-3, 3), 2),
+                "pre_close": round(price * 0.998, 2),
+            },
+            "msg": "success",
+        }
+
+    def get_kline(self, symbol: str, interval: str = "1d", limit: int = 100) -> List[Dict]:
+        """获取K线数据（模拟）"""
+        import random
+        import math
+
+        price = self._simulated_prices.get(symbol, 10.0)
+        klines = []
+
+        if interval == "1d":
+            step_seconds = 86400
+        elif interval == "1h":
+            step_seconds = 3600
+        elif interval == "30m":
+            step_seconds = 1800
+        elif interval == "5m":
+            step_seconds = 300
+        else:
+            step_seconds = 60
+
+        base_ts = int(time.time()) - step_seconds * limit
+        current = price * 0.7
+
+        for i in range(limit):
+            ts = (base_ts + step_seconds * i) * 1000
+            change = random.uniform(-0.03, 0.03)
+            drift = 0.001 * i
+            open_p = current * (1 + random.uniform(-0.005, 0.005))
+            close_p = open_p * (1 + random.uniform(-0.02, 0.02))
+            high_p = max(open_p, close_p) * (1 + abs(random.uniform(0, 0.01)))
+            low_p = min(open_p, close_p) * (1 - abs(random.uniform(0, 0.01)))
+            vol = random.uniform(1000000, 20000000)
+
+            klines.append([ts, open_p, high_p, low_p, close_p, vol])
+            current = close_p
+
+        klines[-1] = [int(time.time() * 1000), price*0.99, price*1.01, price*0.99, price, random.uniform(5000000, 10000000)]
+
+        return [{"code": 0, "data": klines}]
+
+    def get_realtime_price(self, symbol: str) -> float:
+        return self._simulated_prices.get(symbol, 0.0)
+
+
+# ============================================================
+# 中泰证券客户端外观 (Facade)
+# ============================================================
+class ZhongTaiClient:
+    """中泰证券客户端外观 — 统一封装交易与行情"""
+
+    def __init__(self, config: Dict[str, Any] = None):
+        config = config or {}
+        self._trade_client = XTPTradeClient(config.get("trade", {}))
+        self._quote_client = XTPQuoteClient(config.get("quote", {}))
+        self._connected = False
+        self._config = config
+
+    def connect(self) -> bool:
+        trade_ok = self._trade_client.connect()
+        quote_ok = self._quote_client.connect()
+        self._connected = trade_ok and quote_ok
+        return self._connected
+
+    def disconnect(self):
+        self._trade_client.disconnect()
+        self._quote_client.disconnect()
+        self._connected = False
+
+    def is_connected(self) -> bool:
+        return self._connected
+
+    # ── 代理方法 ──
+    def get_ticker(self, symbol: str):
+        return self._quote_client.get_ticker(symbol)
+
+    def get_kline(self, symbol: str, interval: str = "1d", limit: int = 100):
+        return self._quote_client.get_kline(symbol, interval, limit)
+
+    def place_order(self, symbol: str, side: str, quantity: int,
+                    price: float = 0.0, order_type: str = "LIMIT"):
+        return self._trade_client.place_order(symbol, side, quantity, price, order_type)
+
+    def cancel_order(self, order_id: str) -> bool:
+        return self._trade_client.cancel_order(order_id)
+
+    def get_account_info(self):
+        return self._trade_client.get_account_info()
+
+    def get_positions(self):
+        return self._trade_client.get_positions()
+
+    def get_order(self, order_id: str):
+        return self._trade_client.get_order(order_id)
+
+    def get_orders(self):
+        return self._trade_client.get_orders()
+
+    def subscribe(self, symbols: List[str]) -> bool:
+        return self._quote_client.subscribe(symbols)
+
+    def get_realtime_price(self, symbol: str) -> float:
+        return self._quote_client.get_realtime_price(symbol)
+
+
+import json

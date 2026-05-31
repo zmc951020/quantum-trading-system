@@ -8,8 +8,8 @@ import requests
 import json
 import datetime
 
-DEEPSEEK_API_KEY = "sk-e97d90fb3ae8419faca6657a745b66bf"
-DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_API_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com") + "/chat/completions"
 
 SYSTEM_PROMPT = """你是一位专业的量化交易策略专家，擅长：
 1. 策略设计和优化

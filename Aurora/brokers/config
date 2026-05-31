@@ -1,0 +1,427 @@
+# -*- coding: utf-8 -*-
+"""券商配置面板 — 提供配置管理、券商切换、账户信息展示的后端支持"""
+
+import json
+import logging
+import os
+from datetime import datetime
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass, asdict
+
+logger = logging.getLogger("Aurora.BrokerConfigPanel")
+
+
+@dataclass
+class BrokerConfig:
+    """券商配置"""
+    name: str
+    broker_type: str          # xbk / zhongtai / aurora_simulator
+    enabled: bool = True
+    api_host: str = ""
+    api_port: int = 8080
+    username: str = ""
+    password: str = ""
+    env: str = "test"          # real / test
+    market: str = "SH"         # SH / SZ / ALL
+    initial_balance: float = 1000000.0
+    commission_rate: float = 0.0003
+    stamp_duty: float = 0.001  # 印花税
+    min_commission: float = 5.0
+    is_active: bool = False
+    connected: bool = False
+    data_source_status: str = "offline"  # online / offline / simulated / degraded
+    last_switch_time: Optional[str] = None
+    stock_pool: List[str] = None
+
+    def __post_init__(self):
+        if self.stock_pool is None:
+            self.stock_pool = []
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+class BrokerConfigManager:
+    """券商配置管理器 — 单例"""
+
+    _instance = None
+    _config_file = "config/broker_configs.json"
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self._initialized = True
+        self._configs: Dict[str, BrokerConfig] = {}
+        self._switch_history: List[Dict] = []
+        self._load_defaults()
+        self._load_from_file()
+
+    # ── 默认配置 ──
+    def _load_defaults(self):
+        """加载默认券商配置"""
+        defaults = {
+            "xbk": BrokerConfig(
+                name="西部宽客",
+                broker_type="xbk",
+                enabled=True,
+                api_host="westquant.cn",
+                api_port=8080,
+                username="aurora_user",
+                password="",
+                env="test",
+                market="ALL",
+                is_active=True,
+                connected=False,
+                data_source_status="offline",
+                stock_pool=["600000.SH", "000001.SZ", "600519.SH", "000858.SZ", "300750.SZ"],
+            ),
+            "zhongtai": BrokerConfig(
+                name="中泰证券",
+                broker_type="zhongtai",
+                enabled=True,
+                api_host="120.27.164.69",
+                api_port=6001,
+                username="",
+                password="",
+                env="test",
+                market="ALL",
+                is_active=False,
+                connected=False,
+                data_source_status="offline",
+                stock_pool=["600000.SH", "000001.SZ", "600519.SH"],
+            ),
+            "aurora_simulator": BrokerConfig(
+                name="Aurora模拟器",
+                broker_type="aurora_simulator",
+                enabled=True,
+                api_host="localhost",
+                api_port=5000,
+                username="admin",
+                password="admin123",
+                env="test",
+                market="ALL",
+                initial_balance=100000.0,
+                is_active=False,
+                connected=True,
+                data_source_status="simulated",
+                stock_pool=["600000.SH", "000001.SZ", "600519.SH", "000858.SZ", "300750.SZ"],
+            ),
+        }
+        self._configs = defaults
+
+    def _load_from_file(self):
+        """从文件加载券商配置"""
+        if os.path.exists(self._config_file):
+            try:
+                with open(self._config_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for key, cfg_dict in data.get("brokers", {}).items():
+                    if key in self._configs:
+                        for k, v in cfg_dict.items():
+                            if hasattr(self._configs[key], k):
+                                setattr(self._configs[key], k, v)
+                self._switch_history = data.get("switch_history", [])
+                logger.info(f"从文件加载了 {len(data.get('brokers', {}))} 个券商配置")
+            except Exception as e:
+                logger.warning(f"加载券商配置文件失败: {e}")
+
+    def save_to_file(self):
+        """保存券商配置到文件"""
+        os.makedirs(os.path.dirname(self._config_file), exist_ok=True)
+        try:
+            data = {
+                "brokers": {k: v.to_dict() for k, v in self._configs.items()},
+                "switch_history": self._switch_history[-50:],  # 最近50条
+                "updated_at": datetime.now().isoformat(),
+            }
+            with open(self._config_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.info("券商配置已保存")
+        except Exception as e:
+            logger.error(f"保存券商配置失败: {e}")
+
+    # ── CRUD ──
+    def get_all_configs(self) -> List[Dict]:
+        """获取所有券商配置"""
+        return [cfg.to_dict() for cfg in self._configs.values()]
+
+    def get_config(self, broker_type: str) -> Optional[BrokerConfig]:
+        """获取指定券商配置"""
+        return self._configs.get(broker_type)
+
+    def get_active_config(self) -> Optional[BrokerConfig]:
+        """获取当前激活的券商配置"""
+        for cfg in self._configs.values():
+            if cfg.is_active and cfg.enabled:
+                return cfg
+        return None
+
+    def set_active(self, broker_type: str) -> Dict[str, Any]:
+        """设置活跃券商（同时取消其他券商的活跃状态）"""
+        if broker_type not in self._configs:
+            return {"success": False, "message": f"未知券商类型: {broker_type}"}
+
+        old_active = None
+        for cfg in self._configs.values():
+            if cfg.is_active:
+                old_active = cfg.broker_type
+                cfg.is_active = False
+
+        self._configs[broker_type].is_active = True
+        self._configs[broker_type].last_switch_time = datetime.now().isoformat()
+
+        # 记录切换历史
+        self._switch_history.append({
+            "timestamp": datetime.now().isoformat(),
+            "from_broker": old_active,
+            "to_broker": broker_type,
+            "success": True,
+        })
+
+        self.save_to_file()
+        logger.info(f"券商切换: {old_active} → {broker_type}")
+        return {
+            "success": True,
+            "from_broker": old_active,
+            "to_broker": broker_type,
+            "active_broker": broker_type,
+        }
+
+    def update_config(self, broker_type: str, updates: Dict) -> Dict[str, Any]:
+        """更新券商配置"""
+        cfg = self._configs.get(broker_type)
+        if not cfg:
+            return {"success": False, "message": f"未知券商类型: {broker_type}"}
+
+        allowed_fields = [
+            "enabled", "api_host", "api_port", "username", "password",
+            "env", "market", "initial_balance", "commission_rate",
+            "stamp_duty", "min_commission",
+        ]
+        for k, v in updates.items():
+            if k in allowed_fields and hasattr(cfg, k):
+                setattr(cfg, k, v)
+
+        self.save_to_file()
+        return {"success": True, "message": f"配置已更新: {broker_type}"}
+
+    def update_stock_pool(self, broker_type: str, stock_pool: List[str]) -> Dict[str, Any]:
+        """更新指定券商的股票池"""
+        cfg = self._configs.get(broker_type)
+        if not cfg:
+            return {"success": False, "message": f"未知券商类型: {broker_type}"}
+        cfg.stock_pool = stock_pool
+        self.save_to_file()
+        return {"success": True, "stock_pool": stock_pool}
+
+    def update_connection_status(self, broker_type: str, connected: bool,
+                                  data_source_status: str = "offline"):
+        """更新券商连接状态"""
+        cfg = self._configs.get(broker_type)
+        if cfg:
+            cfg.connected = connected
+            cfg.data_source_status = data_source_status
+
+    def get_switch_history(self, limit: int = 20) -> List[Dict]:
+        return self._switch_history[-limit:]
+
+    def get_system_status(self) -> Dict:
+        """获取券商系统总状态"""
+        brokers_status = []
+        for cfg in self._configs.values():
+            brokers_status.append({
+                "name": cfg.name,
+                "broker_type": cfg.broker_type,
+                "enabled": cfg.enabled,
+                "is_active": cfg.is_active,
+                "connected": cfg.connected,
+                "data_source_status": cfg.data_source_status,
+                "stock_pool_size": len(cfg.stock_pool),
+            })
+
+        active = self.get_active_config()
+        return {
+            "active_broker": active.name if active else "无",
+            "active_broker_type": active.broker_type if active else None,
+            "total_brokers": len(self._configs),
+            "connected_brokers": sum(1 for c in self._configs.values() if c.connected),
+            "brokers": brokers_status,
+            "last_switch": self._switch_history[-1] if self._switch_history else None,
+        }
+
+    def enable_broker(self, broker_type: str) -> Dict[str, Any]:
+        cfg = self._configs.get(broker_type)
+        if not cfg:
+            return {"success": False, "message": f"未知券商类型: {broker_type}"}
+        cfg.enabled = True
+        self.save_to_file()
+        return {"success": True, "message": f"券商已启用: {cfg.name}"}
+
+    def disable_broker(self, broker_type: str) -> Dict[str, Any]:
+        cfg = self._configs.get(broker_type)
+        if not cfg:
+            return {"success": False, "message": f"未知券商类型: {broker_type}"}
+        if cfg.is_active:
+            return {"success": False, "message": "不能禁用当前活跃券商"}
+        cfg.enabled = False
+        self.save_to_file()
+        return {"success": True, "message": f"券商已禁用: {cfg.name}"}
+
+
+# ============================================================
+# A股交易规则校验器
+# ============================================================
+class AShareRulesValidator:
+    """A股交易规则校验器 — 供所有券商适配器调用"""
+
+    # A股交易时间（北京时间）
+    MARKET_OPEN_MORNING = (9, 30)
+    MARKET_CLOSE_MORNING = (11, 30)
+    MARKET_OPEN_AFTERNOON = (13, 0)
+    MARKET_CLOSE_AFTERNOON = (15, 0)
+
+    # 涨跌停板比例
+    LIMIT_UP_RATIO = 0.10       # 主板10%
+    LIMIT_UP_GEM_RATIO = 0.20   # 创业板20%
+    LIMIT_DOWN_RATIO = -0.10
+
+    # A股最小交易单位
+    MIN_ORDER_LOT = 100         # 1手 = 100股
+    MAX_ORDER_QUANTITY = 1000000  # 最大100万股
+
+    # T+1限制：当日买入次日才能卖出（通过持仓状态判断）
+
+    @classmethod
+    def is_trading_time(cls) -> Tuple[bool, str]:
+        """判断当前是否在A股交易时间内"""
+        import pytz
+        try:
+            tz = pytz.timezone("Asia/Shanghai")
+            now = datetime.now(tz)
+        except ImportError:
+            # 无pytz时使用UTC+8
+            from datetime import timedelta, timezone
+            tz = timezone(timedelta(hours=8))
+            now = datetime.now(tz)
+
+        current_time = (now.hour, now.minute)
+
+        # 周末不交易
+        if now.weekday() >= 5:
+            return False, "周末休市"
+
+        # 上午交易时段
+        if cls.MARKET_OPEN_MORNING <= current_time <= cls.MARKET_CLOSE_MORNING:
+            return True, "上午交易时段"
+
+        # 下午交易时段
+        if cls.MARKET_OPEN_AFTERNOON <= current_time <= cls.MARKET_CLOSE_AFTERNOON:
+            return True, "下午交易时段"
+
+        return False, "非交易时间"
+
+    @classmethod
+    def validate_order_quantity(cls, quantity: int) -> Tuple[bool, str]:
+        """校验订单数量（A股整手规则）"""
+        if quantity % cls.MIN_ORDER_LOT != 0:
+            return False, f"数量必须为 {cls.MIN_ORDER_LOT} 的整数倍（1手={cls.MIN_ORDER_LOT}股）"
+        if quantity < cls.MIN_ORDER_LOT:
+            return False, f"最小交易量为 {cls.MIN_ORDER_LOT} 股"
+        if quantity > cls.MAX_ORDER_QUANTITY:
+            return False, f"最大交易量为 {cls.MAX_ORDER_QUANTITY} 股"
+        return True, "OK"
+
+    @classmethod
+    def validate_price_limit(cls, symbol: str, price: float,
+                              pre_close: float) -> Tuple[bool, str]:
+        """校验涨跌停板限制"""
+        if pre_close <= 0:
+            return True, "无前收盘价，跳过校验"
+
+        # 判断板块
+        is_gem = symbol.startswith("300") or symbol.startswith("301") or symbol.startswith("688")
+        limit_ratio = cls.LIMIT_UP_GEM_RATIO if is_gem else cls.LIMIT_UP_RATIO
+
+        limit_up = pre_close * (1 + limit_ratio)
+        limit_down = pre_close * (1 - limit_ratio)
+
+        if price > limit_up:
+            return False, f"超过涨停价 {limit_up:.2f}（涨停板 +{limit_ratio*100:.0f}%）"
+        if price < limit_down:
+            return False, f"低于跌停价 {limit_down:.2f}（跌停板 -{limit_ratio*100:.0f}%）"
+
+        return True, "OK"
+
+    @classmethod
+    def validate_t_plus_one(cls, symbol: str, side: str,
+                            positions: Dict[str, Any]) -> Tuple[bool, str]:
+        """T+1校验：当日买入的股票不能当日卖出"""
+        if side.upper() != "SELL":
+            return True, "OK"
+
+        pos = positions.get(symbol)
+        if not pos:
+            return False, "不持有该股票"
+
+        available_qty = pos.get("available_qty", 0)
+        if available_qty <= 0:
+            today_bought = pos.get("today_bought", 0)
+            if today_bought > 0:
+                return False, "T+1限制：当日买入的股票需次日才能卖出"
+            return False, "可用数量不足"
+
+        return True, "OK"
+
+    @classmethod
+    def validate_before_trade(cls, symbol: str, side: str, quantity: int,
+                               price: float, pre_close: float = 0.0,
+                               positions: Optional[Dict] = None) -> Tuple[bool, str]:
+        """交易前综合校验（所有券商适配器下单前调用）"""
+        # 1. 交易时间校验
+        is_trading, msg = cls.is_trading_time()
+        if not is_trading:
+            return False, msg
+
+        # 2. 数量校验
+        ok, msg = cls.validate_order_quantity(quantity)
+        if not ok:
+            return False, msg
+
+        # 3. 涨跌停板校验
+        if pre_close > 0 and price > 0:
+            ok, msg = cls.validate_price_limit(symbol, price, pre_close)
+            if not ok:
+                return False, msg
+
+        # 4. T+1校验
+        if positions is not None and side.upper() == "SELL":
+            ok, msg = cls.validate_t_plus_one(symbol, side, positions)
+            if not ok:
+                return False, msg
+
+        return True, "校验通过"
+
+    @classmethod
+    def get_market_type(cls, symbol: str) -> str:
+        """根据代码判断所属市场"""
+        if symbol.startswith("6"):
+            return "SH"  # 上海主板
+        elif symbol.startswith("0") or symbol.startswith("3"):
+            return "SZ"  # 深圳
+        elif symbol.startswith("688"):
+            return "SH"  # 科创板（上海）
+        else:
+            return "SH"  # 默认上海
+
+
+# ============================================================
+# 全局单例获取
+# ============================================================
+def get_broker_config_manager() -> BrokerConfigManager:
+    return BrokerConfigManager()

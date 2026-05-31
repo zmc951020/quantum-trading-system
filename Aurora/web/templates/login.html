@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurora量化交易系统 — 登录</title>
+<style>
+  :root {
+    --primary: #4f46e5;
+    --primary-hover: #4338ca;
+    --danger: #ef4444;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --input-bg: #0f172a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  }
+  .login-card h1 {
+    font-size: 28px;
+    text-align: center;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #818cf8, #38bdf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .login-card .subtitle {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    font-size: 14px;
+  }
+  .form-group {
+    margin-bottom: 20px;
+  }
+  .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  .form-group input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.2);
+  }
+  .form-group input.error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.15);
+  }
+  .form-group .error-msg {
+    color: var(--danger);
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+  }
+  .form-group .error-msg.show { display: block; }
+  .btn-login {
+    width: 100%;
+    padding: 14px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 8px;
+    position: relative;
+  }
+  .btn-login:hover { background: var(--primary-hover); }
+  .btn-login:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn-login .spinner {
+    display: none;
+    width: 20px; height: 20px;
+    border: 2px solid transparent;
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .btn-login.loading .spinner { display: block; }
+  .btn-login.loading .btn-text { opacity: 0.4; }
+  @keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
+  
+  .toast {
+    position: fixed; top: 20px; right: 20px;
+    padding: 14px 24px;
+    border-radius: 10px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 9999;
+    animation: slideIn .3s ease;
+    max-width: 400px;
+  }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: var(--success); }
+  .toast.warning { background: var(--warning); color: #1e293b; }
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  
+  /* 连接状态指示器 — P2-5 修补 */
+  .connection-status {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .connection-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    transition: background 0.3s;
+  }
+  .connection-dot.disconnected { background: var(--danger); }
+  .connection-dot.connecting { background: var(--warning); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <h1>🔮 Aurora</h1>
+  <p class="subtitle">DeepSeek 智能量化交易平台</p>
+
+  <!-- 错误提示区域 — P2-4 修补 -->
+  <div id="login-alert" style="display:none; padding:12px; border-radius:8px; margin-bottom:16px; font-size:14px;"></div>
+
+  <form id="login-form" novalidate autocomplete="off">
+    <div class="form-group">
+      <label for="username">用户名</label>
+      <input type="text" id="username" name="username" placeholder="请输入用户名"
+             maxlength="50" autocomplete="off">
+      <!-- P2-3: 输入验证提示 -->
+      <div class="error-msg" id="username-error"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="password">密码</label>
+      <input type="password" id="password" name="password" placeholder="请输入密码"
+             maxlength="128" autocomplete="off">
+      <!-- P2-3: 输入验证提示 -->
+      <div class="error-msg" id="password-error"></div>
+    </div>
+
+    <button type="submit" class="btn-login" id="btn-login">
+      <span class="btn-text">登 录</span>
+      <span class="spinner"></span>
+    </button>
+  </form>
+
+  <!-- 连接状态 — P2-5 修补 -->
+  <div class="connection-status">
+    <span class="connection-dot" id="conn-dot"></span>
+    <span id="conn-text">系统就绪</span>
+  </div>
+</div>
+
+<!-- Toast容器 — P2-4 修补 -->
+<div id="toast-container"></div>
+
+<script>
+(function() {
+  // ═══════════════════════════════════════
+  // P2-3: 前端输入验证
+  // ═══════════════════════════════════════
+  const validators = {
+    username: {
+      validate: (v) => {
+        if (!v || !v.trim()) return '请输入用户名';
+        if (v.trim().length < 2) return '用户名至少2个字符';
+        if (v.trim().length > 50) return '用户名最多50个字符';
+        if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(v.trim())) return '用户名只能包含中英文、数字和下划线';
+        return null;
+      },
+      sanitize: (v) => v.trim(),
+    },
+    password: {
+      validate: (v) => {
+        if (!v) return '请输入密码';
+        if (v.length < 1) return '密码不能为空';
+        if (v.length > 128) return '密码最长128个字符';
+        return null;
+      },
+      sanitize: (v) => v,
+    }
+  };
+
+  function validateField(name) {
+    const el = document.getElementById(name);
+    const errorEl = document.getElementById(name + '-error');
+    const result = validators[name].validate(el.value);
+    if (result) {
+      el.classList.add('error');
+      errorEl.textContent = result;
+      errorEl.classList.add('show');
+      return false;
+    }
+    el.classList.remove('error');
+    errorEl.classList.remove('show');
+    return true;
+  }
+
+  function validateAll() {
+    const u = validateField('username');
+    const p = validateField('password');
+    return u && p;
+  }
+
+  // 实时校验
+  document.getElementById('username').addEventListener('blur', () => validateField('username'));
+  document.getElementById('password').addEventListener('blur', () => validateField('password'));
+
+  // ═══════════════════════════════════════
+  // P2-4: Toast 通知系统
+  // ═══════════════════════════════════════
+  function showToast(msg, type) {
+    type = type || 'error';
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity .3s';
+      setTimeout(() => toast.remove(), 300);
+    }, 3500);
+  }
+
+  // ═══════════════════════════════════════
+  // P2-4: 按钮加载状态
+  // ═══════════════════════════════════════
+  function setLoading(loading) {
+    const btn = document.getElementById('btn-login');
+    if (loading) {
+      btn.classList.add('loading');
+      btn.disabled = true;
+    } else {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  }
+
+  function showAlert(msg, type) {
+    const alert = document.getElementById('login-alert');
+    alert.style.display = 'block';
+    alert.textContent = msg;
+    alert.style.background = type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+    alert.style.color = type === 'success' ? '#10b981' : '#ef4444';
+    alert.style.border = '1px solid ' + (type === 'success' ? '#10b981' : '#ef4444');
+  }
+
+  function hideAlert() {
+    document.getElementById('login-alert').style.display = 'none';
+  }
+
+  // ═══════════════════════════════════════
+  // P2-5: 连接状态检测
+  // ═══════════════════════════════════════
+  function updateConnectionStatus(connected) {
+    const dot = document.getElementById('conn-dot');
+    const text = document.getElementById('conn-text');
+    if (connected === null) {
+      dot.className = 'connection-dot connecting';
+      text.textContent = '连接中...';
+    } else if (connected) {
+      dot.className = 'connection-dot';
+      text.textContent = '系统就绪';
+    } else {
+      dot.className = 'connection-dot disconnected';
+      text.textContent = '连接断开';
+    }
+  }
+
+  async function checkConnection() {
+    updateConnectionStatus(null);
+    try {
+      const resp = await fetch('/api/broker/health', { method: 'GET', signal: AbortSignal.timeout(5000) });
+      updateConnectionStatus(resp.ok);
+    } catch {
+      updateConnectionStatus(false);
+    }
+  }
+
+  // ═══════════════════════════════════════
+  // 登录逻辑
+  // ═══════════════════════════════════════
+  document.getElementById('login-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    hideAlert();
+
+    // P2-3: 提交前验证
+    if (!validateAll()) {
+      showToast('请检查输入信息', 'warning');
+      return;
+    }
+
+    const username = validators.username.sanitize(document.getElementById('username').value);
+    const password = validators.password.sanitize(document.getElementById('password').value);
+
+    setLoading(true);
+    try {
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        showAlert('登录成功，正在跳转...', 'success');
+        showToast('登录成功！', 'success');
+        setTimeout(() => { window.location.href = '/'; }, 800);
+      } else {
+        showAlert(data.message || '登录失败', 'error');
+        showToast(data.message || '用户名或密码错误', 'error');
+      }
+    } catch (err) {
+      const msg = '网络错误，请检查连接';
+      showAlert(msg, 'error');
+      showToast(msg, 'error');
+      updateConnectionStatus(false);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  // 初始连接检测
+  checkConnection();
+  // 定时检测
+  setInterval(checkConnection, 30000);
+
+  // 网络状态监听 — P2-5
+  window.addEventListener('online', () => {
+    updateConnectionStatus(true);
+    showToast('网络已恢复', 'success');
+  });
+  window.addEventListener('offline', () => {
+    updateConnectionStatus(false);
+    showToast('网络已断开', 'error');
+  });
+})();
+</script>
+
+</body>
+</html>

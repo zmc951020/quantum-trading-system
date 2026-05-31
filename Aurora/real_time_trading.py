@@ -8,6 +8,7 @@ import sys
 import time
 import logging
 import threading
+import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
@@ -402,6 +403,216 @@ def run_real_time_simulation(
         print("=" * 70)
 
 
+# ═══════════════════════════════════════════════════════════════
+# AI交易顾问（Smart Model Router集成）
+# ═══════════════════════════════════════════════════════════════
+
+class AIAdvisor:
+    """
+    AI交易顾问 — 接入 Smart Model Router
+    根据任务重要性自动路由到合适AI后端（Ollama本地 → DeepSeek → Qwen）
+
+    优先级路由：
+    - P0 交易决策 → DeepSeek V4（最高精度，本地降级备选）
+    - P1 策略分析 → DeepSeek/Qwen（平衡精度与速度）
+    - P2 数据分析 → Qwen（高吞吐，适合批量）
+    - P3 报告生成 → Ollama本地（零费用，可接受延迟）
+    """
+
+    def __init__(self):
+        self._ready = False
+        try:
+            from model_integration import (
+                get_router, ask_ai, ask_trading,
+                ask_strategy, ask_data, ask_report, ask_log
+            )
+            self.get_router = get_router
+            self.ask_ai = ask_ai
+            self.ask_trading = ask_trading
+            self.ask_strategy = ask_strategy
+            self.ask_data = ask_data
+            self.ask_report = ask_report
+            self.ask_log = ask_log
+            self._ready = True
+            logger.info("[AIAdvisor] ✓ 已接入Smart Model Router")
+        except ImportError:
+            logger.warning("[AIAdvisor] ✗ model_integration 未安装，AI功能不可用")
+        except Exception as e:
+            logger.warning(f"[AIAdvisor] ✗ 初始化失败: {e}")
+
+    @property
+    def is_ready(self) -> bool:
+        """AI顾问是否就绪"""
+        return self._ready
+
+    def analyze_market_condition(
+        self, symbol: str, price: float,
+        indicators: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        P1优先级：AI分析当前市场状态
+        辅助策略判断市场趋势、仓位建议、支撑阻力位
+
+        Args:
+            symbol: 交易品种
+            price: 当前价格
+            indicators: 技术指标字典
+
+        Returns:
+            {
+                "content": "AI分析文本",
+                "market_state": "strong_bullish/weak_bullish/ranging/weak_bearish/strong_bearish/unknown",
+                "position_advice": 0.3,  # 建议仓位比例
+                "support": 支撑价,
+                "resistance": 阻力价
+            }
+        """
+        if not self._ready:
+            return {"content": "AI未就绪", "market_state": "unknown"}
+
+        prompt = (
+            f"分析当前{symbol}市场状态：\n"
+            f"  当前价格: {price}\n"
+            f"  技术指标: {json.dumps(indicators or {}, ensure_ascii=False)}\n\n"
+            f"请判断并以JSON格式返回：\n"
+            f"  1. market_state: 市场状态（strong_bullish/weak_bullish/ranging/weak_bearish/strong_bearish）\n"
+            f"  2. position_advice: 建议仓位比例（0.0-1.0）\n"
+            f"  3. support: 关键支撑位\n"
+            f"  4. resistance: 关键阻力位\n"
+            f"  5. summary: 一句话总结"
+        )
+
+        try:
+            result = self.ask_strategy(prompt, temperature=0.3)
+            return result
+        except Exception as e:
+            logger.error(f"[AIAdvisor] 市场分析失败: {e}")
+            return {"content": f"分析失败: {e}", "market_state": "unknown"}
+
+    def evaluate_trade_signal(
+        self, symbol: str, signal_type: str,
+        price: float, quantity: float
+    ) -> Dict[str, Any]:
+        """
+        P0优先级：AI评估交易信号（核心交易决策，不容降级）
+        在实盘下单前进行AI二次确认
+
+        Args:
+            symbol: 交易品种
+            signal_type: 信号类型（buy/sell）
+            price: 当前价格
+            quantity: 计划数量
+
+        Returns:
+            {
+                "content": "评估文本",
+                "approved": True/False,
+                "reason": "决策理由",
+                "risk_level": "low/medium/high/critical",
+                "stop_loss": 建议止损价
+            }
+        """
+        if not self._ready:
+            return {
+                "content": "AI未就绪，跳过信号评估",
+                "approved": False,
+                "reason": "AI不可用"
+            }
+
+        prompt = (
+            f"评估以下交易信号（核心交易决策）：\n"
+            f"  品种: {symbol}\n"
+            f"  信号类型: {signal_type}\n"
+            f"  当前价格: {price}\n"
+            f"  计划数量: {quantity}\n\n"
+            f"请判断并以JSON格式返回：\n"
+            f"  1. approved: 是否批准此交易（true/false）\n"
+            f"  2. reason: 决策理由\n"
+            f"  3. risk_level: 风险等级（low/medium/high/critical）\n"
+            f"  4. stop_loss: 建议止损价格"
+        )
+
+        try:
+            result = self.ask_trading(prompt, temperature=0.1)
+            return result
+        except Exception as e:
+            logger.error(f"[AIAdvisor] 信号评估失败: {e}")
+            return {"content": f"评估失败: {e}", "approved": False, "reason": str(e)}
+
+    def generate_daily_report(
+        self, trades: List[Dict], pnl: float, win_rate: float
+    ) -> Dict[str, Any]:
+        """
+        P3优先级：生成每日交易报告
+        使用本地Ollama模型零费用生成
+
+        Args:
+            trades: 交易记录列表
+            pnl: 总盈亏
+            win_rate: 胜率
+
+        Returns:
+            {"content": "报告文本"}
+        """
+        if not self._ready:
+            return {
+                "content": (
+                    f"AI未就绪，跳过报告生成。\n"
+                    f"交易数: {len(trades)}, 盈亏: {pnl:.2f}, 胜率: {win_rate:.1%}"
+                )
+            }
+
+        prompt = (
+            f"生成今日交易报告摘要：\n"
+            f"  交易笔数: {len(trades)}\n"
+            f"  总盈亏: {pnl:.4f}\n"
+            f"  胜率: {win_rate:.1%}\n"
+            f"  最近交易: {json.dumps(trades[-10:], ensure_ascii=False, indent=2)[:500]}\n\n"
+            f"请用简洁中文总结今日表现，包括亮点和需要改进的地方。"
+        )
+
+        try:
+            return self.ask_report(prompt, temperature=0.5)
+        except Exception as e:
+            logger.error(f"[AIAdvisor] 报告生成失败: {e}")
+            return {"content": f"报告生成失败: {e}"}
+
+    def get_cost_summary(self) -> Dict[str, Any]:
+        """
+        获取AI费用摘要
+        查看各模型的调用次数和费用分布
+        """
+        if not self._ready:
+            return {"status": "unavailable"}
+        try:
+            from model_integration import get_router_stats, get_model_distribution
+            return {
+                "stats": get_router_stats(),
+                "distribution": get_model_distribution(),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+
+# ── 全局AI顾问单例 ──
+_ai_advisor = None
+_ai_advisor_lock = threading.Lock()
+
+
+def get_ai_advisor() -> AIAdvisor:
+    """
+    获取全局AI顾问单例（线程安全）
+    在交易策略中可通过此函数获取AI辅助能力
+    """
+    global _ai_advisor
+    if _ai_advisor is None:
+        with _ai_advisor_lock:
+            if _ai_advisor is None:
+                _ai_advisor = AIAdvisor()
+    return _ai_advisor
+
+
+# ── 入口 ──
 if __name__ == "__main__":
     # 运行实时模拟
     run_real_time_simulation(

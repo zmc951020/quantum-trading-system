@@ -1,0 +1,287 @@
+# -*- coding: utf-8 -*-
+# =========================================
+# Aurora A 股交易日历
+# =========================================
+# 修复 P7：A 股交易日历缺失
+# 提供交易日判断/假期/半日市/交易时段等核心功能
+
+from datetime import date, datetime, time, timedelta
+from typing import List, Optional, Tuple, Set
+import json
+import os
+import logging
+
+logger = logging.getLogger("Aurora.TradingCalendar")
+
+
+class TradingCalendar:
+    """
+    A 股交易日历管理器
+
+    功能：
+    - is_trading_day(date)        判断是否为交易日
+    - is_today_trading()          今天是否交易
+    - prev_trading_day(date)      上一个交易日
+    - next_trading_day(date)      下一个交易日
+    - trading_days_between(d1,d2) 区间内交易日列表
+    - get_trading_phase()         当前交易阶段
+    """
+
+    # ──────── 交易时段常量 ────────
+    MORNING_CALL_AUCTION_START = time(9, 15)
+    MORNING_CALL_AUCTION_END = time(9, 25)
+    MORNING_CONTINUOUS_START = time(9, 30)
+    MORNING_CONTINUOUS_END = time(11, 30)
+    AFTERNOON_CONTINUOUS_START = time(13, 0)
+    AFTERNOON_CONTINUOUS_END = time(15, 0)
+    SHANGHAI_CLOSING_AUCTION_START = time(15, 0)
+    SHANGHAI_CLOSING_AUCTION_END = time(15, 30)
+
+    # ──────── 交易阶段枚举 ────────
+    PHASE_CALL_AUCTION = "call_auction"      # 集合竞价
+    PHASE_CONTINUOUS = "continuous"          # 连续竞价
+    PHASE_LUNCH_BREAK = "lunch_break"        # 午休
+    PHASE_CLOSED = "closed"                  # 休市
+
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, holidays_file: Optional[str] = None):
+        if self._initialized:
+            return
+        self._initialized = True
+
+        # 静态 A 股假期集合 (2025-2026)
+        self._holidays: Set[date] = self._load_holidays(holidays_file)
+        self._workdays: Set[date] = self._load_workdays(holidays_file)
+        logger.info(f"交易日历初始化完成，已加载 {len(self._holidays)} 个假期")
+
+    # ──────── 核心 API ────────
+
+    def is_trading_day(self, dt: Optional[date] = None) -> bool:
+        """判断指定日期是否为交易日"""
+        if dt is None:
+            dt = date.today()
+
+        # 1. 周末不交易
+        if dt.weekday() >= 5:  # 5=周六, 6=周日
+            return False
+
+        # 2. 节假日不交易
+        if dt in self._holidays:
+            return False
+
+        # 3. 调班工作日（如国庆节前的补班周六）
+        if dt in self._workdays:
+            return True
+
+        return True
+
+    def is_today_trading(self) -> bool:
+        """今天是否交易日"""
+        return self.is_trading_day(date.today())
+
+    def prev_trading_day(self, dt: Optional[date] = None) -> date:
+        """获取上一个交易日"""
+        if dt is None:
+            dt = date.today()
+        cursor = dt - timedelta(days=1)
+        max_lookback = 30
+        while max_lookback > 0:
+            if self.is_trading_day(cursor):
+                return cursor
+            cursor -= timedelta(days=1)
+            max_lookback -= 1
+        return dt  # fallback
+
+    def next_trading_day(self, dt: Optional[date] = None) -> date:
+        """获取下一个交易日"""
+        if dt is None:
+            dt = date.today()
+        cursor = dt + timedelta(days=1)
+        max_lookahead = 30
+        while max_lookahead > 0:
+            if self.is_trading_day(cursor):
+                return cursor
+            cursor += timedelta(days=1)
+            max_lookahead -= 1
+        return dt  # fallback
+
+    def trading_days_between(self, start: date, end: date) -> List[date]:
+        """返回区间内所有交易日"""
+        result = []
+        cursor = start
+        while cursor <= end:
+            if self.is_trading_day(cursor):
+                result.append(cursor)
+            cursor += timedelta(days=1)
+        return result
+
+    def trading_days_latest(self, count: int, end_date: Optional[date] = None) -> List[date]:
+        """获取最近 N 个交易日"""
+        if end_date is None:
+            end_date = date.today()
+        result = []
+        cursor = end_date
+        max_lookback = 365
+        while len(result) < count and max_lookback > 0:
+            if self.is_trading_day(cursor):
+                result.append(cursor)
+            cursor -= timedelta(days=1)
+            max_lookback -= 1
+        return list(reversed(result))
+
+    def trading_days_next(self, count: int, start_date: Optional[date] = None) -> List[date]:
+        """获取未来 N 个交易日"""
+        if start_date is None:
+            start_date = date.today()
+        result = []
+        cursor = start_date
+        max_lookahead = 60
+        while len(result) < count and max_lookahead > 0:
+            if self.is_trading_day(cursor):
+                result.append(cursor)
+            cursor += timedelta(days=1)
+            max_lookahead -= 1
+        return result
+
+    @classmethod
+    def get_trading_phase(cls, dt: Optional[datetime] = None) -> str:
+        """
+        返回当前交易阶段：
+          'call_auction'  集合竞价 (9:15-9:25)
+          'continuous'    连续竞价 (9:30-11:30 / 13:00-15:00)
+          'lunch_break'   午休 (11:30-13:00)
+          'closed'        休市
+        """
+        if dt is None:
+            dt = datetime.now()
+        t = dt.time()
+
+        if cls.MORNING_CALL_AUCTION_START <= t <= cls.MORNING_CALL_AUCTION_END:
+            return cls.PHASE_CALL_AUCTION
+        if (cls.MORNING_CONTINUOUS_START <= t <= cls.MORNING_CONTINUOUS_END) or \
+           (cls.AFTERNOON_CONTINUOUS_START <= t <= cls.AFTERNOON_CONTINUOUS_END):
+            return cls.PHASE_CONTINUOUS
+        if cls.MORNING_CONTINUOUS_END < t < cls.AFTERNOON_CONTINUOUS_START:
+            return cls.PHASE_LUNCH_BREAK
+        return cls.PHASE_CLOSED
+
+    @classmethod
+    def is_continuous_auction(cls) -> bool:
+        """当前是否在连续竞价时段"""
+        return cls.get_trading_phase() == cls.PHASE_CONTINUOUS
+
+    @classmethod
+    def can_place_order(cls) -> bool:
+        """当前是否可以下单（连续竞价时段）"""
+        return cls.is_continuous_auction()
+
+    def days_since_last_trading(self) -> int:
+        """距离上一个交易日多少天"""
+        today = date.today()
+        if self.is_trading_day(today):
+            return 0
+        prev = self.prev_trading_day(today)
+        return (today - prev).days
+
+    # ──────── 节假日数据 ────────
+
+    @staticmethod
+    def _load_holidays(filepath: Optional[str] = None) -> Set[date]:
+        """加载节假日数据（内嵌 + 可选文件）"""
+        holidays = set()
+
+        # ── 内嵌 2025 年 A 股假期 ──
+        _2025_HOLIDAYS = [
+            # 元旦
+            date(2025, 1, 1),
+            # 春节
+            date(2025, 1, 28), date(2025, 1, 29), date(2025, 1, 30), date(2025, 1, 31),
+            date(2025, 2, 1), date(2025, 2, 2), date(2025, 2, 3), date(2025, 2, 4),
+            # 清明节
+            date(2025, 4, 4), date(2025, 4, 5), date(2025, 4, 6),
+            # 劳动节
+            date(2025, 5, 1), date(2025, 5, 2), date(2025, 5, 3), date(2025, 5, 4), date(2025, 5, 5),
+            # 端午节
+            date(2025, 5, 31), date(2025, 6, 1), date(2025, 6, 2),
+            # 中秋节
+            date(2025, 10, 6),
+            # 国庆节
+            date(2025, 10, 1), date(2025, 10, 2), date(2025, 10, 3), date(2025, 10, 4),
+            date(2025, 10, 5), date(2025, 10, 6), date(2025, 10, 7), date(2025, 10, 8),
+        ]
+        holidays.update(_2025_HOLIDAYS)
+
+        # ── 内嵌 2026 年 A 股假期（预估）──
+        _2026_HOLIDAYS = [
+            # 元旦
+            date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3),
+            # 春节 (2026-02-17 除夕)
+            date(2026, 2, 17), date(2026, 2, 18), date(2026, 2, 19), date(2026, 2, 20),
+            date(2026, 2, 21), date(2026, 2, 22), date(2026, 2, 23),
+            # 清明节
+            date(2026, 4, 5), date(2026, 4, 6), date(2026, 4, 7),
+            # 劳动节
+            date(2026, 5, 1), date(2026, 5, 2), date(2026, 5, 3), date(2026, 5, 4), date(2026, 5, 5),
+            # 端午节
+            date(2026, 5, 31), date(2026, 6, 1), date(2026, 6, 2),
+            # 国庆节
+            date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3), date(2026, 10, 4),
+            date(2026, 10, 5), date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 8),
+        ]
+        holidays.update(_2026_HOLIDAYS)
+
+        # ── 外部文件加载（可选）──
+        if filepath and os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    extra = json.load(f)
+                    for d in extra.get("holidays", []):
+                        holidays.add(date.fromisoformat(d))
+            except Exception as e:
+                logger.warning(f"加载假期文件失败: {e}")
+
+        return holidays
+
+    @staticmethod
+    def _load_workdays(filepath: Optional[str] = None) -> Set[date]:
+        """加载调班工作日"""
+        workdays = set()
+        # 2025 年调班工作日
+        _2025_WORKDAYS = [
+            date(2025, 1, 26),  # 春节前补班 (周日)
+            date(2025, 2, 8),   # 春节后补班 (周六)
+            date(2025, 4, 27),  # 劳动节补班 (周日)
+            date(2025, 9, 28),  # 国庆节补班 (周日)
+            date(2025, 10, 11), # 国庆节补班 (周六)
+        ]
+        workdays.update(_2025_WORKDAYS)
+
+        if filepath and os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    extra = json.load(f)
+                    for d in extra.get("workdays", []):
+                        workdays.add(date.fromisoformat(d))
+            except Exception as e:
+                logger.warning(f"加载补班数据失败: {e}")
+
+        return workdays
+
+
+# ──────── 便捷单例 ────────
+_calendar_instance: Optional[TradingCalendar] = None
+
+
+def get_calendar() -> TradingCalendar:
+    """获取交易日历单例"""
+    global _calendar_instance
+    if _calendar_instance is None:
+        _calendar_instance = TradingCalendar()
+    return _calendar_instance

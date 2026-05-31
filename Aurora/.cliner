@@ -1,0 +1,101 @@
+# Aurora 系统性能优化工作流
+
+## 触发条件
+当用户提到以下关键词时自动应用本工作流：
+- 性能优化、系统优化、performance optimization、加速
+- 数据库优化、查询优化、索引优化
+- 内存优化、CPU优化、资源监控
+- 并发优化、连接池、批量处理
+- 延迟优化、吞吐量、响应时间
+
+## 核心能力
+此Skill使Cline能识别系统性能瓶颈并实施优化，提升Aurora系统吞吐量和响应速度。
+
+## 工作流程
+
+### 第一步：性能基线评估
+1. **系统资源监控**: `monitor/` 目录性能数据
+   - CPU使用率: `Prometheus: rate(process_cpu_seconds_total[5m])`
+   - 内存使用: `Prometheus: process_resident_memory_bytes`
+   - 磁盘IO: 读写延迟和吞吐
+   - 网络IO: `https_monitor.py` 网络指标
+2. **API响应时间**: `Prometheus: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))`
+3. **数据库性能**: SQLite查询耗时统计
+
+### 第二步：瓶颈定位
+
+| 瓶颈类型 | 症状 | 诊断工具 |
+|---------|------|---------|
+| CPU瓶颈 | API响应慢、排队请求多 | `monitor/` CPU图表 |
+| 内存瓶颈 | OOM、频繁GC | `monitor/` 内存图表 |
+| 数据库瓶颈 | 慢查询、锁等待 | SQLite EXPLAIN QUERY PLAN |
+| 网络瓶颈 | 数据源延迟高、超时 | `https_monitor.py` |
+| API瓶颈 | DeepSeek调用排队 | `deepseek_client.py` 日志 |
+
+### 第三步：数据库性能优化
+- **索引优化**: 
+  ```sql
+  -- 查看慢查询
+  EXPLAIN QUERY PLAN SELECT ...;
+  
+  -- 创建索引加速回测查询
+  CREATE INDEX IF NOT EXISTS idx_backtest_strategy 
+  ON backtest_results(strategy_name, backtest_date);
+  
+  CREATE INDEX IF NOT EXISTS idx_trade_time 
+  ON trade_records(trade_time);
+  ```
+- **连接池**: WAL模式 + ConnectionPool 5连接
+- **定期维护**: VACUUM + ANALYZE（参考 `database-maintenance.md`）
+- **查询优化**: 避免N+1查询，使用批量操作
+
+### 第四步：应用层优化
+- **异步处理**: 使用 `celery_app.py` 将耗时任务异步化
+- **缓存策略**: 
+  - 行情数据缓存: `data_cache/` 目录
+  - API响应缓存: 减少重复计算
+  - 回测结果缓存: 避免重复回测
+- **Gunicorn配置**: `gunicorn.conf.py`
+  - workers数量: `CPU核心数 * 2 + 1`
+  - worker_class: `gevent` / `uvicorn.workers.UvicornWorker`
+- **批量操作**: 聚合API请求减少往返
+
+### 第五步：Python代码优化
+- **使用 `_analyze_git.py` 分析代码性能**
+- **热点函数优化**: 使用cProfile定位慢函数
+- **向量化计算**: NumPy替代Python循环
+- **内存管理**: 及时释放大型数据结构
+- **延迟加载**: 按需导入模块
+
+### 第六步：部署优化
+- **Docker资源限制**: `docker-compose.yml` 内存/CPU限制
+- **Gunicorn调优**: 
+  ```python
+  # gunicorn.conf.py 优化配置
+  workers = 4
+  threads = 2
+  worker_connections = 1000
+  max_requests = 10000
+  max_requests_jitter = 1000
+  ```
+- **Nginx/反向代理**: 静态资源缓存、压缩
+
+### 性能基准目标
+
+| 指标 | 目标值 | 告警阈值 |
+|------|-------|---------|
+| API P95延迟 | < 500ms | > 2000ms |
+| 数据库查询 | < 50ms | > 500ms |
+| DeepSeek推理 | < 3000ms | > 10000ms |
+| 数据源更新 | < 2s | > 10s |
+| 回测执行 | < 30s | > 120s |
+
+### 相关文件清单
+- `monitor/` — 系统性能监控
+- `https_monitor.py` — 网络性能监控
+- `celery_app.py` — 异步任务队列
+- `gunicorn.conf.py` — WSGI服务器配置
+- `docker-compose.yml` — 容器资源限制
+- `deepseek_client.py` — API性能配置
+- `resilience.py` — 重试与超时配置
+- `data_cache/` — 数据缓存目录

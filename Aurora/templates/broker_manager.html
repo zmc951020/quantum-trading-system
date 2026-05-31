@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>券商管理系统 - Aurora量化交易平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: #0a0e27; color: #e0e6ff; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; padding: 30px 0; border-bottom: 1px solid #1e2d5a; margin-bottom: 30px; }
+        header h1 { font-size: 2em; color: #4fc3f7; }
+        header p { color: #8890b5; margin-top: 8px; }
+        .card { background: linear-gradient(135deg, #121a3a, #1a2545); border: 1px solid #2a3a6a; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+        .card h2 { color: #4fc3f7; margin-bottom: 16px; font-size: 1.3em; }
+        .broker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+        .broker-card { background: #0d1530; border: 2px solid #1e2d5a; border-radius: 10px; padding: 20px; transition: all 0.3s; cursor: pointer; position: relative; }
+        .broker-card.active { border-color: #4fc3f7; box-shadow: 0 0 20px rgba(79,195,247,0.2); }
+        .broker-card:hover { border-color: #3a5a9a; transform: translateY(-2px); }
+        .broker-card .name { font-size: 1.2em; font-weight: bold; color: #e0e6ff; }
+        .broker-card .type { color: #7b8ab8; font-size: 0.85em; margin-top: 4px; }
+        .broker-card .status-badge { position: absolute; top: 12px; right: 12px; padding: 4px 12px; border-radius: 20px; font-size: 0.8em; }
+        .status-badge.connected { background: #1b5e20; color: #4caf50; }
+        .status-badge.disconnected { background: #5e1b1b; color: #ef5350; }
+        .status-badge.active-badge { background: #0d47a1; color: #4fc3f7; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #1e2d5a; }
+        th { color: #8890b5; font-weight: normal; font-size: 0.85em; }
+        td { color: #e0e6ff; }
+        .btn { padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: all 0.2s; }
+        .btn-primary { background: #1565c0; color: white; }
+        .btn-primary:hover { background: #1976d2; }
+        .btn-danger { background: #c62828; color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn-switch { background: #2e7d32; color: white; }
+        .btn-switch:hover { background: #388e3c; }
+        .btn-refresh { background: #555; color: white; }
+        .btn-refresh:hover { background: #777; }
+        .flex-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .input { padding: 8px 12px; border: 1px solid #2a3a6a; border-radius: 6px; background: #0d1530; color: #e0e6ff; font-size: 0.9em; }
+        .input:focus { outline: none; border-color: #4fc3f7; }
+        .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; }
+        .alert-info { background: #0d47a1; color: #bbdefb; }
+        .alert-success { background: #1b5e20; color: #c8e6c9; }
+        .alert-error { background: #5e1b1b; color: #ffcdd2; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+        .tab { padding: 10px 24px; background: #0d1530; border: 1px solid #2a3a6a; border-radius: 8px 8px 0 0; cursor: pointer; color: #8890b5; }
+        .tab.active { background: #1a2545; color: #4fc3f7; border-bottom: 2px solid #4fc3f7; }
+        .hidden { display: none; }
+        .score-good { color: #4caf50; }
+        .score-warn { color: #ff9800; }
+        .score-bad { color: #ef5350; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏦 券商管理系统</h1>
+            <p>Aurora 量化交易平台 · 券商接口抽象层 · 多券商无缝切换</p>
+        </header>
+
+        <div id="alert-area"></div>
+
+        <!-- 券商列表 -->
+        <div class="card">
+            <h2>📋 已注册券商</h2>
+            <div id="broker-info" style="margin-bottom: 12px; color: #8890b5;">活跃券商: <strong id="active-broker-name" style="color:#4fc3f7;">--</strong></div>
+            <div class="broker-grid" id="broker-grid"></div>
+        </div>
+
+        <!-- 系统状态 -->
+        <div class="card">
+            <h2>📊 系统状态</h2>
+            <div class="flex-row">
+                <button class="btn btn-refresh" onclick="refreshStatus()">🔄 刷新</button>
+            </div>
+            <div id="system-status-content" style="margin-top: 12px;">
+                <p style="color:#8890b5;">加载中...</p>
+            </div>
+        </div>
+
+        <!-- 选项卡 -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('pool')">📦 股票池</div>
+            <div class="tab" onclick="switchTab('technical')">📈 技术分析</div>
+            <div class="tab" onclick="switchTab('history')">📜 切换历史</div>
+        </div>
+
+        <!-- 股票池面板 -->
+        <div class="card" id="tab-pool">
+            <h2>📦 统一股票池</h2>
+            <div class="flex-row" style="margin-bottom: 16px;">
+                <input id="stock-input" class="input" placeholder="输入股票代码 (如 600000.SH)" style="width: 220px;">
+                <button class="btn btn-primary" onclick="addToPool()">➕ 添加到股票池</button>
+                <button class="btn btn-danger" onclick="removeFromPool()">➖ 从股票池移除</button>
+                <button class="btn btn-refresh" onclick="loadPool()">🔄 刷新</button>
+                <button class="btn btn-primary" onclick="syncPool()">🔗 跨券商同步</button>
+            </div>
+            <div class="table-wrap">
+                <table id="pool-table">
+                    <thead><tr><th>代码</th><th>名称</th><th>当前价</th><th>所属券商</th><th>操作</th></tr></thead>
+                    <tbody id="pool-tbody"><tr><td colspan="5" style="color:#8890b5;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 技术分析面板 -->
+        <div class="card hidden" id="tab-technical">
+            <h2>📈 技术分析桥接</h2>
+            <div class="flex-row" style="margin-bottom: 16px;">
+                <input id="ta-symbol-input" class="input" placeholder="单个股票代码" style="width: 180px;">
+                <button class="btn btn-primary" onclick="analyzeSingle()">🔍 分析</button>
+                <button class="btn btn-primary" onclick="analyzeBatch()">📊 批量分析（全池）</button>
+            </div>
+            <div id="ta-result" style="margin-top: 12px;">
+                <p style="color:#8890b5;">选择股票并点击分析...</p>
+            </div>
+        </div>
+
+        <!-- 切换历史面板 -->
+        <div class="card hidden" id="tab-history">
+            <h2>📜 券商切换历史</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>时间</th><th>从</th><th>到</th><th>状态</th><th>耗时</th></tr></thead>
+                    <tbody id="history-tbody"><tr><td colspan="5" style="color:#8890b5;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api/broker';
+
+        function showAlert(msg, type = 'info') {
+            const area = document.getElementById('alert-area');
+            area.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+            setTimeout(() => { area.innerHTML = ''; }, 5000);
+        }
+
+        function switchTab(tab) {
+            ['pool', 'technical', 'history'].forEach(t => {
+                document.getElementById('tab-' + t).classList.add('hidden');
+            });
+            document.getElementById('tab-' + tab).classList.remove('hidden');
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'pool') loadPool();
+            if (tab === 'history') loadHistory();
+        }
+
+        async function loadBrokers() {
+            try {
+                const resp = await fetch(`${API}/list`);
+                const json = await resp.json();
+                document.getElementById('active-broker-name').textContent = json.active;
+                const grid = document.getElementById('broker-grid');
+                grid.innerHTML = json.data.map(b => {
+                    const isActive = b.name === json.active;
+                    const cls = `broker-card${isActive ? ' active' : ''}`;
+                    const badgeCls = isActive ? 'active-badge' : (b.status === 'connected' ? 'connected' : 'disconnected');
+                    const badgeText = isActive ? '当前' : (b.status === 'connected' ? '已连接' : '未连接');
+                    return `
+                        <div class="${cls}" onclick="switchBroker('${b.broker_type}')">
+                            <span class="status-badge ${badgeCls}">${badgeText}</span>
+                            <div class="name">${b.icon || '🏢'} ${b.name}</div>
+                            <div class="type">${b.broker_type} · ${b.category}</div>
+                            <div style="margin-top: 8px; font-size: 0.85em; color: #8890b5;">${b.description || ''}</div>
+                            <div style="margin-top: 4px; color: #8890b5;">延迟: ${b.latency_ms || '--'}ms | 股票池: ${b.stock_pool_count || 0}只</div>
+                        </div>`;
+                }).join('');
+            } catch(e) {
+                showAlert('加载券商列表失败: ' + e.message, 'error');
+            }
+        }
+
+        async function switchBroker(brokerType) {
+            try {
+                const resp = await fetch(`${API}/switch`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({broker_type: brokerType})
+                });
+                const json = await resp.json();
+                if (json.status === 'success') {
+                    showAlert(`✅ 已切换到 ${brokerType}`, 'success');
+                    loadBrokers();
+                    refreshStatus();
+                } else {
+                    showAlert(`❌ 切换失败: ${json.data?.message || '未知错误'}`, 'error');
+                }
+            } catch(e) {
+                showAlert('切换券商失败: ' + e.message, 'error');
+            }
+        }
+
+        async function refreshStatus() {
+            try {
+                const resp = await fetch(`${API}/status`);
+                const json = await resp.json();
+                const d = json.data;
+                document.getElementById('system-status-content').innerHTML = `
+                    <div class="flex-row">
+                        <div style="flex:1;">
+                            <strong>活跃券商:</strong> ${d.active_broker}<br>
+                            <strong>注册券商数:</strong> ${d.total_brokers}<br>
+                            <strong>连接中:</strong> ${d.connected_count} | <strong>已断开:</strong> ${d.disconnected_count}
+                        </div>
+                        <div style="flex:1;">
+                            <strong>股票池总数:</strong> ${d.total_stocks_in_pool}<br>
+                            <strong>上次切换:</strong> ${d.last_switch_time || '从未'}<br>
+                            <strong>切换次数:</strong> ${d.switch_count || 0}
+                        </div>
+                    </div>`;
+            } catch(e) {
+                showAlert('刷新状态失败: ' + e.message, 'error');
+            }
+        }
+
+        async function loadPool() {
+            try {
+                const resp = await fetch(`${API}/pool`);
+                const json = await resp.json();
+                const detail = json.data?.detail || [];
+                const tbody = document.getElementById('pool-tbody');
+                if (detail.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="color:#8890b5;">股票池为空，请添加股票</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = detail.map(s => `
+                    <tr>
+                        <td><strong>${s.symbol}</strong></td>
+                        <td>${s.name || '--'}</td>
+                        <td>${s.current_price ? '¥' + s.current_price.toFixed(2) : '--'}</td>
+                        <td>${s.broker}</td>
+                        <td>
+                            <button class="btn btn-danger" style="padding:4px 12px;font-size:0.8em;" onclick="removeStock('${s.symbol}')">移除</button>
+                        </td>
+                    </tr>`).join('');
+            } catch(e) {
+                showAlert('加载股票池失败: ' + e.message, 'error');
+            }
+        }
+
+        async function addToPool() {
+            const symbol = document.getElementById('stock-input').value.trim();
+            if (!symbol) return showAlert('请输入股票代码', 'error');
+            try {
+                const resp = await fetch(`${API}/pool/add`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol, meta: {name: symbol}})
+                });
+                const json = await resp.json();
+                if (json.status === 'success') {
+                    showAlert(json.message, 'success');
+                    loadPool();
+                    document.getElementById('stock-input').value = '';
+                } else {
+                    showAlert(json.message, 'error');
+                }
+            } catch(e) {
+                showAlert('添加失败: ' + e.message, 'error');
+            }
+        }
+
+        async function removeFromPool() {
+            const symbol = document.getElementById('stock-input').value.trim();
+            if (!symbol) return showAlert('请输入要移除的股票代码', 'error');
+            removeStock(symbol);
+        }
+
+        async function removeStock(symbol) {
+            try {
+                const resp = await fetch(`${API}/pool/remove`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol})
+                });
+                const json = await resp.json();
+                showAlert(json.message, json.status === 'success' ? 'success' : 'error');
+                if (json.status === 'success') loadPool();
+            } catch(e) {
+                showAlert('移除失败: ' + e.message, 'error');
+            }
+        }
+
+        async function syncPool() {
+            try {
+                const resp = await fetch(`${API}/pool/sync`);
+                const json = await resp.json();
+                showAlert('✅ 跨券商同步完成', 'success');
+                loadPool();
+            } catch(e) {
+                showAlert('同步失败: ' + e.message, 'error');
+            }
+        }
+
+        async function analyzeSingle() {
+            const symbol = document.getElementById('ta-symbol-input').value.trim();
+            if (!symbol) return showAlert('请输入股票代码', 'error');
+            try {
+                const resp = await fetch('/api/technical/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol})
+                });
+                const json = await resp.json();
+                const d = json.data;
+                document.getElementById('ta-result').innerHTML = `
+                    <div class="card">
+                        <strong>${d.symbol}</strong> | 当前价: ¥${d.current_price?.toFixed(2) || '--'} | 券商: ${d.broker || '--'}
+                    </div>
+                    <pre style="background:#0d1530; padding:12px; border-radius:8px; overflow-x:auto; max-height:400px;">${JSON.stringify(d.indicators || d, null, 2)}</pre>`;
+            } catch(e) {
+                showAlert('分析失败: ' + e.message, 'error');
+            }
+        }
+
+        async function analyzeBatch() {
+            try {
+                const resp = await fetch(`${API}/pool`);
+                const json = await resp.json();
+                const symbols = (json.data?.stocks || []).map(s => s.symbol || s);
+                if (symbols.length === 0) return showAlert('股票池为空', 'error');
+                document.getElementById('ta-result').innerHTML = '<p style="color:#8890b5;">正在批量分析 ' + symbols.length + ' 只股票...</p>';
+                const resp2 = await fetch('/api/technical/batch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbols})
+                });
+                const json2 = await resp2.json();
+                const results = json2.data?.results || [];
+                document.getElementById('ta-result').innerHTML = results.map(r => `
+                    <div class="card">
+                        <strong>${r.symbol}</strong> | 
+                        评分: <span class="${r.overall_score > 70 ? 'score-good' : (r.overall_score > 40 ? 'score-warn' : 'score-bad')}">${r.overall_score}</span> | 
+                        信号: ${r.signal || '--'}
+                    </div>`).join('') || '<p style="color:#8890b5;">无结果</p>';
+            } catch(e) {
+                showAlert('批量分析失败: ' + e.message, 'error');
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const resp = await fetch(`${API}/switch-history`);
+                const json = await resp.json();
+                const data = json.data || [];
+                const tbody = document.getElementById('history-tbody');
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="color:#8890b5;">暂无切换记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.map(h => `
+                    <tr>
+                        <td>${h.timestamp}</td>
+                        <td>${h.from_broker}</td>
+                        <td>${h.to_broker}</td>
+                        <td style="color:${h.success ? '#4caf50' : '#ef5350'}">${h.success ? '✅ 成功' : '❌ 失败'}</td>
+                        <td>${h.duration_ms}ms</td>
+                    </tr>`).join('');
+            } catch(e) {
+                showAlert('加载历史失败: ' + e.message, 'error');
+            }
+        }
+
+        // 初始加载
+        loadBrokers();
+        refreshStatus();
+        loadPool();
+    </script>
+</body>
+</html>

@@ -906,18 +906,53 @@ class UserManager:
 
     def create_admin(self):
         """
-        创建管理员用户（如果不存在）
+        创建管理员用户
+        安全策略：必须通过 ADMIN_INITIAL_PASSWORD 环境变量提供初始密码
+        禁止自动生成、禁止打印密码到控制台/日志（金融级安全标准）
         """
         if 'admin' not in self.users:
-            self.register('admin', 'admin123', 'admin@aurora.com', 'admin')
-            print("管理员用户已创建: admin / admin123")
+            admin_password = os.environ.get('ADMIN_INITIAL_PASSWORD')
+            if not admin_password:
+                raise RuntimeError(
+                    "安全错误：管理员初始密码未设置。\n"
+                    "请设置环境变量 ADMIN_INITIAL_PASSWORD，\n"
+                    "长度至少12位，包含大小写字母、数字和特殊字符。\n"
+                    "示例：export ADMIN_INITIAL_PASSWORD=Your_Secure_P@ssw0rd"
+                )
+            # 密码强度校验（金融级标准）
+            if len(admin_password) < 12:
+                raise ValueError("安全错误：ADMIN_INITIAL_PASSWORD 长度必须至少12位")
+            has_upper = any(c.isupper() for c in admin_password)
+            has_lower = any(c.islower() for c in admin_password)
+            has_digit = any(c.isdigit() for c in admin_password)
+            has_special = any(not c.isalnum() for c in admin_password)
+            if not (has_upper and has_lower and has_digit and has_special):
+                raise ValueError(
+                    "安全错误：ADMIN_INITIAL_PASSWORD 必须包含"
+                    "大写字母、小写字母、数字和特殊字符"
+                )
+
+            self.register('admin', admin_password, 'admin@aurora.com', 'admin')
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("管理员用户已创建（密码已通过环境变量安全注入，未记录明文）")
+            return True
+        return False
 
 
 # 全局用户管理器实例
 user_manager = UserManager()
 
-# 确保有管理员用户
-user_manager.create_admin()
+# 确保有管理员用户（安全启动：环境变量未设置时将报错，防止无密码运行）
+try:
+    user_manager.create_admin()
+except (RuntimeError, ValueError) as e:
+    import logging
+    logging.getLogger(__name__).critical(f"管理员创建失败: {e}")
+    print(f"[严重安全错误] {e}")
+    print("系统无法在无管理员密码的情况下启动，请设置 ADMIN_INITIAL_PASSWORD 环境变量后重试。")
+    import sys
+    sys.exit(1)
 
 if __name__ == '__main__':
     # 测试用户管理功能

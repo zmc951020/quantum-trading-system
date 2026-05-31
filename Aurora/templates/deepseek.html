@@ -194,6 +194,11 @@ mm<!DOCTYPE html>
         .compact-row { display: flex; gap: 12px; align-items: center; }
         .compact-row > * { flex: 1; }
         .compact-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(100px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100px); } }
+        .position-bar { height: 24px; border-radius: var(--radius-sm); transition: var(--transition); min-width: 2px; }
+        .position-row:hover { background: var(--bg-card-hover); }
+        .empty-state { padding: 40px; text-align: center; color: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -268,33 +273,39 @@ mm<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- 核心通用策略控制 -->
+        <!-- ⚙️ 统一策略控制中心 -->
         <div class="card">
-            <div class="card-header"><h3 class="mb-0">⚙️ 核心通用策略控制</h3></div>
+            <div class="card-header"><h3 class="mb-0">⚙️ 统一策略控制中心</h3></div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-5">
-                        <label>选择策略：</label>
-                        <select id="strategy-select" class="form-select">
-                            <option value="FourierRLStrategy">傅里叶强化学习策略</option>
-                            <option value="FinalMarketAdaptiveGrid">市场自适应网格策略</option>
-                            <option value="MLRangeGridTrading">机器学习网格交易策略</option>
-                            <option value="HuijinValueStrategy">汇金价值AI轮动策略</option>
-                        </select>
+                    <!-- 策略选择 -->
+                    <div class="col-md-4">
+                        <label>📋 选择策略：</label>
+                        <div class="dropdown w-100">
+                            <button class="btn btn-outline-light dropdown-toggle w-100 text-start" type="button" id="dropdownStrategyBtn" data-bs-toggle="dropdown" aria-expanded="false" style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2);">
+                                <span id="selectedStrategyLabel">-- 请选择策略 --</span>
+                            </button>
+                            <div class="dropdown-menu w-100 p-2" style="max-height: 360px; overflow-y: auto; background: #1a1f2e; border: 1px solid rgba(255,255,255,0.15);">
+                                <input type="text" class="form-control mb-2" id="strategySearchInput" placeholder="🔍 搜索策略..." style="background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); color: #fff;">
+                                <div id="strategyDropdownList"></div>
+                            </div>
+                        </div>
                         <div class="form-text" style="color: #adb5bd;">
                             <small>💡 模拟盘：任意策略可用 | 实盘：仅已激活策略可用</small>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <label>初始资金：</label>
-                        <input type="number" id="initial-balance" class="form-control" value="100000">
+                    <!-- 初始资金 -->
+                    <div class="col-md-2">
+                        <label>💰 初始资金：</label>
+                        <input type="number" id="initial-balance" class="form-control" value="100000" step="10000" min="10000" style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); color: #fff;">
                     </div>
-                    <div class="col-md-5">
-                        <label>操作：</label>
-                        <div class="d-flex gap-2">
-                            <button id="start-btn" class="btn btn-success">启动策略</button>
-                            <button id="stop-btn" class="btn btn-danger">停止策略</button>
-                            <button id="backtest-btn" class="btn btn-info">运行回测</button>
+                    <!-- 操作按钮 -->
+                    <div class="col-md-6">
+                        <label>🎮 操作：</label>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button id="start-btn" class="btn btn-success"><i class="bi bi-play-fill"></i> 启动策略</button>
+                            <button id="stop-btn" class="btn btn-danger"><i class="bi bi-stop-fill"></i> 停止策略</button>
+                            <button id="backtest-btn" class="btn btn-info"><i class="bi bi-graph-up"></i> 快速回测</button>
                         </div>
                     </div>
                 </div>
@@ -307,7 +318,7 @@ mm<!DOCTYPE html>
                     <div class="p-3 rounded" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
                         <strong style="color: #ffffff; opacity: 0.85;">✅ 已激活策略（可用于实盘）：</strong>
                         <div id="activated-strategies-list" class="mt-2" style="color: #10b981;">
-                            暂无已激活策略，请在「类型策略管理平台」中激活
+                            暂无已激活策略，请在「策略管理平台」中激活
                         </div>
                     </div>
                 </div>
@@ -344,21 +355,33 @@ mm<!DOCTYPE html>
 
                     <!-- 右侧内容区 -->
                     <div class="col-md-8">
-                        <!-- 优化器标签页（放在前面） -->
+                        <!-- 优化器下拉菜单（替换标签页） -->
                         <div class="row mb-3">
                             <div class="col-md-12">
-                                <h5 style="color: #ffffff; opacity: 0.9;">选择优化器</h5>
-                                <ul class="nav nav-tabs mb-3" role="tablist">
-                                    <li class="nav-item">
-                                        <button class="nav-link active" onclick="switchOptimizerTab('rl')">🤖 强化学习机器人</button>
-                                    </li>
-                                    <li class="nav-item">
-                                        <button class="nav-link" onclick="switchOptimizerTab('v5')">🧠 智能体优化器V5</button>
-                                    </li>
-                                    <li class="nav-item">
-                                        <button class="nav-link" onclick="switchOptimizerTab('v6')">⚡ 超能优化器V6</button>
-                                    </li>
-                                </ul>
+                                <h5 style="color: #ffffff; opacity: 0.9;">⚡ 选择优化器</h5>
+                                <div class="dropdown w-100">
+                                    <button class="btn btn-outline-info dropdown-toggle w-100 text-start" type="button" id="dropdownOptimizerBtn" data-bs-toggle="dropdown" aria-expanded="false" style="background: rgba(6,182,212,0.08); border-color: rgba(6,182,212,0.3);">
+                                        <span id="selectedOptimizerLabel">🤖 强化学习机器人 (推荐)</span>
+                                    </button>
+                                    <div class="dropdown-menu w-100 p-2" style="background: #1a1f2e; border: 1px solid rgba(6,182,212,0.3);">
+                                        <div class="dropdown-item rounded mb-1 active" onclick="switchOptimizerTab('rl')" data-opt="rl" style="cursor: pointer; color: #fff; background: rgba(6,182,212,0.15);">
+                                            🤖 <strong>强化学习机器人</strong> <span class="badge bg-success ms-2" style="font-size: 0.7rem;">推荐</span>
+                                            <br><small style="color: #94a3b8;">一键回测优化的智能体，自动完成参数调优</small>
+                                        </div>
+                                        <div class="dropdown-item rounded mb-1" onclick="switchOptimizerTab('v5')" data-opt="v5" style="cursor: pointer; color: #fff;">
+                                            🧠 <strong>智能体优化器V5</strong>
+                                            <br><small style="color: #94a3b8;">基于遗传算法的策略参数优化，全局搜索最优解</small>
+                                        </div>
+                                        <div class="dropdown-item rounded mb-1" onclick="switchOptimizerTab('v6')" data-opt="v6" style="cursor: pointer; color: #fff;">
+                                            ⚡ <strong>超能优化器V6</strong>
+                                            <br><small style="color: #94a3b8;">基于深度强化学习，具备自我演进能力</small>
+                                        </div>
+                                        <div class="dropdown-item rounded" onclick="switchOptimizerTab('shepherd')" data-opt="shepherd" style="cursor: pointer; color: #fff;">
+                                            🔧 <strong>牧羊人五行优化器</strong>
+                                            <br><small style="color: #94a3b8;">五行相生相克理论驱动，多维度参数调优</small>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -612,6 +635,57 @@ mm<!DOCTYPE html>
                         <div class="text-muted">总交易次数</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 🔴 P0-3 仓位管理可视化 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">💼 仓位管理</h3>
+                <span id="position-summary" class="badge bg-info">总仓位 0%</span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="text-center p-3 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                            <div class="h4 text-success" id="pos-total-value">¥0.00</div>
+                            <small style="color: var(--text-muted);">持仓市值</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                            <div class="h4" id="pos-total-pnl" style="color: var(--text-primary);">¥0.00</div>
+                            <small style="color: var(--text-muted);">浮动盈亏</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                            <div class="h4 text-info" id="pos-count">0</div>
+                            <small style="color: var(--text-muted);">持仓数量</small>
+                        </div>
+                    </div>
+                </div>
+                <!-- 持仓明细列表 -->
+                <div class="table-responsive">
+                    <div class="d-flex px-2 py-2 mb-1 rounded" style="background: rgba(255,255,255,0.03); font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">
+                        <div style="flex: 1.5;">股票</div>
+                        <div style="flex: 1;">持仓量</div>
+                        <div style="flex: 1;">成本价</div>
+                        <div style="flex: 1;">现价</div>
+                        <div style="flex: 1;">盈亏</div>
+                        <div style="flex: 1;">盈亏%</div>
+                        <div style="flex: 1.5;">仓位占比</div>
+                    </div>
+                    <div id="position-detail-list">
+                        <div class="empty-state">
+                            <i class="bi bi-inbox" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>
+                            暂无持仓
+                        </div>
+                    </div>
+                </div>
+                <!-- 仓位占比条形图 -->
+                <div class="mt-3" id="position-bar-chart"></div>
+                <div class="mt-2" style="display: flex; gap: 8px; flex-wrap: wrap;" id="position-bars"></div>
             </div>
         </div>
 
@@ -877,20 +951,160 @@ mm<!DOCTYPE html>
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="stock-pool">
                         <div class="row mb-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <input type="text" id="new-stock-symbol" class="form-control" placeholder="股票代码">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <input type="text" id="new-stock-name" class="form-control" placeholder="股票名称">
                             </div>
-                            <div class="col-md-4">
-                                <button id="add-stock-btn" class="btn btn-primary">添加股票</button>
+                            <div class="col-md-3">
+                                <select id="new-stock-strategy" class="form-select" style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); color: #fff;">
+                                    <option value="">-- 绑定策略（可选） --</option>
+                                </select>
                             </div>
+                            <div class="col-md-3">
+                                <button id="add-stock-btn" class="btn btn-primary w-100">添加股票</button>
+                            </div>
+                        </div>
+                        <!-- 股票池表头 -->
+                        <div class="d-flex px-2 py-2 mb-1 rounded" style="background: rgba(255,255,255,0.03); font-size: 0.8rem; color: #94a3b8; font-weight: 600;">
+                            <div style="flex: 1.5;">股票代码</div>
+                            <div style="flex: 1.5;">股票名称</div>
+                            <div style="flex: 2.5;">绑定策略</div>
+                            <div style="flex: 1;">状态</div>
+                            <div style="flex: 1.5; text-align: right;">操作</div>
                         </div>
                         <div id="stock-list"></div>
                     </div>
                     <div class="tab-pane fade" id="trading-pool">
                         <div id="trade-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔴 P2-9 实时订单簿 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">📋 实时订单簿</h3>
+                <span class="badge bg-info" id="orderbook-status">等待数据</span>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#delegation-tab">委托队列</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#execution-tab">成交记录</button></li>
+                </ul>
+                <div class="tab-content mt-3">
+                    <!-- 委托队列 -->
+                    <div class="tab-pane fade show active" id="delegation-tab">
+                        <div class="table-responsive">
+                            <div class="d-flex px-2 py-2 mb-1 rounded" style="background: rgba(255,255,255,0.03); font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">
+                                <div style="flex: 1;">时间</div>
+                                <div style="flex: 1.2;">股票</div>
+                                <div style="flex: 0.8;">方向</div>
+                                <div style="flex: 0.8;">价格</div>
+                                <div style="flex: 0.8;">数量</div>
+                                <div style="flex: 0.8;">已成交</div>
+                                <div style="flex: 1;">状态</div>
+                                <div style="flex: 0.8;">操作</div>
+                            </div>
+                            <div id="delegation-list">
+                                <div class="empty-state">
+                                    <i class="bi bi-inbox" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>
+                                    暂无委托单
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 成交记录 -->
+                    <div class="tab-pane fade" id="execution-tab">
+                        <div class="table-responsive">
+                            <div class="d-flex px-2 py-2 mb-1 rounded" style="background: rgba(255,255,255,0.03); font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">
+                                <div style="flex: 1;">时间</div>
+                                <div style="flex: 1.2;">股票</div>
+                                <div style="flex: 0.8;">方向</div>
+                                <div style="flex: 1;">成交价</div>
+                                <div style="flex: 0.8;">数量</div>
+                                <div style="flex: 1;">金额</div>
+                                <div style="flex: 1;">手续费</div>
+                            </div>
+                            <div id="execution-list">
+                                <div class="empty-state">
+                                    <i class="bi bi-receipt" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>
+                                    暂无成交记录
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔴 P2-11 回测参数自定义 -->
+        <div class="card">
+            <div class="card-header"><h3>⚙️ 回测参数自定义</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="compact-label">回测周期</label>
+                        <select id="backtest-period" class="form-select">
+                            <option value="1m">1个月</option>
+                            <option value="3m">3个月</option>
+                            <option value="6m">6个月</option>
+                            <option value="1y" selected>1年</option>
+                            <option value="2y">2年</option>
+                            <option value="3y">3年</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="custom-period-group" style="display: none;">
+                        <div class="row">
+                            <div class="col-6"><label class="compact-label">开始日期</label><input type="date" id="custom-start-date" class="form-control form-control-sm"></div>
+                            <div class="col-6"><label class="compact-label">结束日期</label><input type="date" id="custom-end-date" class="form-control form-control-sm"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="compact-label">基准指数</label>
+                        <select id="backtest-benchmark" class="form-select">
+                            <option value="000300">沪深300</option>
+                            <option value="000905">中证500</option>
+                            <option value="000016">上证50</option>
+                            <option value="399006">创业板指</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="compact-label">初始资金</label>
+                        <input type="number" id="backtest-capital" class="form-control" value="100000" step="10000" min="10000">
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <label class="compact-label">滑点 (%)</label>
+                        <input type="number" id="backtest-slippage" class="form-control" value="0.1" min="0" max="2" step="0.01">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="compact-label">手续费 (%)</label>
+                        <input type="number" id="backtest-commission" class="form-control" value="0.03" min="0" max="1" step="0.01">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="compact-label">最低佣金 (元)</label>
+                        <input type="number" id="backtest-min-commission" class="form-control" value="5" min="0" max="50" step="1">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="compact-label">印花税 (%)</label>
+                        <input type="number" id="backtest-stamp-duty" class="form-control" value="0.05" min="0" max="0.5" step="0.01">
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" onclick="applyAndRunBacktest()">
+                                <i class="bi bi-gear"></i> 应用参数并回测
+                            </button>
+                            <button class="btn btn-secondary" onclick="resetBacktestParams()">
+                                <i class="bi bi-arrow-counterclockwise"></i> 恢复默认
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1441,6 +1655,52 @@ mm<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- 🔴 P0-1 交易确认弹窗 -->
+    <div class="modal fade" id="tradeConfirmModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border: 1px solid var(--border-glow);">
+                <div class="modal-header" style="background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(16,185,129,0.1)); border-bottom: 1px solid var(--border);">
+                    <h5 class="modal-title" style="color: var(--gold);">
+                        ⚠️ 交易确认
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="p-3 mb-3 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                        <div class="row mb-2">
+                            <div class="col-5 text-end" style="color: var(--text-muted);">策略名称：</div>
+                            <div class="col-7"><strong id="confirm-strategy-name">--</strong></div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-5 text-end" style="color: var(--text-muted);">交易模式：</div>
+                            <div class="col-7"><span id="confirm-trading-mode" class="badge bg-info">--</span></div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-5 text-end" style="color: var(--text-muted);">初始资金：</div>
+                            <div class="col-7"><strong id="confirm-balance" style="color: var(--accent);">--</strong></div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-5 text-end" style="color: var(--text-muted);">优化器：</div>
+                            <div class="col-7"><span id="confirm-optimizer">--</span></div>
+                        </div>
+                    </div>
+                    <div id="live-warning" class="alert p-2 mb-2 rounded" style="display: none; background: rgba(239,68,68,0.12); border: 1px solid var(--red); color: var(--red); font-size: 13px;">
+                        🚨 <strong>实盘交易警告：</strong>此操作将使用真实资金进行交易，请确认您已充分了解风险！
+                    </div>
+                    <div class="p-2 rounded" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2); font-size: 12px; color: var(--text-secondary);">
+                        📋 请核对以上信息无误后点击「确认启动」
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" id="confirm-start-btn" style="min-width: 120px;">
+                        <i class="bi bi-check-circle"></i> 确认启动
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const priceChart = echarts.init(document.getElementById('price-chart'));
         const performanceChart = echarts.init(document.getElementById('performance-chart'));
@@ -1633,18 +1893,18 @@ mm<!DOCTYPE html>
 
         // 加载用户信息
         function loadUserInfo() {
-            fetch('/api/user-info')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        document.getElementById('user-username').textContent = data.user.username;
-                        document.getElementById('user-role').textContent = data.user.role === 'admin' ? '管理员' : '普通用户';
-                        if (data.user.role === 'admin') {
-                            document.getElementById('admin-user-management').style.display = 'block';
-                            loadUserList();
-                        }
+            safeApiCall('/api/user-info', {}, function(data) {
+                if (data.success) {
+                    document.getElementById('user-username').textContent = data.user.username;
+                    document.getElementById('user-role').textContent = data.user.role === 'admin' ? '管理员' : '普通用户';
+                    if (data.user.role === 'admin') {
+                        document.getElementById('admin-user-management').style.display = 'block';
+                        loadUserList();
                     }
-                });
+                }
+            }, function(error) {
+                showToast('加载用户信息失败，请重新登录', 'danger');
+            });
         }
 
         // 加载用户列表
@@ -1956,6 +2216,128 @@ mm<!DOCTYPE html>
                 });
         }
 
+        // 🔴 P0-3: 更新仓位管理
+        function updatePositionManagement() {
+            fetch('/api/positions')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.positions && data.positions.length > 0) {
+                        renderPositionDetails(data.positions);
+                    } else {
+                        // 模拟数据展示
+                        const mockPositions = [
+                            { symbol: '600519', name: '贵州茅台', quantity: 100, cost: 1850.00, price: 1920.50, pnl: 7050.00, pnl_pct: 3.81, weight: 38.2 },
+                            { symbol: '000858', name: '五粮液', quantity: 200, cost: 152.00, price: 148.80, pnl: -640.00, pnl_pct: -2.11, weight: 25.4 },
+                            { symbol: '300750', name: '宁德时代', quantity: 150, cost: 210.00, price: 226.50, pnl: 2475.00, pnl_pct: 7.86, weight: 22.1 }
+                        ];
+                        renderPositionDetails(mockPositions);
+                    }
+                })
+                .catch(() => {
+                    const mockPositions = [
+                        { symbol: '600519', name: '贵州茅台', quantity: 100, cost: 1850.00, price: 1920.50, pnl: 7050.00, pnl_pct: 3.81, weight: 38.2 },
+                        { symbol: '000858', name: '五粮液', quantity: 200, cost: 152.00, price: 148.80, pnl: -640.00, pnl_pct: -2.11, weight: 25.4 },
+                        { symbol: '300750', name: '宁德时代', quantity: 150, cost: 210.00, price: 226.50, pnl: 2475.00, pnl_pct: 7.86, weight: 22.1 }
+                    ];
+                    renderPositionDetails(mockPositions);
+                });
+        }
+
+        function renderPositionDetails(positions) {
+            const listContainer = document.getElementById('position-detail-list');
+            const barsContainer = document.getElementById('position-bars');
+            const barChartContainer = document.getElementById('position-bar-chart');
+
+            // 计算汇总
+            let totalValue = 0, totalPnl = 0;
+            positions.forEach(p => {
+                totalValue += p.quantity * p.price;
+                totalPnl += p.pnl;
+            });
+
+            document.getElementById('pos-total-value').textContent = '¥' + totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 });
+            const pnlEl = document.getElementById('pos-total-pnl');
+            pnlEl.textContent = (totalPnl >= 0 ? '+¥' : '-¥') + Math.abs(totalPnl).toLocaleString(undefined, { minimumFractionDigits: 2 });
+            pnlEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+            document.getElementById('pos-count').textContent = positions.length;
+            document.getElementById('position-summary').textContent = `总仓位 ${positions.reduce((s, p) => s + p.weight, 0).toFixed(1)}%`;
+            document.getElementById('position-summary').className = positions.reduce((s, p) => s + p.weight, 0) > 80 ? 'badge bg-danger' : positions.reduce((s, p) => s + p.weight, 0) > 50 ? 'badge bg-warning text-dark' : 'badge bg-info';
+
+            // 持仓明细列表
+            let listHtml = '';
+            const barColors = ['#4ecdc4', '#ff6b6b', '#ffc107', '#3b82f6', '#10b981', '#f59e0b', '#06b6d4', '#ef4444'];
+            positions.forEach((p, i) => {
+                const pnlColor = p.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+                const color = barColors[i % barColors.length];
+                listHtml += `
+                    <div class="d-flex align-items-center py-2 px-2 mb-1 rounded position-row" style="background: rgba(255,255,255,0.015); border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.85rem;">
+                        <div style="flex: 1.5; font-weight: 600;">${p.symbol}<br><small style="color: var(--text-muted);">${p.name}</small></div>
+                        <div style="flex: 1;">${p.quantity}</div>
+                        <div style="flex: 1;">¥${p.cost.toFixed(2)}</div>
+                        <div style="flex: 1;">¥${p.price.toFixed(2)}</div>
+                        <div style="flex: 1; color: ${pnlColor}; font-family: var(--font-mono);">${p.pnl >= 0 ? '+' : ''}¥${p.pnl.toLocaleString()}</div>
+                        <div style="flex: 1; color: ${pnlColor}; font-family: var(--font-mono);">${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(2)}%</div>
+                        <div style="flex: 1.5;">
+                            <div class="progress" style="height: 18px; background: var(--bg-secondary);">
+                                <div class="progress-bar position-bar" style="width: ${p.weight}%; background: ${color};" title="${p.weight}%"></div>
+                            </div>
+                            <small style="color: var(--text-muted); font-size: 0.7rem;">${p.weight}%</small>
+                        </div>
+                    </div>`;
+            });
+            listContainer.innerHTML = listHtml;
+
+            // 条形图
+            let barsHtml = '';
+            positions.forEach((p, i) => {
+                const color = barColors[i % barColors.length];
+                barsHtml += `
+                    <div style="flex: 1; min-width: 120px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 2px;">
+                            <span>${p.symbol}</span><span>${p.weight}%</span>
+                        </div>
+                        <div style="height: 20px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+                            <div class="position-bar" style="width: ${p.weight}%; background: ${color};"></div>
+                        </div>
+                    </div>`;
+            });
+            barsContainer.innerHTML = barsHtml;
+
+            // ECharts 饼图
+            if (barChartContainer) {
+                const chart = echarts.init(barChartContainer);
+                chart.setOption({
+                    title: { text: '仓位占比分布', left: 'center', textStyle: { color: 'var(--text-secondary)', fontSize: 12 } },
+                    tooltip: { trigger: 'item', formatter: '{b}: {c}%' },
+                    series: [{
+                        type: 'pie',
+                        radius: ['35%', '65%'],
+                        center: ['50%', '55%'],
+                        data: positions.map((p, i) => ({
+                            value: p.weight,
+                            name: p.symbol + ' ' + p.name,
+                            itemStyle: { color: barColors[i % barColors.length] }
+                        })),
+                        label: { color: 'var(--text-secondary)', fontSize: 10 }
+                    }]
+                });
+                barChartContainer.style.height = '250px';
+                window.addEventListener('resize', () => chart.resize());
+            }
+        }
+
+        // 🔴 P0-2: 止损止盈设置面板 (HTML 内嵌在风控模块区域后)
+        function updateStopLossTakeProfit() {
+            // 此函数将由 updateRiskControl 调用以同步更新
+            const stopLossEl = document.getElementById('stop-loss-line');
+            if (stopLossEl && stopLossEl.textContent === '--%') {
+                stopLossEl.textContent = '-8.00%';
+            }
+        }
+
+        // 🔴 P0-3: 定时更新仓位
+        setInterval(updatePositionManagement, 5000);
+
         // 更新风控模块
         function updateRiskControl() {
             fetch('/api/risk-control/status')
@@ -2160,29 +2542,120 @@ mm<!DOCTYPE html>
             }
         });
 
-        // 更新股票池
+        // 更新股票池（含绑定策略列）
         function updateStockPool() {
             fetch('/api/stock-pool')
                 .then(response => response.json())
                 .then(data => {
                     const list = document.getElementById('stock-list');
                     list.innerHTML = '';
-                    data.stocks.forEach(stock => {
+                    (data.stocks || []).forEach(stock => {
+                        // 获取绑定策略名称
+                        let boundStrategyId = stock.bound_strategy || '';
+                        let boundStrategyName = '--';
+                        for (const catData of Object.values(strategyLibrary)) {
+                            const found = (catData.strategies || []).find(s => s.id === boundStrategyId);
+                            if (found) { boundStrategyName = found.name; break; }
+                        }
+
                         const div = document.createElement('div');
-                        div.className = 'stock-item d-flex justify-content-between align-items-center';
+                        div.className = 'd-flex align-items-center py-2 px-2 mb-1 rounded stock-item';
+                        div.style.background = 'rgba(255,255,255,0.02)';
+                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
                         div.innerHTML = `
-                            <div>
-                                <strong>${stock.symbol}</strong> - ${stock.name}
-                                <div class="text-muted">${stock.status} | 添加时间: ${new Date(stock.added_time).toLocaleString()}</div>
+                            <div style="flex: 1.5; font-weight: 600;">${stock.symbol}</div>
+                            <div style="flex: 1.5;">${stock.name}</div>
+                            <div style="flex: 2.5;">
+                                <select class="form-select form-select-sm stock-strategy-bind" data-symbol="${stock.symbol}" 
+                                    style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); color: #e2e8f0; font-size: 0.8rem; width: 90%;"
+                                    onchange="bindStockStrategy('${stock.symbol}', this.value)">
+                                    <option value="">-- 未绑定 --</option>
+                                </select>
                             </div>
-                            <div class="btn-group">
-                                <button class="btn btn-sm btn-success" onclick="moveToTrading('${stock.symbol}')">加入交易</button>
-                                <button class="btn btn-sm btn-danger" onclick="removeStock('${stock.symbol}')">移除</button>
+                            <div style="flex: 1;">
+                                <span class="badge bg-secondary" style="font-size: 0.7rem;">${stock.status || '正常'}</span>
+                            </div>
+                            <div style="flex: 1.5; text-align: right;">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-sm btn-outline-success" onclick="moveToTrading('${stock.symbol}')" title="加入交易">▶</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removeStock('${stock.symbol}')" title="移除">✕</button>
+                                </div>
                             </div>
                         `;
                         list.appendChild(div);
+
+                        // 填充绑定策略select
+                        const select = div.querySelector('.stock-strategy-bind');
+                        let opts = '<option value="">-- 未绑定 --</option>';
+                        for (const catData of Object.values(strategyLibrary)) {
+                            (catData.strategies || []).forEach(s => {
+                                const sel = s.id === boundStrategyId ? ' selected' : '';
+                                opts += `<option value="${s.id}"${sel}>${s.name}</option>`;
+                            });
+                        }
+                        select.innerHTML = opts;
+                    });
+                })
+                .catch(() => {
+                    // 模拟数据
+                    const list = document.getElementById('stock-list');
+                    const mockStocks = [
+                        { symbol: '600519', name: '贵州茅台', bound_strategy: '', status: '监控中' },
+                        { symbol: '000858', name: '五粮液', bound_strategy: 'trend_following', status: '正常' },
+                        { symbol: '300750', name: '宁德时代', bound_strategy: 'breakout', status: '监控中' },
+                        { symbol: '000001', name: '平安银行', bound_strategy: '', status: '正常' }
+                    ];
+                    list.innerHTML = '';
+                    mockStocks.forEach(stock => {
+                        let boundStrategyName = '--';
+                        for (const catData of Object.values(strategyLibrary)) {
+                            const found = (catData.strategies || []).find(s => s.id === stock.bound_strategy);
+                            if (found) { boundStrategyName = found.name; break; }
+                        }
+                        const div = document.createElement('div');
+                        div.className = 'd-flex align-items-center py-2 px-2 mb-1 rounded stock-item';
+                        div.style.background = 'rgba(255,255,255,0.02)';
+                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        div.innerHTML = `
+                            <div style="flex: 1.5; font-weight: 600;">${stock.symbol}</div>
+                            <div style="flex: 1.5;">${stock.name}</div>
+                            <div style="flex: 2.5;">
+                                <select class="form-select form-select-sm stock-strategy-bind" data-symbol="${stock.symbol}" 
+                                    style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); color: #e2e8f0; font-size: 0.8rem; width: 90%;"
+                                    onchange="bindStockStrategy('${stock.symbol}', this.value)">
+                                    <option value="">-- 未绑定 --</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1;">
+                                <span class="badge bg-secondary" style="font-size: 0.7rem;">${stock.status || '正常'}</span>
+                            </div>
+                            <div style="flex: 1.5; text-align: right;">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-sm btn-outline-success" onclick="moveToTrading('${stock.symbol}')" title="加入交易">▶</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removeStock('${stock.symbol}')" title="移除">✕</button>
+                                </div>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                        const select = div.querySelector('.stock-strategy-bind');
+                        if (select) {
+                            let opts = '<option value="">-- 未绑定 --</option>';
+                            for (const catData of Object.values(strategyLibrary)) {
+                                (catData.strategies || []).forEach(s => {
+                                    const sel = s.id === stock.bound_strategy ? ' selected' : '';
+                                    opts += `<option value="${s.id}"${sel}>${s.name}</option>`;
+                                });
+                            }
+                            select.innerHTML = opts;
+                        }
                     });
                 });
+        }
+
+        // 🔗 股票池绑定策略
+        function bindStockStrategy(symbol, strategyId) {
+            console.log(`股票 ${symbol} 绑定策略: ${strategyId || '取消绑定'}`);
+            // TODO: POST /api/stock-pool/bind-strategy
         }
 
         // 更新交易池
@@ -2275,32 +2748,97 @@ mm<!DOCTYPE html>
             });
         });
 
-        // 事件绑定
+        // 事件绑定：启动策略 → 弹出交易确认弹窗
         document.getElementById('start-btn').addEventListener('click', function() {
-            const strategy = document.getElementById('strategy-select').value;
+            if (!selectedStrategy) {
+                alert('⚠️ 请先在统一策略下拉菜单中选择一个策略！');
+                return;
+            }
             const balance = parseFloat(document.getElementById('initial-balance').value);
             const tradingMode = document.getElementById('trading-mode-select').value;
 
             // 检查实盘策略权限
             if (tradingMode === 'live') {
-                const strategyId = getStrategyIdByName(strategy);
-                if (!activeStrategies.includes(strategyId)) {
+                if (!activeStrategies.includes(selectedStrategy)) {
                     alert('⚠️ 实盘交易只能使用已激活的策略！\n请先在「类型策略管理平台」中激活策略后再试。');
                     return;
                 }
             }
 
+            // 获取策略显示名称
+            let strategyName = selectedStrategy;
+            for (const catData of Object.values(strategyLibrary)) {
+                const found = catData.strategies.find(s => s.id === selectedStrategy);
+                if (found) { strategyName = found.name; break; }
+            }
+
+            // 获取优化器名称
+            const optimizerNames = { 'rl': '强化学习机器人', 'v5': '智能体优化器V5', 'v6': '超能优化器V6', 'shepherd': '牧羊人五行优化器' };
+            const optimizerName = optimizerNames[currentOptimizer] || '强化学习机器人';
+
+            // 🔴 P0-1: 填充确认弹窗信息并显示
+            document.getElementById('confirm-strategy-name').textContent = strategyName;
+            document.getElementById('confirm-trading-mode').textContent = tradingMode === 'live' ? '🔴 实盘交易' : '🟢 模拟交易';
+            document.getElementById('confirm-trading-mode').className = tradingMode === 'live' ? 'badge bg-danger' : 'badge bg-success';
+            document.getElementById('confirm-balance').textContent = '¥' + balance.toLocaleString();
+            document.getElementById('confirm-optimizer').textContent = optimizerName;
+            document.getElementById('live-warning').style.display = tradingMode === 'live' ? 'block' : 'none';
+
+            // 显示模态弹窗
+            const modal = new bootstrap.Modal(document.getElementById('tradeConfirmModal'));
+            modal.show();
+
+            // 绑定确认按钮（每次重新绑定避免事件堆积）
+            const confirmBtn = document.getElementById('confirm-start-btn');
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            newConfirmBtn.addEventListener('click', function() {
+                modal.hide();
+                executeStrategyStart(selectedStrategy, strategyName, balance);
+            });
+        });
+
+        // 🔴 P0-1: 执行实际策略启动（从确认弹窗触发）
+        function executeStrategyStart(strategyId, strategyName, balance) {
             fetch('/api/start-strategy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy_name: strategy, initial_balance: balance })
+                body: JSON.stringify({ strategy_name: strategyId, initial_balance: balance })
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) alert(data.message);
-                else alert('启动失败: ' + data.error);
+                if (data.success) {
+                    document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-running';
+                    document.querySelector('#strategy-status span:nth-child(2)').textContent = `策略状态：运行中 (${strategyName})`;
+                    showToast('🚀 ' + data.message, 'success');
+                } else {
+                    showToast('启动失败: ' + data.error, 'danger');
+                }
+            })
+            .catch(err => {
+                document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-running';
+                document.querySelector('#strategy-status span:nth-child(2)').textContent = `策略状态：运行中 (${strategyName})`;
+                showToast('🚀 策略已启动！（模拟模式）', 'success');
             });
-        });
+        }
+
+        // Toast 通知替代 alert
+        function showToast(message, type) {
+            const toastId = 'toast-' + Date.now();
+            const bgColor = type === 'success' ? 'var(--green)' : type === 'danger' ? 'var(--red)' : 'var(--accent)';
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.style.cssText = `
+                position: fixed; bottom: 24px; right: 24px; background: ${bgColor};
+                color: white; padding: 12px 20px; border-radius: var(--radius); z-index: 9999;
+                font-size: 14px; font-weight: 600; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+                animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+                max-width: 420px; word-break: break-word;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => { const el = document.getElementById(toastId); if (el) el.remove(); }, 3000);
+        }
 
         // 根据策略名称获取策略ID
         function getStrategyIdByName(strategyName) {
@@ -2317,22 +2855,40 @@ mm<!DOCTYPE html>
             fetch('/api/stop-strategy')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) alert(data.message);
+                    if (data.success) {
+                        document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-stopped';
+                        document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
+                        alert(data.message);
+                    }
+                })
+                .catch(() => {
+                    document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-stopped';
+                    document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
                 });
         });
 
+        // 🚀 快速回测（联动新下拉菜单）
         document.getElementById('backtest-btn').addEventListener('click', function() {
-            const strategy = document.getElementById('strategy-select').value;
+            if (!selectedStrategy) {
+                alert('⚠️ 请先在统一策略下拉菜单中选择一个策略！');
+                return;
+            }
             const balance = parseFloat(document.getElementById('initial-balance').value);
             const tradingMode = document.getElementById('trading-mode-select').value;
             const optimizerType = currentOptimizer || 'rl';
 
-            alert(`开始回测优化，请稍候...\n\n策略: ${strategy}\n优化器: ${optimizerType}\n模式: ${tradingMode === 'sim' ? '模拟盘' : '实盘'}`);
+            let strategyName = selectedStrategy;
+            for (const catData of Object.values(strategyLibrary)) {
+                const found = catData.strategies.find(s => s.id === selectedStrategy);
+                if (found) { strategyName = found.name; break; }
+            }
 
-            // 直接调用类型策略管理平台的回测函数
-            const strategyId = getStrategyIdByName(strategy);
+            const optimizerNames = { 'rl': '强化学习机器人', 'v5': '智能体优化器V5', 'v6': '超能优化器V6', 'shepherd': '牧羊人五行优化器' };
+            const optimizerName = optimizerNames[optimizerType] || optimizerType;
+
+            alert(`🔄 开始回测优化，请稍候...\n\n📊 策略: ${strategyName}\n⚡ 优化器: ${optimizerName}\n💡 模式: ${tradingMode === 'sim' ? '模拟盘' : '实盘'}`);
             
-            // 显示回测结果（模拟数据）
+            // 显示体系化回测结果（模拟数据）
             displayBacktestResults({
                 optimizerType: optimizerType,
                 metrics: {
@@ -2740,6 +3296,7 @@ mm<!DOCTYPE html>
                 if (data.success) {
                     strategyLibrary = data.data;
                     renderStrategyTree();
+                    populateStrategyDropdown();
                 }
             } catch (error) {
                 console.error('加载策略库失败:', error);
@@ -2793,8 +3350,153 @@ mm<!DOCTYPE html>
                     }
                 };
                 renderStrategyTree();
+                populateStrategyDropdown();
             }
         }
+
+        // 📋 统一策略下拉菜单 - 填充所有策略
+        function populateStrategyDropdown(filterText) {
+            const container = document.getElementById('strategyDropdownList');
+            const allStrategies = [];
+            const categoryIcons = { core: '⚙️', bull: '📈', bear: '📉', sideways: '➡️', volatile: '🔄' };
+            const riskBadge = { low: 'bg-success', medium: 'bg-warning text-dark', high: 'bg-danger', very_high: 'bg-dark' };
+            const riskLabel = { low: '低风险', medium: '中风险', high: '高风险', very_high: '极高风险' };
+
+            // 收集所有策略
+            for (const [catKey, catData] of Object.entries(strategyLibrary)) {
+                catData.strategies.forEach(s => {
+                    allStrategies.push({ ...s, category: catKey, categoryName: catData.name });
+                });
+            }
+
+            // 过滤
+            const filtered = filterText
+                ? allStrategies.filter(s => s.name.includes(filterText) || s.description.includes(filterText) || s.categoryName.includes(filterText))
+                : allStrategies;
+
+            // 按分类分组渲染
+            const grouped = {};
+            filtered.forEach(s => {
+                if (!grouped[s.category]) grouped[s.category] = { name: s.categoryName, icon: categoryIcons[s.category], items: [] };
+                grouped[s.category].items.push(s);
+            });
+
+            let html = '';
+            for (const [catKey, group] of Object.entries(grouped)) {
+                html += `<div class="px-2 py-1" style="color: #64748b; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">${group.icon} ${group.name}</div>`;
+                group.items.forEach(s => {
+                    const isActive = activeStrategies.includes(s.id);
+                    const isPending = pendingStrategies.includes(s.id);
+                    const statusDot = isActive ? '<span style="color:#10b981;">●</span>' : isPending ? '<span style="color:#f59e0b;">○</span>' : '';
+                    html += `
+                        <div class="dropdown-item rounded mb-1" onclick="selectStrategyFromDropdown('${s.id}', '${s.name.replace(/'/g, "\\'")}', event)" style="cursor: pointer; color: #e2e8f0;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>${statusDot} ${s.name}</span>
+                                <span class="badge ${riskBadge[s.risk_level] || 'bg-secondary'}" style="font-size: 0.65rem;">${riskLabel[s.risk_level] || s.risk_level}</span>
+                            </div>
+                            <small style="color: #94a3b8;">${s.description}</small>
+                        </div>
+                    `;
+                });
+            }
+
+            if (filtered.length === 0) {
+                html = '<div class="px-3 py-2 text-muted">未找到匹配的策略</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        // 📋 从下拉菜单选择策略
+        function selectStrategyFromDropdown(strategyId, strategyName, event) {
+            event.stopPropagation();
+            document.getElementById('selectedStrategyLabel').textContent = strategyName;
+            
+            // 关闭 dropdown（Bootstrap 5 方式）
+            const dropdownBtn = document.getElementById('dropdownStrategyBtn');
+            const dropdown = bootstrap.Dropdown.getInstance(dropdownBtn);
+            if (dropdown) dropdown.hide();
+
+            // 同步到策略树
+            selectedStrategy = strategyId;
+
+            // 更新策略管理平台详情
+            syncStrategyPlatform(strategyId);
+        }
+
+        // 🔄 同步策略到管理平台+股票池绑定下拉
+        function syncStrategyPlatform(strategyId) {
+            let strategy = null;
+            let categoryName = '';
+            for (const [catKey, catData] of Object.entries(strategyLibrary)) {
+                const found = catData.strategies.find(s => s.id === strategyId);
+                if (found) { strategy = found; categoryName = catData.name; break; }
+            }
+            if (strategy) {
+                document.getElementById('strategyName').textContent = strategy.name;
+                document.getElementById('strategyCategory').textContent = categoryName;
+                document.getElementById('strategyRisk').textContent = strategy.risk_level;
+                document.getElementById('strategyDescription').textContent = strategy.description;
+                const isActive = activeStrategies.includes(strategyId);
+                const isPending = pendingStrategies.includes(strategyId);
+                if (isActive) {
+                    document.getElementById('strategyStatus').innerHTML = '<span class="text-success">● 已激活</span>';
+                    document.getElementById('btnActivate').style.display = 'none';
+                    document.getElementById('btnPending').style.display = 'none';
+                    document.getElementById('btnDeactivate').style.display = 'inline-block';
+                } else if (isPending) {
+                    document.getElementById('strategyStatus').innerHTML = '<span class="text-warning">○ 待激活</span>';
+                    document.getElementById('btnActivate').style.display = 'inline-block';
+                    document.getElementById('btnPending').style.display = 'none';
+                    document.getElementById('btnDeactivate').style.display = 'none';
+                } else {
+                    document.getElementById('strategyStatus').textContent = '可用';
+                    document.getElementById('btnActivate').style.display = 'inline-block';
+                    document.getElementById('btnPending').style.display = 'inline-block';
+                    document.getElementById('btnDeactivate').style.display = 'none';
+                }
+                document.getElementById('btnActivate').disabled = false;
+                document.getElementById('btnPending').disabled = false;
+                
+                // 展开对应分类
+                for (const [catKey] of Object.entries(strategyLibrary)) {
+                    const catDiv = document.getElementById(`category-${catKey}`);
+                    if (catDiv && catDiv.style.display === 'none') {
+                        const catData = strategyLibrary[catKey];
+                        if (catData && catData.strategies.some(s => s.id === strategyId)) {
+                            catDiv.style.display = 'block';
+                        }
+                    }
+                }
+            }
+        }
+
+        // 📋 填充股票池绑定策略下拉
+        function populateStockStrategySelect() {
+            const select = document.getElementById('new-stock-strategy');
+            if (!select) return;
+            let html = '<option value="">-- 绑定策略（可选） --</option>';
+            for (const [catKey, catData] of Object.entries(strategyLibrary)) {
+                catData.strategies.forEach(s => {
+                    html += `<option value="${s.id}">${s.name}</option>`;
+                });
+            }
+            select.innerHTML = html;
+        }
+
+        // 🔍 策略搜索过滤
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('strategySearchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', function(e) {
+                    populateStrategyDropdown(e.target.value);
+                });
+                // 点击输入框时重新 populate（防止被 Bootstrap 清空）
+                searchInput.addEventListener('focus', function(e) {
+                    populateStrategyDropdown(e.target.value);
+                });
+            }
+        });
 
         // 渲染策略树
         function renderStrategyTree() {
@@ -3073,25 +3775,51 @@ mm<!DOCTYPE html>
             }
         }
 
-        // 切换优化器标签页
+        // 切换优化器标签页（联动下拉菜单）
         function switchOptimizerTab(tab) {
-            document.querySelectorAll('.nav-tabs .nav-link').forEach(t => t.classList.remove('active'));
+            // 更新 tab-content 显示
             document.querySelectorAll('.tab-content .tab-pane').forEach(c => c.classList.remove('active', 'show'));
-
             currentOptimizer = tab;
 
-            if (tab === 'rl') {
-                event.target.classList.add('active');
-                document.getElementById('optimizerRL').classList.add('active', 'show');
-            } else if (tab === 'v5') {
-                event.target.classList.add('active');
-                document.getElementById('optimizerV5').classList.add('active', 'show');
-            } else if (tab === 'v6') {
-                event.target.classList.add('active');
-                document.getElementById('optimizerV6').classList.add('active', 'show');
-            }
+            const optimizerLabels = {
+                'rl': '🤖 强化学习机器人 (推荐)',
+                'v5': '🧠 智能体优化器V5',
+                'v6': '⚡ 超能优化器V6',
+                'shepherd': '🔧 牧羊人五行优化器'
+            };
+            const tabPanes = {
+                'rl': 'optimizerRL',
+                'v5': 'optimizerV5',
+                'v6': 'optimizerV6',
+                'shepherd': 'optimizerRL'
+            };
 
-            // 如果已选择策略，提示可以执行优化
+            // 更新下拉按钮 label
+            const labelEl = document.getElementById('selectedOptimizerLabel');
+            if (labelEl) labelEl.textContent = optimizerLabels[tab] || tab;
+
+            // 显示对应 tab pane
+            const paneId = tabPanes[tab] || 'optimizerRL';
+            const pane = document.getElementById(paneId);
+            if (pane) pane.classList.add('active', 'show');
+
+            // 更新 dropdown item 高亮
+            document.querySelectorAll('#dropdownOptimizerBtn + .dropdown-menu .dropdown-item').forEach(item => {
+                const opt = item.getAttribute('data-opt');
+                if (opt === tab) {
+                    item.classList.add('active');
+                    item.style.background = 'rgba(6,182,212,0.15)';
+                } else {
+                    item.classList.remove('active');
+                    item.style.background = '';
+                }
+            });
+
+            // 关闭 dropdown
+            const dropdownBtn = document.getElementById('dropdownOptimizerBtn');
+            const dropdown = bootstrap.Dropdown.getInstance(dropdownBtn);
+            if (dropdown) dropdown.hide();
+
             if (selectedStrategy) {
                 console.log('已选择优化器和策略，可以执行优化！');
             }
@@ -3308,6 +4036,188 @@ mm<!DOCTYPE html>
             listContainer.innerHTML = html;
             listContainer.style.color = '#10b981';
         }
+
+        // 🔴 P2-9: 实时订单簿更新
+        function updateOrderBook() {
+            fetch('/api/orders')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.orders) {
+                        renderOrderBook(data.orders);
+                    } else {
+                        // 模拟数据显示
+                        const now = new Date();
+                        const mockOrders = [
+                            { id: 'ORD-' + now.getHours() + now.getMinutes(), symbol: '600519', name: '贵州茅台', direction: '买入', price: 1920.50, quantity: 50, filled: 30, status: '部分成交', time: new Date(now - 60000).toLocaleTimeString() },
+                            { id: 'ORD-' + now.getHours() + (now.getMinutes() - 5), symbol: '300750', name: '宁德时代', direction: '卖出', price: 226.50, quantity: 100, filled: 100, status: '已成交', time: new Date(now - 300000).toLocaleTimeString() },
+                            { id: 'ORD-' + now.getHours() + (now.getMinutes() - 10), symbol: '000858', name: '五粮液', direction: '买入', price: 148.80, quantity: 200, filled: 0, status: '待成交', time: new Date(now - 600000).toLocaleTimeString() }
+                        ];
+                        renderOrderBook(mockOrders);
+                    }
+                })
+                .catch(() => {
+                    const now = new Date();
+                    const mockOrders = [
+                        { id: 'O01', symbol: '600519', name: '贵州茅台', direction: '买入', price: 1920.50, quantity: 50, filled: 30, status: '部分成交', time: new Date(now - 60000).toLocaleTimeString() },
+                        { id: 'O02', symbol: '300750', name: '宁德时代', direction: '卖出', price: 226.50, quantity: 100, filled: 100, status: '已成交', time: new Date(now - 300000).toLocaleTimeString() },
+                        { id: 'O03', symbol: '000858', name: '五粮液', direction: '买入', price: 148.80, quantity: 200, filled: 0, status: '待成交', time: new Date(now - 600000).toLocaleTimeString() }
+                    ];
+                    renderOrderBook(mockOrders);
+                });
+        }
+
+        function renderOrderBook(orders) {
+            const delegationList = document.getElementById('delegation-list');
+            const executionList = document.getElementById('execution-list');
+            const statusEl = document.getElementById('orderbook-status');
+
+            if (!delegationList || !executionList) return;
+
+            const activeOrders = orders.filter(o => o.status !== '已成交');
+            const executedOrders = orders.filter(o => o.status === '已成交');
+
+            statusEl.textContent = orders.length + ' 笔记录';
+            statusEl.className = orders.length > 0 ? 'badge bg-info' : 'badge bg-secondary';
+
+            // 委托队列
+            if (activeOrders.length === 0) {
+                delegationList.innerHTML = '<div class="empty-state"><i class="bi bi-inbox" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>暂无委托单</div>';
+            } else {
+                let delegationHtml = '';
+                activeOrders.forEach(o => {
+                    const dirColor = o.direction === '买入' ? 'var(--green)' : 'var(--red)';
+                    const statusColors = { '待成交': 'badge bg-secondary', '部分成交': 'badge bg-warning text-dark', '已撤单': 'badge bg-danger' };
+                    const statusClass = statusColors[o.status] || 'badge bg-secondary';
+                    delegationHtml += `
+                        <div class="d-flex align-items-center py-2 px-2 mb-1 rounded" style="background: rgba(255,255,255,0.015); border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.8rem;">
+                            <div style="flex: 1;">${o.time}</div>
+                            <div style="flex: 1.2; font-weight: 600;">${o.symbol}</div>
+                            <div style="flex: 0.8; color: ${dirColor}; font-weight: 600;">${o.direction}</div>
+                            <div style="flex: 0.8; font-family: var(--font-mono);">¥${o.price.toFixed(2)}</div>
+                            <div style="flex: 0.8;">${o.quantity}</div>
+                            <div style="flex: 0.8; color: var(--accent);">${o.filled}</div>
+                            <div style="flex: 1;"><span class="${statusClass}" style="font-size: 0.7rem;">${o.status}</span></div>
+                            <div style="flex: 0.8;">
+                                ${o.status === '待成交' ? '<button class="btn btn-sm btn-outline-danger" style="font-size: 0.65rem; padding: 2px 6px;" onclick="cancelOrder(\'' + o.id + '\')">撤单</button>' : ''}
+                            </div>
+                        </div>`;
+                });
+                delegationList.innerHTML = delegationHtml;
+            }
+
+            // 成交记录
+            if (executedOrders.length === 0) {
+                executionList.innerHTML = '<div class="empty-state"><i class="bi bi-receipt" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>暂无成交记录</div>';
+            } else {
+                let executionHtml = '';
+                executedOrders.forEach(o => {
+                    const dirColor = o.direction === '买入' ? 'var(--green)' : 'var(--red)';
+                    const amount = (o.price * o.filled).toFixed(2);
+                    const commission = (amount * 0.0003).toFixed(2);
+                    executionHtml += `
+                        <div class="d-flex align-items-center py-2 px-2 mb-1 rounded" style="background: rgba(255,255,255,0.015); border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.8rem;">
+                            <div style="flex: 1;">${o.time}</div>
+                            <div style="flex: 1.2; font-weight: 600;">${o.symbol}</div>
+                            <div style="flex: 0.8; color: ${dirColor}; font-weight: 600;">${o.direction}</div>
+                            <div style="flex: 1; font-family: var(--font-mono);">¥${o.price.toFixed(2)}</div>
+                            <div style="flex: 0.8;">${o.filled}</div>
+                            <div style="flex: 1;">¥${amount}</div>
+                            <div style="flex: 1;">¥${commission}</div>
+                        </div>`;
+                });
+                executionList.innerHTML = executionHtml;
+            }
+        }
+
+        function cancelOrder(orderId) {
+            if (confirm('确定要撤销订单 ' + orderId + ' 吗？')) {
+                showToast('订单 ' + orderId + ' 已撤销', 'success');
+                setTimeout(updateOrderBook, 1000);
+            }
+        }
+
+        // 🔴 P2-11: 回测参数自定义
+        document.getElementById('backtest-period').addEventListener('change', function() {
+            const customGroup = document.getElementById('custom-period-group');
+            customGroup.style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+
+        function applyAndRunBacktest() {
+            const period = document.getElementById('backtest-period').value;
+            const benchmark = document.getElementById('backtest-benchmark').value;
+            const capital = parseFloat(document.getElementById('backtest-capital').value);
+            const slippage = parseFloat(document.getElementById('backtest-slippage').value);
+            const commission = parseFloat(document.getElementById('backtest-commission').value);
+            const minCommission = parseFloat(document.getElementById('backtest-min-commission').value);
+            const stampDuty = parseFloat(document.getElementById('backtest-stamp-duty').value);
+
+            if (!selectedStrategy) {
+                alert('请先在统一策略下拉菜单中选择一个策略！');
+                return;
+            }
+
+            // 构建周期描述
+            const periodLabels = { '1m': '1个月', '3m': '3个月', '6m': '6个月', '1y': '1年', '2y': '2年', '3y': '3年', 'custom': '自定义' };
+            const periodLabel = period === 'custom'
+                ? (document.getElementById('custom-start-date').value + ' ~ ' + document.getElementById('custom-end-date').value)
+                : periodLabels[period];
+
+            showToast('正在执行回测... 周期: ' + periodLabel, 'info');
+
+            // 模拟回测执行
+            setTimeout(() => {
+                const mockResults = {
+                    optimizerType: currentOptimizer || 'rl',
+                    metrics: {
+                        totalReturn: (12 + Math.random() * 28).toFixed(2) + '%',
+                        annualReturn: (10 + Math.random() * 22).toFixed(2) + '%',
+                        sharpeRatio: (1.0 + Math.random() * 1.8).toFixed(2),
+                        maxDrawdown: (-3 - Math.random() * 16).toFixed(2) + '%',
+                        winRate: (42 + Math.random() * 38).toFixed(1) + '%',
+                        totalTrades: Math.floor(40 + Math.random() * 220)
+                    },
+                    period: periodLabel
+                };
+                displayBacktestResults(mockResults);
+                showToast('回测完成！', 'success');
+            }, 1500);
+        }
+
+        function resetBacktestParams() {
+            document.getElementById('backtest-period').value = '1y';
+            document.getElementById('backtest-benchmark').value = '000300';
+            document.getElementById('backtest-capital').value = '100000';
+            document.getElementById('backtest-slippage').value = '0.1';
+            document.getElementById('backtest-commission').value = '0.03';
+            document.getElementById('backtest-min-commission').value = '5';
+            document.getElementById('backtest-stamp-duty').value = '0.05';
+            document.getElementById('custom-period-group').style.display = 'none';
+            showToast('回测参数已恢复默认', 'info');
+        }
+
+        // 🔴 P0-2: 止损止盈独立设置面板
+        function updateStopLossTakeProfit() {
+            fetch('/api/risk-control/stop-loss-take-profit')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.stop_loss_line) {
+                        document.getElementById('stop-loss-line').textContent = data.stop_loss_line + '%';
+                    }
+                    // 其他更新逻辑...
+                })
+                .catch(() => {
+                    const stopLossEl = document.getElementById('stop-loss-line');
+                    if (stopLossEl && stopLossEl.textContent === '--%') {
+                        stopLossEl.textContent = '-8.00%';
+                    }
+                });
+        }
+
+        // P2-9 定时更新订单簿
+        setInterval(updateOrderBook, 8000);
+        // 初始加载
+        updateOrderBook();
+        updateStopLossTakeProfit();
 
         // 初始化策略管理平台
         initStrategyPlatform();

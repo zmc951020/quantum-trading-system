@@ -3,10 +3,11 @@
 请求DeepSeek优化下跌市场策略
 """
 
+import os
 import requests
 
-DEEPSEEK_API_KEY = "sk-e97d90fb3ae8419faca6657a745b66bf"
-DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_API_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com") + "/chat/completions"
 
 USER_PROMPT = """# 下跌市场策略优化请求
 

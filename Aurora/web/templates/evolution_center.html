@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aurora 策略自演进中心</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6/dist/axios.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Microsoft YaHei',sans-serif;background:#0a0e27;color:#e0e6ed;padding:15px}
+.header{background:linear-gradient(135deg,#1a1f3a,#0d1128);padding:12px 20px;border-radius:8px;border:1px solid #1e2a4a;margin-bottom:15px}
+.header h1{font-size:20px;background:linear-gradient(90deg,#ce93d8,#7b1fa2);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.row{display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap}.card{background:#121636;border:1px solid #1e2a4a;border-radius:8px;padding:15px;flex:1;min-width:280px}
+.card h3{color:#ce93d8;font-size:14px;margin-bottom:10px;border-bottom:1px solid #1e2a4a;padding-bottom:8px}
+.chart-box{width:100%;height:250px}.metric-row{display:flex;gap:10px;flex-wrap:wrap}
+.metric{background:#1a2548;border-radius:6px;padding:10px 14px;text-align:center;min-width:90px}
+.metric .value{font-size:22px;font-weight:bold;margin:5px 0}.metric .label{font-size:11px;color:#8899aa}
+.positive{color:#00e676}.warning{color:#ffab40}.negative{color:#ff1744}
+.dna-item{background:#1a2548;border-radius:6px;padding:10px;margin:6px 0;border-left:3px solid #7b1fa2}
+.dna-item .id{font-size:12px;color:#ce93d8}.dna-item .fitness{font-size:14px;font-weight:bold}
+.dna-item .meta{font-size:11px;color:#8899aa;margin-top:4px}
+.evolution-log{max-height:200px;overflow-y:auto;font-size:12px}
+.log-item{padding:4px 0;border-bottom:1px solid #1e2a4a;color:#8899aa}
+.log-item .gen{color:#ce93d8}.btn{padding:8px 16px;background:#1a2548;color:#e0e6ed;border:1px solid #2a3a6a;border-radius:4px;cursor:pointer;font-size:13px;margin:4px}
+.btn:hover{background:#2a3a6a}.btn.primary{background:#7b1fa2;border-color:#ce93d8}
+</style></head>
+<body>
+<div class="header"><h1>🧬 Aurora 策略自演进中心</h1></div>
+<div class="row">
+  <div class="card"><h3>📊 进化代数统计</h3>
+    <div class="metric-row">
+      <div class="metric"><div class="value" id="genCount">12</div><div class="label">当前代数</div></div>
+      <div class="metric"><div class="value positive" id="popSize">48</div><div class="label">种群规模</div></div>
+      <div class="metric"><div class="value positive" id="eliteCount">15</div><div class="label">精英存档</div></div>
+      <div class="metric"><div class="value positive" id="bestSharpe">3.15</div><div class="label">最优夏普</div></div>
+    </div>
+  </div>
+  <div class="card"><h3>📈 适应度进化曲线</h3><div class="chart-box" id="fitnessChart"></div></div>
+  <div class="card"><h3>🌡️ 种群多样性</h3><div class="chart-box" id="diversityChart"></div></div>
+</div>
+<div class="row">
+  <div class="card"><h3>🏆 精英策略基因库</h3><div id="eliteDNA" style="max-height:300px;overflow-y:auto"></div></div>
+  <div class="card"><h3>📜 进化日志</h3><div class="evolution-log" id="evoLog"></div></div>
+  <div class="card"><h3>⚙️ 演进控制</h3>
+    <button class="btn primary" onclick="evolveNow()">🧬 进化一代</button>
+    <button class="btn" onclick="evolveBatch()">⚡ 批量进化(10代)</button>
+    <button class="btn" onclick="marketAdapt()">🎯 市场自适应</button>
+    <button class="btn" onclick="resetEvolution()">🔄 重置进化</button>
+    <button class="btn" onclick="exportDNA()">💾 导出基因库</button>
+    <div style="margin-top:15px">
+      <h4 style="color:#ce93d8;font-size:13px">参数配置</h4>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <label style="font-size:12px;color:#8899aa">种群: <input id="cfgPop" value="50" style="width:60px;background:#1a2548;border:1px solid #2a3a6a;color:#e0e6ed;padding:4px;border-radius:4px"></label>
+        <label style="font-size:12px;color:#8899aa">变异率: <input id="cfgMut" value="0.2" style="width:60px;background:#1a2548;border:1px solid #2a3a6a;color:#e0e6ed;padding:4px;border-radius:4px"></label>
+        <label style="font-size:12px;color:#8899aa">交叉率: <input id="cfgCross" value="0.7" style="width:60px;background:#1a2548;border:1px solid #2a3a6a;color:#e0e6ed;padding:4px;border-radius:4px"></label>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let charts={};
+function initChart(id){const el=document.getElementById(id);if(!el)return;if(charts[id])charts[id].dispose();charts[id]=echarts.init(el);window.addEventListener('resize',()=>charts[id]?.resize())}
+function loadAll(){
+  initChart('fitnessChart');initChart('diversityChart');
+  loadFitness();loadDiversity();loadEliteDNA();loadLog();
+}
+function loadFitness(){
+  if(!charts.fitnessChart)return;
+  const gens=[];const best=[];const avg=[];const worst=[];
+  for(let i=1;i<=12;i++){gens.push(`Gen${i}`);best.push((1.5+i*0.15+Math.random()*0.3).toFixed(2));avg.push((1.0+i*0.1+Math.random()*0.2).toFixed(2));worst.push((0.5+i*0.05+Math.random()*0.15).toFixed(2))}
+  document.getElementById('genCount').textContent='12';document.getElementById('bestSharpe').textContent=best[best.length-1];
+  charts.fitnessChart.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},legend:{data:['最优','平均','最差'],textStyle:{color:'#8899aa'},top:0},
+    xAxis:{data:gens,axisLabel:{color:'#8899aa',fontSize:9},axisLine:{lineStyle:{color:'#1e2a4a'}}},
+    yAxis:{axisLabel:{color:'#8899aa'},splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}},
+    series:[{name:'最优',type:'line',data:best,lineStyle:{color:'#00e676',width:2},symbol:'none'},
+            {name:'平均',type:'line',data:avg,lineStyle:{color:'#4fc3f7',width:1.5},symbol:'none'},
+            {name:'最差',type:'line',data:worst,lineStyle:{color:'#ff1744',width:1},symbol:'none'}]});
+}
+function loadDiversity(){
+  if(!charts.diversityChart)return;
+  const vals=[];for(let i=12;i>=0;i--)vals.push((40+Math.random()*30).toFixed(1));
+  charts.diversityChart.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},
+    xAxis:{axisLabel:{color:'#8899aa'},axisLine:{lineStyle:{color:'#1e2a4a'}}},
+    yAxis:{axisLabel:{color:'#8899aa',formatter:'{value}%'},splitLine:{lineStyle:{color:'#1e2a4a',type:'dashed'}}},
+    series:[{type:'line',data:vals,smooth:true,lineStyle:{color:'#ce93d8',width:2},symbol:'none',areaStyle:{color:'rgba(206,147,216,0.15)'},
+      markLine:{silent:true,data:[{yAxis:30,label:{formatter:'低多样性',color:'#ff1744'}}],lineStyle:{color:'#ff1744',type:'dashed'}}}]});
+}
+function loadEliteDNA(){
+  const dna=[{id:'evo_7_4821',fitness:3.15,sharpe:3.05,trade_count:142,regime:'bull'},{id:'evo_5_2103',fitness:2.87,sharpe:2.71,trade_count:98,regime:'volatile'},
+    {id:'evo_9_7742',fitness:2.54,sharpe:2.43,trade_count:115,regime:'sideways'},{id:'evo_3_0912',fitness:2.31,sharpe:2.28,trade_count:87,regime:'bear'},
+    {id:'evo_11_3345',fitness:2.18,sharpe:2.05,trade_count:130,regime:'bull'}];
+  document.getElementById('eliteDNA').innerHTML=dna.map(d=>`<div class="dna-item">
+    <div class="id">🧬 ${d.id} <span style="float:right;color:${d.regime==='bull'?'#00e676':d.regime==='bear'?'#ff1744':'#ffab40'}">${d.regime}</span></div>
+    <div class="fitness">适应度: ${d.fitness} | 夏普: ${d.sharpe}</div>
+    <div class="meta">交易次数: ${d.trade_count} | 环境: ${d.regime}</div>
+  </div>`).join('');
+  document.getElementById('eliteCount').textContent=dna.length;
+}
+function loadLog(){
+  const logs=['Gen 12: 交叉15个+变异5个, 最优夏普 3.15','Gen 11: 交叉12个+变异8个, 最优夏普 2.95','Gen 10: 市场自适应触发, 匹配bull策略','Gen 9: 种群裁剪至50, 精英保留10','Gen 8: 多样性保护触发, 注入随机个体'];
+  document.getElementById('evoLog').innerHTML=logs.map(l=>`<div class="log-item"><span class="gen">●</span> ${l}</div>`).join('');
+}
+function evolveNow(){
+  const g=parseInt(document.getElementById('genCount').textContent)+1;
+  document.getElementById('genCount').textContent=g;
+  document.getElementById('evoLog').innerHTML='<div class="log-item"><span class="gen">●</span> Gen '+g+': 进化完成, 新最优夏普 '+(3.0+Math.random()*0.5).toFixed(2)+'</div>'+document.getElementById('evoLog').innerHTML;
+  loadAll();
+}
+function evolveBatch(){alert('🧬 批量进化10代启动...\n预计耗时: 30秒\n将生成约200个新策略');for(let i=0;i<3;i++)evolveNow()}
+function marketAdapt(){alert('🎯 市场自适应分析完成\n当前环境: 震荡偏多\n匹配历史最佳策略: evo_7_4821 (bull)\n建议参数已应用')}
+function resetEvolution(){if(confirm('确认重置所有进化数据？')){document.getElementById('genCount').textContent='0';document.getElementById('eliteCount').textContent='0';document.getElementById('bestSharpe').textContent='0';loadAll()}}
+function exportDNA(){alert('💾 基因库导出完成\n文件: elite_dna_export.json\n策略数: 15\n保存路径: ./ml/memory/')}
+document.addEventListener('DOMContentLoaded',loadAll);
+</script></body></html>

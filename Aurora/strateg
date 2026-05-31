@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""PPO 100K timesteps training script for Smart Rotate strategy."""
+
+import sys, logging, warnings
+sys.path.insert(0, ".")
+
+# Suppress PerformanceWarning noise
+warnings.filterwarnings("ignore", category=UserWarning)
+import pandas as pd
+pd.set_option("mode.chained_assignment", None)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+from strategies.smart_rotate_ppo.strategy import SmartRotatePPOStrategy
+
+cfg = {
+    "total_timesteps": 100_000,
+    "n_steps": 2048,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 3e-4,
+    "ent_coef": 0.01,
+    "use_real_data": False,       # 模拟数据先跑通
+    "synthetic_data_length": 5000,
+    "eval_freq": 10_000,
+    "save_path": "ppo_smart_rotate_100k.zip",
+}
+
+print("=" * 60)
+print("PPO 100K Timesteps Training")
+print("=" * 60)
+
+strategy = SmartRotatePPOStrategy(cfg)
+strategy.train(progress_bar=True)
+
+print("=" * 60)
+print("Training Complete!")
+print("=" * 60)

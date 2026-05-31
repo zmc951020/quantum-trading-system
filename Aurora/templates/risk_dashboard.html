@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金融级风控仪表盘 · Aurora A股量化交易系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root { --bg-deep: #0d1320; --bg-card: #1a2233; --accent-cyan: #00e0d6; --accent-blue: #5a8dff; --accent-purple: #8b70ff; --accent-red: #ff5252; --accent-orange: #ff9100; --accent-green: #4ade80; --text-primary: #ffffff; --text-secondary: #bcc5d0; --border-subtle: rgba(255,255,255,0.16); }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:var(--bg-deep); font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif; color:var(--text-primary); min-height:100vh; overflow-x:hidden; }
+        .grid-bg { position:fixed; top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none; background-image:linear-gradient(rgba(74,125,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(74,125,255,0.02) 1px,transparent 1px); background-size:60px 60px; animation:gridDrift 25s linear infinite; }
+        @keyframes gridDrift { 0%{background-position:0 0} 100%{background-position:60px 60px} }
+        .nav-bar { position:sticky;top:0;z-index:100;background:rgba(13,19,32,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border-subtle);padding:12px 28px;display:flex;align-items:center;justify-content:space-between; }
+        .nav-brand { font-size:1.15rem;font-weight:700;color:var(--accent-cyan);letter-spacing:1px; }
+        .nav-brand span { color:var(--accent-blue); }
+        .nav-links { display:flex;gap:4px; }
+        .nav-link { padding:8px 18px;border-radius:10px;font-size:13px;font-weight:500;color:var(--text-secondary);text-decoration:none;transition:all 0.25s; }
+        .nav-link:hover,.nav-link.active { color:var(--accent-cyan);background:rgba(0,224,214,0.06); }
+        .container-fluid { position:relative;z-index:2;padding:20px 28px; }
+        .page-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px; }
+        .page-title { font-size:1.4rem;font-weight:700; }
+        .live-badge { font-size:12px;padding:4px 14px;border-radius:20px;background:rgba(0,224,214,0.1);color:var(--accent-cyan);border:1px solid rgba(0,224,214,0.25);display:inline-flex;align-items:center;gap:6px; }
+        .live-dot { width:7px;height:7px;border-radius:50%;background:var(--accent-cyan);animation:pulse 1.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .status-bar { display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px; }
+        .status-chip { background:linear-gradient(145deg,rgba(26,34,51,0.95),rgba(21,29,45,0.95));border:1px solid var(--border-subtle);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:all 0.3s; }
+        .status-chip:hover { border-color:rgba(0,224,214,0.35);transform:translateY(-2px); }
+        .chip-safe .status-icon { color:var(--accent-green); }
+        .chip-warn .status-icon { color:var(--accent-orange); }
+        .chip-danger .status-icon { color:var(--accent-red); }
+        .chip-info .status-icon { color:var(--accent-cyan); }
+        .status-icon { font-size:2rem;width:50px;height:50px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:rgba(255,255,255,0.03); }
+        .chip-label { font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px; }
+        .chip-value { font-size:1.1rem;font-weight:700; }
+        .chip-sub { font-size:11px;color:var(--text-secondary); }
+        .card { background:linear-gradient(145deg,rgba(26,34,51,0.96),rgba(21,29,45,0.96));border:1px solid var(--border-subtle);border-radius:16px;backdrop-filter:blur(20px);margin-bottom:20px;box-shadow:0 6px 24px rgba(0,0,0,0.3);position:relative; }
+        .card::before { content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,224,214,0.3),rgba(90,141,255,0.3),transparent);border-radius:16px 16px 0 0; }
+        .card-header { padding:14px 22px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02); }
+        .card-header h5 { font-size:1rem;font-weight:600;margin:0;display:flex;align-items:center;gap:8px; }
+        .card-body { padding:16px 22px; }
+        .rule-row { display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;margin-bottom:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);transition:all 0.2s; }
+        .rule-row:hover { background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.1); }
+        .rule-name { font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px; }
+        .rule-pass { color:var(--accent-green);font-weight:600;font-size:13px; }
+        .rule-fail { color:var(--accent-red);font-weight:600;font-size:13px; }
+        .rule-warn { color:var(--accent-orange);font-weight:600;font-size:13px; }
+        .table-dk { width:100%;font-size:12px;border-collapse:collapse; }
+        .table-dk th { text-align:left;padding:9px 12px;font-size:11px;color:var(--text-secondary);border-bottom:1px solid var(--border-subtle);text-transform:uppercase; }
+        .table-dk td { padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px; }
+        .table-dk tr:hover td { background:rgba(255,255,255,0.02); }
+        .s-dot { width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px; }
+        .s-dot.g { background:var(--accent-green);box-shadow:0 0 8px var(--accent-green); }
+        .s-dot.r { background:var(--accent-red);box-shadow:0 0 8px var(--accent-red); }
+        .s-dot.o { background:var(--accent-orange);box-shadow:0 0 8px var(--accent-orange); }
+        .s-dot.w { background:#555; }
+        .prog { height:6px;border-radius:3px;background:rgba(255,255,255,0.05);overflow:hidden; }
+        .prog-f { height:100%;border-radius:3px;transition:width 0.6s; }
+        .prog-g { background:var(--accent-green); } .prog-r { background:var(--accent-red); } .prog-o { background:var(--accent-orange); } .prog-c { background:var(--accent-cyan); }
+        .btn-e { padding:10px 20px;border-radius:12px;font-weight:700;font-size:13px;border:2px solid var(--accent-red);color:var(--accent-red);background:rgba(255,82,82,0.08);cursor:pointer;letter-spacing:1px;transition:all 0.3s; }
+        .btn-e:hover { background:rgba(255,82,82,0.2);box-shadow:0 0 30px rgba(255,82,82,0.25); }
+        .btn-a { padding:7px 16px;border-radius:10px;font-size:12px;font-weight:600;border:1px solid var(--border-subtle);background:rgba(255,255,255,0.04);color:var(--text-primary);cursor:pointer;transition:all 0.25s; }
+        .btn-a:hover { border-color:var(--accent-cyan);color:var(--accent-cyan); }
+        .btn-a.db { border-color:var(--accent-red);color:var(--accent-red); }
+        .btn-a.db:hover { background:rgba(255,82,82,0.1); }
+        .audit-log { font-family:'Consolas','Monaco',monospace;background:rgba(12,18,28,0.9);border:1px solid var(--border-subtle);border-radius:10px;padding:14px;max-height:280px;overflow-y:auto;font-size:11px;line-height:1.7;color:var(--text-secondary); }
+        .log-w { color:var(--accent-orange); } .log-e { color:var(--accent-red); } .log-i { color:var(--accent-cyan); } .log-s { color:var(--accent-green); }
+    </style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<nav class="nav-bar">
+    <div class="nav-brand">⚡ AURORA <span>风控中心</span></div>
+    <div class="nav-links">
+        <a href="/dashboard" class="nav-link">仪表盘</a>
+        <a href="/security-monitor" class="nav-link">安全监控</a>
+        <a href="/risk-dashboard" class="nav-link active">风控仪表盘</a>
+        <a href="/maintenance" class="nav-link">系统维护</a>
+    </div>
+    <div class="live-badge"><span class="live-dot"></span>实时监控中</div>
+</nav>
+<div class="container-fluid">
+    <div class="page-header">
+        <div class="page-title">金融级风控仪表盘 <small style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px;">A股实盘风控标准 v2.0</small></div>
+        <div style="font-size:12px;color:var(--text-secondary);" id="refreshTime">最后刷新: --</div>
+    </div>
+
+    <!-- 总览状态 -->
+    <div class="status-bar">
+        <div class="status-chip chip-info" id="chip-comp">
+            <div class="status-icon"><i class="bi bi-clock-history"></i></div>
+            <div><div class="chip-label">A股规则合规</div><div class="chip-value" id="val-comp">--</div><div class="chip-sub" id="sub-comp">加载中...</div></div>
+        </div>
+        <div class="status-chip chip-info" id="chip-brk">
+            <div class="status-icon"><i class="bi bi-lightning-charge"></i></div>
+            <div><div class="chip-label">熔断状态</div><div class="chip-value" id="val-brk">--</div><div class="chip-sub" id="sub-brk">加载中...</div></div>
+        </div>
+        <div class="status-chip chip-info" id="chip-sec">
+            <div class="status-icon"><i class="bi bi-shield-shaded"></i></div>
+            <div><div class="chip-label">安全等级</div><div class="chip-value" id="val-sec">--</div><div class="chip-sub" id="sub-sec">加载中...</div></div>
+        </div>
+        <div class="status-chip chip-info" id="chip-hlt">
+            <div class="status-icon"><i class="bi bi-heart-pulse"></i></div>
+            <div><div class="chip-label">系统健康</div><div class="chip-value" id="val-hlt">--</div><div class="chip-sub" id="sub-hlt">加载中...</div></div>
+        </div>
+        <div class="status-chip chip-info" id="chip-ord">
+            <div class="status-icon"><i class="bi bi-cart-check"></i></div>
+            <div><div class="chip-label">订单状态</div><div class="chip-value" id="val-ord">--</div><div class="chip-sub" id="sub-ord">加载中...</div></div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <!-- A股规则检查 -->
+            <div class="card">
+                <div class="card-header"><h5><i class="bi bi-flag-fill" style="color:var(--accent-red);"></i>A股交易规则适配</h5><span style="font-size:11px;color:var(--text-secondary);">T+1 · 涨跌停 · 停牌 · 集合竞价 · 手数</span></div>
+                <div class="card-body" id="rulesPanel"></div>
+            </div>
+            <!-- 硬风控面板 -->
+            <div class="card">
+                <div class="card-header"><h5><i class="bi bi-exclamation-triangle-fill" style="color:var(--accent-orange);"></i>独立硬风控（事前·事中·事后）</h5><span style="font-size:11px;color:var(--text-secondary);">三层风控体系</span></div>
+                <div class="card-body" id="riskPanel">
+                    <table class="table-dk"><thead><tr><th>层级</th><th>检查项</th><th>状态</th><th>阈值</th><th>当前值</th></tr></thead><tbody id="riskTbody"><tr><td colspan="5" style="text-align:center;color:var(--text-secondary);">加载中...</td></tr></tbody></table>
+                    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn-e" id="btnLiq" onclick="doLiquidate()"><i class="bi bi-exclamation-triangle"></i>一键清仓</button>
+                        <button class="btn-a db" onclick="doResetBreaker()">重置熔断</button>
+                        <button class="btn-a" id="btnPause" onclick="doPause()">暂停全部交易</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <!-- 订单管理 -->
+            <div class="card">
+                <div class="card-header"><h5><i class="bi bi-receipt" style="color:var(--accent-blue);"></i>订单管理中心</h5><span style="font-size:11px;color:var(--text-secondary);">幂等性·超时·废单风暴</span></div>
+                <div class="card-body">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                        <div style="background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(255,255,255,0.06);"><div style="font-size:10px;color:var(--text-secondary);">今日订单</div><div style="font-size:1.3rem;font-weight:700;" id="ordTotal">--</div></div>
+                        <div style="background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(255,255,255,0.06);"><div style="font-size:10px;color:var(--text-secondary);">废单/重复</div><div style="font-size:1.3rem;font-weight:700;" id="ordReject">--</div></div>
+                        <div style="background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(255,255,255,0.06);"><div style="font-size:10px;color:var(--text-secondary);">幂等拦截</div><div style="font-size:1.3rem;font-weight:700;" id="ordIdem">--</div></div>
+                        <div style="background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(255,255,255,0.06);"><div style="font-size:10px;color:var(--text-secondary);">超时</div><div style="font-size:1.3rem;font-weight:700;" id="ordTimeout">--</div></div>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">废单风暴指标</div>
+                    <div style="display:flex;align-items:center;gap:10px;"><div class="prog" style="flex:1;"><div class="prog-f prog-o" id="rejProg" style="width:0%;"></div></div><span style="font-size:11px;font-weight:600;" id="rejPct">0%</span></div>
+                    <div style="font-size:10px;color:var(--text-secondary);margin-top:4px;" id="rejDetail">连续废单: 0 / 阈值: 5</div>
+                </div>
+            </div>
+            <!-- 安全审计 -->
+            <div class="card">
+                <div class="card-header"><h5><i class="bi bi-key-fill" style="color:var(--accent-purple);"></i>安全审计</h5><span style="font-size:11px;color:var(--text-secondary);">密钥·脱敏·审计</span></div>
+                <div class="card-body">
+                    <table class="table-dk"><thead><tr><th>检查项</th><th>状态</th><th>详情</th></tr></thead><tbody id="secTbody"><tr><td colspan="3" style="text-align:center;color:var(--text-secondary);">加载中...</td></tr></tbody></table>
+                </div>
+            </div>
+            <!-- 容灾 -->
+            <div class="card">
+                <div class="card-header"><h5><i class="bi bi-cloud-lightning-rain" style="color:var(--accent-cyan);"></i>容灾与自愈</h5><span style="font-size:11px;color:var(--text-secondary);">Watchdog·停机·心跳</span></div>
+                <div class="card-body" id="resPanel"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 审计日志 -->
+    <div class="card" style="margin-top:20px;">
+        <div class="card-header"><h5><i class="bi bi-journal-text" style="color:var(--accent-cyan);"></i>审计事件日志</h5><button class="btn-a" onclick="clearLogs()">清空</button></div>
+        <div class="card-body"><div class="audit-log" id="auditLog"><span class="log-i">[系统] 风控仪表盘已就绪，等待数据...</span></div></div>
+    </div>
+</div>
+
+<script>
+// ==================== 核心逻辑 ====================
+const POLL_MS = 3000;
+let paused = false, logLines = [];
+
+function addLog(lv, msg) {
+    const t = new Date().toLocaleTimeString('zh-CN');
+    const cls = {error:'log-e',warn:'log-w',success:'log-s',info:'log-i'}[lv] || 'log-i';
+    logLines.push(`<span class="${cls}">[${t}] ${msg}</span>`);
+    if (logLines.length > 50) logLines.shift();
+    document.getElementById('auditLog').innerHTML = logLines.join('<br>');
+}
+function clearLogs() { logLines = []; document.getElementById('auditLog').innerHTML = '<span class="log-i">[系统] 日志已清空</span>'; }
+
+async function refresh() {
+    try {
+        const r = await fetch('/api/risk-dashboard/status');
+        const d = await r.json();
+        if (!d) return;
+        renderSummary(d.summary || {});
+        renderRules(d.a_share_rules || []);
+        renderRisk(d.risk || {});
+        renderOrders(d.order_mgmt || {});
+        renderSecurity(d.security || {});
+        renderResilience(d.resilience || {});
+        document.getElementById('refreshTime').textContent = '最后刷新: ' + new Date().toLocaleTimeString('zh-CN');
+    } catch (e) { addLog('error', '数据获取失败: ' + e.message); }
+}
+
+function renderSummary(s) {
+    const pass = s.a_share_pass || 0, total = s.a_share_total || 7;
+    const allP = pass >= total;
+    setChip('comp', allP ? 'chip-safe' : 'chip-warn', allP ? '✓ 全部合规' : pass+'/'+total+' 合规', allP ? '所有A股规则通过' : (total-pass)+'项未达标');
+
+    const brk = s.breaker_triggered;
+    setChip('brk', brk ? 'chip-danger' : 'chip-safe', brk ? '⚠ 已触发' : '✓ 正常', s.breaker_reason || '运行正常');
+
+    const secI = s.security_issues || 0;
+    setChip('sec', secI===0?'chip-safe':'chip-danger', secI===0?'A级':(secI<=2?'B级':'C级')+'·'+secI+'项问题', secI===0?'无安全漏洞':'存在密钥/日志风险');
+
+    setChip('hlt', s.system_healthy?'chip-safe':'chip-danger', s.system_healthy?'✓ 健康':'⚠ 异常', 'Watchdog:'+(s.watchdog_active?'运行':'停止')+' 心跳:'+(s.health_pulse_active?'运行':'停止'));
+
+    setChip('ord', s.order_system_ok?'chip-safe':'chip-danger', s.order_system_ok?'✓ 正常':'⚠ 异常', s.order_system_ok?'订单系统运行正常':'废单风暴或超时');
+    document.getElementById('btnLiq').disabled = !s.breaker_triggered && !s.system_healthy;
+}
+function setChip(id, cls, val, sub) {
+    const c = document.getElementById('chip-'+id);
+    if (c) c.className = 'status-chip '+cls;
+    const ve = document.getElementById('val-'+id);
+    if (ve) ve.textContent = val;
+    const se = document.getElementById('sub-'+id);
+    if (se) se.textContent = sub;
+}
+
+function renderRules(rules) {
+    const map = {
+        'T+1 卖出限制': 'T1',
+        '涨跌停价拦截': 'PRICE_LIMIT',
+        '停牌检查': 'SUSPEND',
+        '集合竞价时间窗': 'AUCTION',
+        '交易单位(手数/零股)': 'LOT',
+        '科创板/创业板权限': 'BOARD',
+        '交易日历': 'CALENDAR'
+    };
+    let h = '';
+    for (const [name, key] of Object.entries(map)) {
+        const rule = rules.find(r => r.check_key === key) || {};
+        const ok = rule.status === 'pass';
+        const dot = ok ? 'g' : (rule.status === 'fail' ? 'r' : 'o');
+        const cls = ok ? 'rule-pass' : (rule.status === 'fail' ? 'rule-fail' : 'rule-warn');
+        h += `<div class="rule-row"><span class="rule-name"><span class="s-dot ${dot}"></span>${name}</span><span class="${cls}">${rule.status_label || '未实现'}</span></div>`;
+    }
+    document.getElementById('rulesPanel').innerHTML = h || '<div style="color:var(--text-secondary)">无规则数据</div>';
+}
+
+function renderRisk(r) {
+    const checks = r.checks || [];
+    if (!checks.length) { document.getElementById('riskTbody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);">无风控数据</td></tr>'; return; }
+    let h = '';
+    checks.forEach(c => {
+        const ok = c.status === 'pass';
+        h += `<tr><td>${c.layer || '-'}</td><td>${c.name || '-'}</td>`
+           + `<td><span class="s-dot ${ok?'g':'r'}"></span>${ok?'通过':'触发'}</td>`
+           + `<td>${c.threshold || '-'}</td><td>${c.current_value || '-'}</td></tr>`;
+    });
+    document.getElementById('riskTbody').innerHTML = h;
+    if (r.breaker_active) addLog('warn', '熔断已触发: ' + (r.breaker_reason || '未知原因'));
+    if (r.auto_liquidate) addLog('error', '自动清仓已执行！');
+}
+
+function renderOrders(o) {
+    document.getElementById('ordTotal').textContent = o.today_total || 0;
+    document.getElementById('ordReject').textContent = o.rejected || 0;
+    document.getElementById('ordIdem').textContent = o.idempotent || 0;
+    document.getElementById('ordTimeout').textContent = o.timeout || 0;
+    const rejPct = Math.min(100, ((o.storm_count || 0) / 5) * 100);
+    document.getElementById('rejProg').style.width = rejPct + '%';
+    document.getElementById('rejPct').textContent = Math.round(rejPct) + '%';
+    document.getElementById('rejDetail').textContent = '连续废单: ' + (o.storm_count || 0) + ' / 阈值: 5';
+    if (rejPct >= 80) addLog('warn', '废单风暴预警: 连续废单 ' + (o.storm_count || 0) + ' 次');
+}
+
+function renderSecurity(s) {
+    const items = [
+        {k:'api_key_check', n:'API密钥硬编码扫描'},
+        {k:'log_masking', n:'日志脱敏检查'},
+        {k:'env_file_check', n:'.env文件保护'},
+        {k:'git_secrets', n:'Git历史密钥泄露'},
+        {k:'secret_key_rotation', n:'SECRET_KEY复杂性'},
+        {k:'memory_safety', n:'内存密钥残留'},
+        {k:'access_audit', n:'访问审计追踪'}
+    ];
+    let h = '';
+    items.forEach(it => {
+        const detail = (s.checks || []).find(c => c.check_key === it.k) || {};
+        const ok = detail.status === 'pass';
+        h += `<tr><td>${it.n}</td><td><span class="s-dot ${ok?'g':'r'}"></span>${ok?'安全':'风险'}</td><td style="font-size:11px;">${detail.detail || '-'}</td></tr>`;
+    });
+    document.getElementById('secTbody').innerHTML = h;
+}
+
+function renderResilience(r) {
+    const items = [
+        {k:'watchdog', n:'Watchdog守护进程'},
+        {k:'graceful_shutdown', n:'优雅停机'},
+        {k:'health_pulse', n:'健康心跳'},
+        {k:'snapshot', n:'停机快照'}
+    ];
+    let h = '';
+    items.forEach(it => {
+        const d = (r.checks || []).find(c => c.check_key === it.k) || {};
+        const ok = d.status === 'pass';
+        const dot = ok ? 'g' : (d.status === 'fail' ? 'r' : 'w');
+        const cls = ok ? 'rule-pass' : (d.status === 'fail' ? 'rule-fail' : 'rule-warn');
+        h += `<div class="rule-row"><span class="rule-name"><span class="s-dot ${dot}"></span>${it.n}</span><span class="${cls}">${d.status_label || '未实现'}</span></div>`;
+    });
+    document.getElementById('resPanel').innerHTML = h;
+}
+
+// ==================== 操作按钮 ====================
+async function doLiquidate() {
+    if (!confirm('确认执行一键清仓？此操作将立即平掉所有持仓！')) return;
+    try {
+        const r = await fetch('/api/risk-dashboard/liquidate', {method:'POST'});
+        const d = await r.json();
+        addLog(d.success ? 'success' : 'error', d.message || '清仓完成');
+    } catch (e) { addLog('error', '清仓请求失败: ' + e.message); }
+}
+async function doResetBreaker() {
+    if (!confirm('确认重置熔断状态？')) return;
+    try {
+        const r = await fetch('/api/risk-dashboard/reset-breaker', {method:'POST'});
+        const d = await r.json();
+        addLog(d.success ? 'success' : 'error', d.message || '熔断已重置');
+    } catch (e) { addLog('error', '重置失败: ' + e.message); }
+}
+async function doPause() {
+    paused = !paused;
+    try {
+        const r = await fetch('/api/risk-dashboard/pause', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({paused})});
+        const d = await r.json();
+        addLog('warn', paused ? '全部交易已暂停' : '交易已恢复');
+        document.getElementById('btnPause').innerHTML = paused ? '恢复全部交易' : '暂停全部交易';
+    } catch (e) { addLog('error', '操作失败: ' + e.message); }
+}
+
+// ==================== 启动 ====================
+refresh();
+setInterval(refresh, POLL_MS);
+addLog('info', '风控仪表盘初始化完成，每'+(POLL_MS/1000)+'秒刷新');
+</script>
+</body>
+</html>

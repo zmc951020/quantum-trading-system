@@ -67,10 +67,12 @@ class XbkApiClient:
     # 失败计数和退避控制
     _request_fail_count = 0
     _last_fail_log_time = 0
+    _circuit_open = False          # 熔断器：连续失败过多时断开
+    _circuit_open_until = 0        # 熔断器恢复时间戳
 
     def _request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
         """
-        发送API请求
+        发送API请求（指数退避+熔断器）
 
         Args:
             method: HTTP方法
@@ -82,6 +84,20 @@ class XbkApiClient:
         """
         if data is None:
             data = {}
+
+        # 熔断器检查：连续失败超过阈值则快速失败
+        now = time.time()
+        if XbkApiClient._circuit_open:
+            if now < XbkApiClient._circuit_open_until:
+                if (XbkApiClient._request_fail_count <= 1 or 
+                    now - XbkApiClient._last_fail_log_time >= 30):
+                    wait_remaining = int(XbkApiClient._circuit_open_until - now)
+                    print(f"[XBK] 熔断器开启，{wait_remaining}秒后重试 (连续失败{XbkApiClient._request_fail_count}次)")
+                    XbkApiClient._last_fail_log_time = now
+                return {'code': -1, 'msg': f'circuit_breaker_open ({wait_remaining}s remaining)', 'data': None}
+            else:
+                XbkApiClient._circuit_open = False
+                print("[XBK] 熔断器恢复，重新尝试连接")
 
         timestamp = str(int(time.time() * 1000))
         signature = self._generate_signature(timestamp, data)
@@ -100,18 +116,25 @@ class XbkApiClient:
                 response = self.session.post(url, json=data, headers=headers, timeout=5)
 
             response.raise_for_status()
-            # 成功后重置失败计数
+            # 成功后重置失败计数和熔断器
             XbkApiClient._request_fail_count = 0
+            XbkApiClient._circuit_open = False
             return response.json()
         except requests.RequestException as e:
             XbkApiClient._request_fail_count += 1
-            now = time.time()
-            # 控制日志频率：首次失败立即打印，之后每10秒或每10次打印一次
+            # 指数退避日志控制：1s, 2s, 4s, 8s, 16s, 32s, 64s...
+            backoff = min(2 ** min(XbkApiClient._request_fail_count - 1, 10), 300)
             if (XbkApiClient._request_fail_count <= 1 or 
-                now - XbkApiClient._last_fail_log_time >= 10 or 
-                XbkApiClient._request_fail_count % 10 == 0):
-                print(f"API请求失败(第{XbkApiClient._request_fail_count}次): {e}")
+                now - XbkApiClient._last_fail_log_time >= backoff):
+                print(f"[XBK] API请求失败(第{XbkApiClient._request_fail_count}次, 退避{backoff}s): {e}")
                 XbkApiClient._last_fail_log_time = now
+            
+            # 连续失败>=5次触发熔断器（5分钟内不再尝试）
+            if XbkApiClient._request_fail_count >= 5 and not XbkApiClient._circuit_open:
+                XbkApiClient._circuit_open = True
+                XbkApiClient._circuit_open_until = now + 300  # 5分钟
+                print(f"[XBK] ⚡ 熔断器触发！5分钟内不再尝试连接（连续失败{XbkApiClient._request_fail_count}次）")
+            
             return {'code': -1, 'msg': str(e), 'data': None}
 
 
@@ -374,7 +397,8 @@ class XbkDataFeed:
             })
             
             # 减去1分钟
-            timestamp = timestamp.replace(minute=timestamp.minute - 1)
+            from datetime import timedelta
+            timestamp = timestamp - timedelta(minutes=1)
         
         return klines[::-1]  # 反转顺序，最新的在最后
 

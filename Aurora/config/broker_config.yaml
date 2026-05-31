@@ -1,0 +1,106 @@
+# Aurora量化交易系统 — 券商配置
+# 支持多券商动态切换：西部宽客(XBK)、中泰证券(ZhongTai)、模拟券商
+
+brokers:
+
+  # ── 西部宽客（XBK） ────────────────────────────────
+  xbk:
+    enabled: true
+    adapter: "xbk_adapter.XbkAdapter"
+    simulated: true           # true=模拟模式，false=真实API
+    account_id: "XBK_MAIN"
+    initial_balance: 2000000.0
+    # 真实API参数（simulated=false时需填写）
+    api_key: ""
+    api_secret: ""
+    api_url: "https://api.xbk.com/v2"
+
+  # ── 中泰证券 ────────────────────────────────────────
+  zhongtai:
+    enabled: true
+    adapter: "adapters.zhongtai_adapter.ZhongTaiAdapter"
+    simulated: true
+    account_id: "ZT_DEFAULT"
+    initial_balance: 1000000.0
+    # 真实API参数
+    app_key: ""
+    app_secret: ""
+    api_url: ""
+
+  # ── 模拟券商（始终可用，用于回测/演示） ──────────────
+  simulated:
+    enabled: true
+    adapter: "xbk_adapter.XbkAdapter"
+    simulated: true
+    account_id: "SIM_DEMO"
+    initial_balance: 500000.0
+
+# ── 默认活跃券商 ──────────────────────────────────────
+default_broker: "xbk"
+
+# ── 股票池配置 ────────────────────────────────────────
+stock_pool:
+  # 初始候选股票
+  initial_candidates:
+    - "600519.SH"   # 贵州茅台
+    - "000858.SZ"   # 五粮液
+    - "300750.SZ"   # 宁德时代
+    - "002415.SZ"   # 海康威视
+    - "600036.SH"   # 招商银行
+    - "603259.SH"   # 药明康德
+    - "000725.SZ"   # 京东方A
+    - "002475.SZ"   # 立讯精密
+    - "601318.SH"   # 中国平安
+    - "000333.SZ"   # 美的集团
+    - "600276.SH"   # 恒瑞医药
+    - "002594.SZ"   # 比亚迪
+    - "688981.SH"   # 中芯国际
+    - "300059.SZ"   # 东方财富
+    - "601012.SH"   # 隆基绿能
+
+  # 黑名单（ST股、风险股等）
+  blacklist: []
+
+  # 精选池（从候选池手动或通过技术分析提升）
+  initial_selected: []
+
+# ── 技术分析桥接配置 ──────────────────────────────────
+analysis:
+  # 扫描线程数
+  max_workers: 8
+
+  # 评分阈值
+  min_score: 50.0
+
+  # 默认返回Top N
+  top_n: 10
+
+  # 评分权重（总和应为100）
+  weights:
+    trend: 25       # 趋势指标
+    momentum: 25    # 动量指标
+    volume: 20      # 成交量
+    volatility: 15  # 波动率
+    pattern: 15     # 形态识别
+
+  # K线获取参数
+  kline:
+    interval: "1d"
+    limit: 200      # 获取最近200个交易日
+
+# ── 交易参数 ──────────────────────────────────────────
+trading:
+  # 单只股票最大仓位比例（占可用资金）
+  max_position_pct: 0.15
+
+  # 买入信号最低评分
+  buy_min_score: 60
+
+  # 卖出信号最高评分
+  sell_max_score: 40
+
+  # 风控参数
+  risk:
+    max_daily_trades: 20
+    max_daily_loss_pct: 0.05
+    stop_loss_pct: 0.08

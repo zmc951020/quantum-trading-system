@@ -17,3 +17,25 @@ env/
 # 5. 编辑器的本地配置，不用上传
 .idea/
 .vscode/
+
+# 6. 备份文件
+*.backup.*
+*.bak
+
+# 7. 工具缓存目录
+.cliner/
+.cl/
+
+# 8. pytest缓存
+.pytest_cache/
+.pytest_cache
+
+# 9. 数据目录（本地数据）
+data/
+*.db
+*.sqlite
+
+# 10. 临时文件
+*.tmp
+*.temp
+_
