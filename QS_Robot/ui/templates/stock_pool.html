@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票池智能管理系统</title>
+    <link rel="stylesheet" href="/static/css/stock_pool.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-icon">🤖</span>
+                <span class="logo-text">QS Robot</span>
+            </div>
+            <div class="nav-menu">
+                <a href="/dashboard" class="nav-link">🏠 首页</a>
+                <a href="/" class="nav-link">🤖 智能助手</a>
+                <a href="/stock_pool" class="nav-link active">📊 股票池</a>
+                <a href="#" class="nav-link disabled">📈 技术分析</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 页面标题和操作按钮 -->
+            <section class="page-header">
+                <div class="page-title">
+                    <span class="title-icon">📊</span>
+                    <span>股票池智能管理系统</span>
+                </div>
+                <div class="page-actions">
+                    <button id="btn-refresh" class="btn btn-primary">刷新数据</button>
+                    <button id="btn-run-pipeline" class="btn btn-success">运行筛选流程</button>
+                </div>
+            </section>
+
+            <!-- 统计卡片 -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-total">0</span>
+                        <span class="stat-label">总股票数</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-passed">0</span>
+                        <span class="stat-label">筛选通过</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🎯</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-matched">0</span>
+                        <span class="stat-label">策略匹配</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-final">0</span>
+                        <span class="stat-label">入选实盘</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 股票池分布 -->
+            <div class="section">
+                <div class="section-header">
+                    <h2>股票池分布</h2>
+                </div>
+                <div class="pool-distribution">
+                    <div class="pool-chart-container">
+                        <canvas id="poolChart"></canvas>
+                    </div>
+                    <div class="pool-list">
+                        <div class="pool-item" data-pool="candidate">
+                            <span class="pool-dot" style="background-color: #6366f1;"></span>
+                            <span class="pool-name">候选池</span>
+                            <span class="pool-count" id="pool-candidate">0</span>
+                        </div>
+                        <div class="pool-item" data-pool="classified">
+                            <span class="pool-dot" style="background-color: #f59e0b;"></span>
+                            <span class="pool-name">分类池</span>
+                            <span class="pool-count" id="pool-classified">0</span>
+                        </div>
+                        <div class="pool-item" data-pool="watchlist">
+                            <span class="pool-dot" style="background-color: #10b981;"></span>
+                            <span class="pool-name">监控池</span>
+                            <span class="pool-count" id="pool-watchlist">0</span>
+                        </div>
+                        <div class="pool-item" data-pool="adaptive">
+                            <span class="pool-dot" style="background-color: #8b5cf6;"></span>
+                            <span class="pool-name">策略适配池</span>
+                            <span class="pool-count" id="pool-adaptive">0</span>
+                        </div>
+                        <div class="pool-item" data-pool="trading">
+                            <span class="pool-dot" style="background-color: #ef4444;"></span>
+                            <span class="pool-name">实盘池</span>
+                            <span class="pool-count" id="pool-trading">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 双栏布局 -->
+            <div class="two-columns">
+                <!-- 模拟测试结果 -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>模拟测试结果</h2>
+                        <span class="section-subtitle">策略匹配与回测表现</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>股票</th>
+                                    <th>策略</th>
+                                    <th>收益率</th>
+                                    <th>夏普比率</th>
+                                    <th>最大回撤</th>
+                                    <th>胜率</th>
+                                    <th>评分</th>
+                                </tr>
+                            </thead>
+                            <tbody id="simulation-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 最终入选列表 -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>入选实盘池</h2>
+                        <span class="section-subtitle">综合评分Top股票</span>
+                    </div>
+                    <div class="final-list" id="final-list">
+                        <div class="empty-state">
+                            <span class="empty-icon">🔍</span>
+                            <span class="empty-text">暂无入选股票</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 策略分布 -->
+            <div class="section">
+                <div class="section-header">
+                    <h2>策略分布</h2>
+                    <span class="section-subtitle">各策略匹配数量</span>
+                </div>
+                <div class="strategy-chart-container">
+                    <canvas id="strategyChart"></canvas>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div id="loading-mask" class="loading-mask" style="display: none;">
+        <div class="loading-spinner"></div>
+        <span class="loading-text">正在运行筛选评估流程...</span>
+    </div>
+
+    <script src="/static/js/stock_pool.js"></script>
+</body>
+</html>

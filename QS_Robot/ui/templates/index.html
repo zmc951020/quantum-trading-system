@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QS Robot - 量化系统智能助手</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-icon">🤖</span>
+                <span class="logo-text">QS Robot</span>
+            </div>
+            <div class="nav-menu">
+                <a href="/dashboard" class="nav-link">🏠 首页</a>
+                <a href="/" class="nav-link active">🤖 智能助手</a>
+                <a href="/stock_pool" class="nav-link">📊 股票池</a>
+                <a href="#" class="nav-link disabled">📈 技术分析</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 悬浮球 -->
+    <div id="float-ball" class="float-ball">
+        <div class="avatar">🤖</div>
+        <div class="pulse"></div>
+    </div>
+
+    <!-- 侧边窗 -->
+    <div id="sidebar" class="sidebar">
+        <div class="header">
+            <div class="title">
+                <span>QS Robot</span>
+                <span class="subtitle">量化系统智能助手</span>
+            </div>
+            <div class="actions">
+                <button id="btn-minimize" title="最小化">_</button>
+                <button id="btn-close" title="关闭">×</button>
+            </div>
+        </div>
+
+        <div class="status-bar" id="status-bar">
+            <div class="status-item">
+                <span class="dot" id="llm-status-dot"></span>
+                <span id="llm-status">LLM: 检测中</span>
+            </div>
+            <div class="status-item">
+                <span class="dot" id="system-status-dot"></span>
+                <span id="system-status">系统: 检测中</span>
+            </div>
+        </div>
+
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="chat">💬 聊天</button>
+            <button class="tab-btn" data-tab="optimizer">⚡ 优化器</button>
+        </div>
+
+        <div class="tab-content active" id="tab-chat">
+            <div class="chat-container" id="chat-container">
+                <div class="message assistant">
+                    <div class="message-content">
+                        你好！我是QS Robot，你的量化系统智能助手。我可以帮你：
+                        <ul>
+                            <li>查询系统状态与策略信息</li>
+                            <li>优化策略参数</li>
+                            <li>运行回测与分析</li>
+                            <li>风控监控与预警</li>
+                        </ul>
+                        请问有什么可以帮你的？
+                    </div>
+                </div>
+            </div>
+
+            <div class="quick-actions">
+                <button class="quick-btn" data-query="系统状态">系统状态</button>
+                <button class="quick-btn" data-query="策略列表">策略列表</button>
+                <button class="quick-btn" data-query="优化策略">优化策略</button>
+                <button class="quick-btn" data-query="健康检查">健康检查</button>
+                <button class="quick-btn stock-pool-btn" onclick="window.location.href='/stock_pool'">📊 股票池</button>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <button class="icon-btn" id="btn-voice" title="语音输入">🎤</button>
+                    <input type="text" id="message-input" placeholder="输入问题或指令..." autocomplete="off">
+                    <button class="send-btn" id="btn-send">发送</button>
+                    <button class="icon-btn" id="btn-tts" title="语音播报">🔊</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="tab-optimizer">
+            <div class="optimizer-panel">
+                <div class="panel-title">⚡ 韬定律集群优化器</div>
+
+                <div class="form-group">
+                    <label>策略选择</label>
+                    <select id="opt-strategy">
+                        <option value="双均线策略">双均线策略</option>
+                        <option value="MACD策略">MACD策略</option>
+                        <option value="RSI策略">RSI策略</option>
+                        <option value="布林带策略">布林带策略</option>
+                        <option value="动量策略">动量策略</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>优化目标</label>
+                    <select id="opt-target">
+                        <option value="sharpe_ratio">夏普比率</option>
+                        <option value="total_return">总收益率</option>
+                        <option value="max_drawdown">最大回撤</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>粗筛点数</label>
+                        <input type="number" id="opt-coarse" value="30" min="5" max="200">
+                    </div>
+                    <div class="form-group">
+                        <label>精搜点数</label>
+                        <input type="number" id="opt-refined" value="50" min="10" max="500">
+                    </div>
+                </div>
+
+                <button class="optimize-btn" id="btn-optimize">🚀 运行韬定律集群优化</button>
+
+                <div class="optimizer-result" id="optimizer-result" style="display:none;">
+                    <div class="result-header">📊 优化结果</div>
+
+                    <div class="result-stats" id="result-stats"></div>
+
+                    <div class="result-section">
+                        <div class="section-title">最佳参数</div>
+                        <div class="result-params" id="result-params"></div>
+                    </div>
+
+                    <div class="result-section">
+                        <div class="section-title">评分指标</div>
+                        <div class="result-metrics" id="result-metrics"></div>
+                    </div>
+                </div>
+
+                <div class="optimizer-status" id="optimizer-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+    // === 标签切换 ===
+    document.addEventListener('DOMContentLoaded', () => {
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.getAttribute('data-tab');
+
+                tabBtns.forEach(b => b.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+
+                btn.classList.add('active');
+                document.getElementById('tab-' + target).classList.add('active');
+            });
+        });
+
+        // === 韬定律集群优化 ===
+        const btnOptimize = document.getElementById('btn-optimize');
+        const optStatus = document.getElementById('optimizer-status');
+        const optResult = document.getElementById('optimizer-result');
+
+        btnOptimize.addEventListener('click', async () => {
+            const strategy = document.getElementById('opt-strategy').value;
+            const target = document.getElementById('opt-target').value;
+            const coarse = parseInt(document.getElementById('opt-coarse').value);
+            const refined = parseInt(document.getElementById('opt-refined').value);
+
+            btnOptimize.disabled = true;
+            btnOptimize.textContent = '⏳ 优化中...';
+            optResult.style.display = 'none';
+            optStatus.textContent = '正在运行韬定律集群优化，请稍候...';
+            optStatus.className = 'optimizer-status running';
+
+            try {
+                const response = await fetch('/api/tau/optimize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        strategy: strategy,
+                        target: target,
+                        coarse_points: coarse,
+                        refined_points: refined
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    optStatus.textContent = '✅ 优化完成！';
+                    optStatus.className = 'optimizer-status success';
+                    displayOptimizeResult(result);
+                } else {
+                    optStatus.textContent = '❌ 优化失败：' + (result.error || '未知错误');
+                    optStatus.className = 'optimizer-status error';
+                }
+            } catch (error) {
+                optStatus.textContent = '❌ 网络错误：' + error.message;
+                optStatus.className = 'optimizer-status error';
+            } finally {
+                btnOptimize.disabled = false;
+                btnOptimize.textContent = '🚀 运行韬定律集群优化';
+            }
+        });
+
+        function displayOptimizeResult(result) {
+            optResult.style.display = 'block';
+
+            const data = result.data || result;
+
+            const stats = document.getElementById('result-stats');
+            stats.innerHTML = '';
+            if (data.total_evals !== undefined || data.coarse_count !== undefined) {
+                const statItems = [];
+                if (data.total_evals !== undefined) statItems.push({ label: '总评估次数', value: data.total_evals });
+                if (data.coarse_count !== undefined) statItems.push({ label: '粗筛点数', value: data.coarse_count });
+                if (data.refined_count !== undefined) statItems.push({ label: '精搜点数', value: data.refined_count });
+                if (data.cache_hits !== undefined) statItems.push({ label: '缓存命中', value: data.cache_hits });
+                if (data.elapsed_seconds !== undefined) statItems.push({ label: '耗时(秒)', value: data.elapsed_seconds.toFixed(2) });
+
+                stats.innerHTML = statItems.map(s =>
+                    `<div class="stat-item"><div class="stat-label">${s.label}</div><div class="stat-value">${s.value}</div></div>`
+                ).join('');
+            }
+
+            const paramsDiv = document.getElementById('result-params');
+            paramsDiv.innerHTML = '';
+            const bestParams = data.best_params || {};
+            for (const [key, val] of Object.entries(bestParams)) {
+                paramsDiv.innerHTML += `<div class="param-item"><span class="param-key">${key}</span><span class="param-value">${typeof val === 'number' ? val.toFixed(4) : val}</span></div>`;
+            }
+
+            const metricsDiv = document.getElementById('result-metrics');
+            metricsDiv.innerHTML = '';
+            const metrics = data.best_metrics || {};
+            for (const [key, val] of Object.entries(metrics)) {
+                const displayVal = typeof val === 'number' ? val.toFixed(4) : val;
+                metricsDiv.innerHTML += `<div class="metric-item"><span class="metric-key">${key}</span><span class="metric-value">${displayVal}</span></div>`;
+            }
+
+            if (paramsDiv.innerHTML === '') {
+                paramsDiv.innerHTML = '<div class="empty-text">暂无参数数据</div>';
+            }
+            if (metricsDiv.innerHTML === '') {
+                const score = data.best_score;
+                if (score !== undefined) {
+                    metricsDiv.innerHTML = `<div class="metric-item"><span class="metric-key">最佳评分</span><span class="metric-value">${typeof score === 'number' ? score.toFixed(4) : score}</span></div>`;
+                } else {
+                    metricsDiv.innerHTML = '<div class="empty-text">暂无评分数据</div>';
+                }
+            }
+        }
+    });
+    </script>
+</body>
+</html>
