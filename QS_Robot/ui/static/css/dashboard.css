@@ -86,6 +86,72 @@ body {
     color: #94a3b8;
 }
 
+/* 系统切换区域 */
+.system-switch-section {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+}
+
+.switch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.switch-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.current-system {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.current-system span {
+    color: #00d4ff;
+    font-weight: 600;
+}
+
+.switch-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.system-btn {
+    flex: 1;
+    padding: 14px 24px;
+    border: 2px solid rgba(148, 163, 184, 0.2);
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: transparent;
+    color: #94a3b8;
+}
+
+.system-btn:hover {
+    border-color: rgba(102, 126, 234, 0.5);
+    color: #e2e8f0;
+}
+
+.system-btn.active {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border-color: #667eea;
+    color: white;
+}
+
+.system-btn.active:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
 /* 主内容区 */
 .main-content {
     flex: 1;

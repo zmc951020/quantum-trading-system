@@ -30,6 +30,12 @@ class QSConfig:
                     "enabled": True,
                     "api_base": "http://localhost:11434",
                     "default_model": "qwen2.5-coder:1.5b"
+                },
+                "echobird": {
+                    "enabled": False,
+                    "api_base": "http://localhost:8080/v1",
+                    "default_model": "gpt-4o",
+                    "api_key": ""
                 }
             },
             "aurora_system": {

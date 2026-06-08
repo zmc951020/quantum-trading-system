@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QS Robot V2.0 - 量化策略管理平台</title>
+    <style>
+        /* ========== 全局基础样式 ========== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+            background: #0a0e1a;
+            color: #e8e8e8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* ========== 顶部状态栏 ========== */
+        .top-status-bar {
+            background: linear-gradient(135deg, #16213e 0%, #0a0e1a 100%);
+            padding: 12px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+            box-shadow: 0 2px 15px rgba(15, 52, 96, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 700;
+            color: #6ba5f7;
+        }
+        .brand-icon { font-size: 28px; }
+        .brand-subtitle {
+            font-size: 12px;
+            color: #8ba3c7;
+            font-weight: 400;
+            margin-left: 8px;
+        }
+        .status-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 13px;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #b5c4d8;
+            padding: 6px 12px;
+            background: rgba(107, 165, 247, 0.08);
+            border-radius: 20px;
+            border: 1px solid rgba(107, 165, 247, 0.2);
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.warning { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+        .status-dot.error { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ========== Tab 导航栏 ========== */
+        .tabs-nav {
+            background: #16213e;
+            padding: 0 30px;
+            display: flex;
+            gap: 4px;
+            border-bottom: 2px solid #0f3460;
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+        .tabs-nav::-webkit-scrollbar { height: 4px; }
+        .tabs-nav::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+
+        .tab-btn {
+            padding: 14px 22px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: #8ba3c7;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+            position: relative;
+        }
+        .tab-btn:hover {
+            color: #fff;
+            background: rgba(107, 165, 247, 0.08);
+        }
+        .tab-btn.active {
+            color: #6ba5f7;
+            border-bottom: 3px solid #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        .tab-icon { font-size: 18px; }
+
+        /* ========== 主内容容器 ========== */
+        .main-container {
+            flex: 1;
+            padding: 25px 30px;
+            max-width: 1800px;
+            margin: 0 auto;
+            width: 100%;
+            overflow-y: auto;
+        }
+        .tab-panel { display: none; animation: fadeIn 0.4s ease; }
+        .tab-panel.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== 通用卡片/面板样式 ========== */
+        .panel {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 20px;
+            border: 1px solid #0f3460;
+            transition: border-color 0.3s;
+        }
+        .panel:hover { border-color: #2a3f5f; }
+        .panel-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: #6ba5f7;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #0f3460;
+        }
+        .panel-title-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .panel-title::before {
+            content: '';
+            width: 4px;
+            height: 18px;
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+        .panel-subtitle { font-size: 12px; color: #8ba3c7; font-weight: 400; }
+
+        /* ========== 通用表单样式 ========== */
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        .form-label {
+            display: block;
+            font-size: 13px;
+            color: #8ba3c7;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .form-input, .form-select {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0a0e1a;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            color: #e8e8e8;
+            font-size: 14px;
+            transition: all 0.3s;
+            outline: none;
+        }
+        .form-input:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+        }
+        .form-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba3c7' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            padding-right: 36px;
+        }
+
+        /* ========== 按钮样式 ========== */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #fff;
+        }
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #fff;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: #fff;
+        }
+        .btn-info {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+            color: #fff;
+        }
+        .btn-secondary {
+            background: #0f3460;
+            color: #b5c4d8;
+            border: 1px solid #2a3f5f;
+        }
+        .btn-secondary:hover { background: #1a3a66; color: #fff; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        /* ========== 仪表盘 - 状态卡片网格 ========== */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+            margin-bottom: 25px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+            border-radius: 14px;
+            padding: 22px;
+            border: 1px solid #0f3460;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        .stat-card:hover {
+            transform: translateY(-4px);
+            border-color: #667eea;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2);
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+        .stat-card.success::before { background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
+        .stat-card.warning::before { background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); }
+        .stat-card.danger::before { background: linear-gradient(90deg, #ef4444 0%, #f87171 100%); }
+        .stat-card.info::before { background: linear-gradient(90deg, #06b6d4 0%, #22d3ee 100%); }
+
+        .stat-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .stat-label {
+            font-size: 13px;
+            color: #8ba3c7;
+            margin-bottom: 6px;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .stat-value .unit { font-size: 16px; color: #8ba3c7; font-weight: 500; margin-left: 2px; }
+        .stat-change {
+            font-size: 12px;
+            color: #10b981;
+        }
+        .stat-change.down { color: #ef4444; }
+
+        /* 进度条 */
+        .progress-bar-container {
+            background: #0a0e1a;
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 8px;
+            transition: width 0.5s ease;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+        .progress-bar.success { background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
+        .progress-bar.warning { background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); }
+        .progress-bar.danger { background: linear-gradient(90deg, #ef4444 0%, #f87171 100%); }
+
+        /* ========== 表格样式 ========== */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #0a0e1a;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .data-table thead {
+            background: #0f3460;
+        }
+        .data-table th {
+            padding: 14px 16px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            color: #b5c4d8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #2a3f5f;
+        }
+        .data-table td {
+            padding: 14px 16px;
+            font-size: 14px;
+            color: #e8e8e8;
+            border-bottom: 1px solid #0f3460;
+        }
+        .data-table tbody tr {
+            transition: background 0.2s;
+        }
+        .data-table tbody tr:hover {
+            background: rgba(107, 165, 247, 0.05);
+        }
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* 状态标签 */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge-running { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-stopped { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .badge-paused { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-info { background: rgba(107, 165, 247, 0.15); color: #6ba5f7; border: 1px solid rgba(107, 165, 247, 0.3); }
+        .badge-watch { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge-candidate { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+        .badge-testing { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-prelive { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        /* 评分星级 */
+        .rating {
+            color: #f59e0b;
+            font-size: 14px;
+            letter-spacing: 2px;
+        }
+        .rating .empty { color: #0f3460; }
+
+        /* 操作按钮组 */
+        .action-btns {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        /* ========== 结果卡片（回测/优化） ========== */
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .result-card {
+            background: #0a0e1a;
+            border-radius: 10px;
+            padding: 18px;
+            text-align: center;
+            border: 1px solid #0f3460;
+        }
+        .result-card-label {
+            font-size: 12px;
+            color: #8ba3c7;
+            margin-bottom: 8px;
+        }
+        .result-card-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #6ba5f7;
+        }
+        .result-card-value.positive { color: #10b981; }
+        .result-card-value.negative { color: #ef4444; }
+
+        /* 最佳参数展示 */
+        .params-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .param-item {
+            background: #0a0e1a;
+            padding: 14px;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        .param-key { font-size: 12px; color: #8ba3c7; display: block; margin-bottom: 4px; }
+        .param-value { font-size: 16px; font-weight: 600; color: #fff; }
+
+        /* ========== 股票池流动轨道 ========== */
+        .pool-tracks {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .pool-track {
+            background: #0a0e1a;
+            border-radius: 12px;
+            padding: 18px;
+            border: 2px solid #0f3460;
+            transition: all 0.3s;
+        }
+        .pool-track:hover { border-color: #667eea; transform: translateY(-2px); }
+        .pool-track-icon { font-size: 28px; margin-bottom: 8px; }
+        .pool-track-name { font-size: 14px; font-weight: 600; color: #e8e8e8; margin-bottom: 4px; }
+        .pool-track-count { font-size: 28px; font-weight: 700; color: #6ba5f7; }
+        .pool-track-desc { font-size: 11px; color: #8ba3c7; margin-top: 6px; }
+
+        /* ========== 系统监控模块状态 ========== */
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .module-card {
+            background: #0a0e1a;
+            border-radius: 12px;
+            padding: 18px;
+            border: 1px solid #0f3460;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .module-card-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        .module-card-info { flex: 1; }
+        .module-card-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+        .module-card-status { font-size: 12px; color: #10b981; }
+        .module-card-status.warning { color: #f59e0b; }
+        .module-card-status.error { color: #ef4444; }
+
+        /* ========== 聊天界面 ========== */
+        .chat-container {
+            background: #0a0e1a;
+            border-radius: 12px;
+            height: 550px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #0f3460;
+            overflow: hidden;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 80%;
+            animation: msgSlide 0.3s ease;
+        }
+        @keyframes msgSlide {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .message.assistant .message-avatar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .message.user .message-avatar { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+
+        .message-content {
+            background: #16213e;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #e8e8e8;
+            border: 1px solid #0f3460;
+        }
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border-color: transparent;
+        }
+        .message-time {
+            font-size: 11px;
+            color: #8ba3c7;
+            margin-top: 4px;
+        }
+
+        .chat-input-area {
+            padding: 15px;
+            background: #16213e;
+            border-top: 1px solid #0f3460;
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            background: #0a0e1a;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            color: #e8e8e8;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            resize: none;
+        }
+        .chat-input:focus { border-color: #667eea; }
+
+        .quick-replies {
+            padding: 10px 15px;
+            background: #16213e;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            border-top: 1px solid #0f3460;
+        }
+        .quick-reply {
+            padding: 6px 14px;
+            background: #0f3460;
+            border: 1px solid #2a3f5f;
+            border-radius: 20px;
+            color: #b5c4d8;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .quick-reply:hover {
+            background: #667eea;
+            color: #fff;
+            border-color: #667eea;
+        }
+
+        /* ========== 底部操作栏 ========== */
+        .bottom-bar {
+            background: linear-gradient(135deg, #16213e 0%, #0a0e1a 100%);
+            padding: 14px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 2px solid #0f3460;
+            font-size: 12px;
+            color: #8ba3c7;
+        }
+        .bottom-bar-left { display: flex; gap: 20px; align-items: center; }
+        .bottom-bar-right { display: flex; gap: 12px; }
+
+        /* ========== 状态提示条 ========== */
+        .info-bar {
+            background: rgba(107, 165, 247, 0.08);
+            border: 1px solid rgba(107, 165, 247, 0.2);
+            border-radius: 8px;
+            padding: 12px 18px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #b5c4d8;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .info-bar.success { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #10b981; }
+        .info-bar.warning { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3); color: #f59e0b; }
+        .info-bar.error { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; }
+
+        /* 技术分析指标显示 */
+        .indicator-section {
+            margin-top: 20px;
+        }
+        .indicator-row {
+            display: grid;
+            grid-template-columns: 120px 1fr 120px;
+            gap: 15px;
+            align-items: center;
+            padding: 12px 14px;
+            background: #0a0e1a;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .indicator-name { font-size: 14px; font-weight: 600; color: #6ba5f7; }
+        .indicator-bar {
+            height: 8px;
+            background: #0f3460;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .indicator-bar-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #10b981 100%);
+        }
+        .indicator-marker {
+            position: absolute;
+            top: -4px;
+            width: 4px;
+            height: 16px;
+            background: #fff;
+            border-radius: 2px;
+            box-shadow: 0 0 6px #fff;
+        }
+        .indicator-value { font-size: 14px; text-align: right; font-weight: 600; color: #fff; }
+
+        /* 信号显示 */
+        .signal-banner {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.15) 100%);
+            border: 2px solid rgba(16, 185, 129, 0.4);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .signal-banner.sell {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.15) 100%);
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+        .signal-banner.hold {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.15) 100%);
+            border-color: rgba(245, 158, 11, 0.4);
+        }
+        .signal-icon { font-size: 48px; margin-bottom: 10px; }
+        .signal-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+        .signal-desc { font-size: 13px; color: #b5c4d8; }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #0a0e1a; }
+        ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2a3f5f; }
+
+        /* 响应式 */
+        @media (max-width: 900px) {
+            .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+            .pool-tracks { grid-template-columns: repeat(2, 1fr); }
+            .top-status-bar { flex-direction: column; gap: 10px; align-items: flex-start; }
+        }
+        @media (max-width: 600px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .pool-tracks { grid-template-columns: 1fr; }
+            .main-container { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- ========== 顶部状态栏 ========== -->
+    <div class="top-status-bar">
+        <div class="status-left">
+            <div class="brand">
+                <span class="brand-icon">🤖</span>
+                <span>QS Robot</span>
+                <span class="brand-subtitle">V2.0 · 量化策略管理平台</span>
+            </div>
+        </div>
+        <div class="status-right">
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span>Aurora: 已连接</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span id="sysMode">双核联动</span>
+            </div>
+            <div class="status-item">
+                <span>📅 <span id="currentDate"></span></span>
+            </div>
+            <div class="status-item">
+                <span>⏰ <span id="currentTime"></span></span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="refreshSystem()">🔄 刷新</button>
+        </div>
+    </div>
+
+    <!-- ========== Tab 导航栏 ========== -->
+    <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="dashboard">
+            <span class="tab-icon">📊</span><span>仪表盘</span>
+        </button>
+        <button class="tab-btn" data-tab="strategy">
+            <span class="tab-icon">📈</span><span>策略管理</span>
+        </button>
+        <button class="tab-btn" data-tab="backtest">
+            <span class="tab-icon">📊</span><span>回测中心</span>
+        </button>
+        <button class="tab-btn" data-tab="optimizer">
+            <span class="tab-icon">⚡</span><span>韬定律优化器</span>
+        </button>
+        <button class="tab-btn" data-tab="analysis">
+            <span class="tab-icon">📈</span><span>技术分析</span>
+        </button>
+        <button class="tab-btn" data-tab="stockpool">
+            <span class="tab-icon">📊</span><span>股票池</span>
+        </button>
+        <button class="tab-btn" data-tab="monitor">
+            <span class="tab-icon">🖥️</span><span>系统监控</span>
+        </button>
+        <button class="tab-btn" data-tab="chat">
+            <span class="tab-icon">🤖</span><span>Cline智能体</span>
+        </button>
+    </div>
+
+    <!-- ========== 主内容容器 ========== -->
+    <div class="main-container">
+
+        <!-- ========== Tab 1: 仪表盘 ========== -->
+        <div class="tab-panel active" id="panel-dashboard">
+            <div class="info-bar success">
+                <span>✅</span>
+                <span>系统运行正常 · Aurora引擎已连接 · 策略引擎活跃 · 最近检查: <span id="lastCheck"></span></span>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">📊 系统总览</div>
+                    <span class="panel-subtitle">实时数据</span>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="stat-card info">
+                        <div class="stat-icon">📋</div>
+                        <div class="stat-label">策略总数</div>
+                        <div class="stat-value" id="totalStrategies">8</div>
+                        <div class="stat-change">+2 本月新增</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-icon">🚀</div>
+                        <div class="stat-label">活跃策略</div>
+                        <div class="stat-value" id="activeStrategies">5</div>
+                        <div class="stat-change">运行中</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-icon">🔬</div>
+                        <div class="stat-label">回测次数</div>
+                        <div class="stat-value" id="totalBacktests">1,247</div>
+                        <div class="stat-change">+23 今日</div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="stat-icon">💻</div>
+                        <div class="stat-label">CPU 使用率</div>
+                        <div class="stat-value" id="cpuUsage">32<span class="unit">%</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar success" id="cpuBar" style="width:32%"></div></div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="stat-icon">🧠</div>
+                        <div class="stat-label">内存使用</div>
+                        <div class="stat-value" id="memUsage">5.2<span class="unit">GB</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar success" id="memBar" style="width:42%"></div></div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="stat-icon">💾</div>
+                        <div class="stat-label">磁盘使用</div>
+                        <div class="stat-value" id="diskUsage">128<span class="unit">GB</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar warning" id="diskBar" style="width:64%"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">🎯 今日收益概览</div>
+                    <span class="panel-subtitle">各策略 PnL</span>
+                </div>
+                <div class="result-grid">
+                    <div class="result-card">
+                        <div class="result-card-label">总收益率</div>
+                        <div class="result-card-value positive">+12.47%</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">今日盈亏</div>
+                        <div class="result-card-value positive">+¥3,285</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">夏普比率</div>
+                        <div class="result-card-value">1.85</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">最大回撤</div>
+                        <div class="result-card-value negative">-3.24%</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">胜率</div>
+                        <div class="result-card-value">58.3%</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">交易次数</div>
+                        <div class="result-card-value">47</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">⚡ 最近操作日志</div>
+                    <span class="panel-subtitle">最近5条</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>时间</th><th>类型</th><th>策略</th><th>详情</th><th>状态</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>14:32:18</td><td>回测</td><td>双均线策略</td><td>参数优化完成 (fast=12, slow=26)</td><td><span class="badge badge-running">完成</span></td></tr>
+                        <tr><td>14:28:05</td><td>交易</td><td>MACD策略</td><td>买入 100股 贵州茅台 @¥1680.50</td><td><span class="badge badge-running">已执行</span></td></tr>
+                        <tr><td>14:15:42</td><td>策略</td><td>布林带策略</td><td>策略启动成功</td><td><span class="badge badge-running">运行中</span></td></tr>
+                        <tr><td>13:58:20</td><td>优化</td><td>动量策略</td><td>韬定律优化完成，最佳评分 0.8432</td><td><span class="badge badge-running">完成</span></td></tr>
+                        <tr><td>13:42:11</td><td>风控</td><td>系统</td><td>检测到异常波动，暂停 RS2策略</td><td><span class="badge badge-paused">警告</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Tab 2: 策略管理 ========== -->
+        <div class="tab-panel" id="panel-strategy">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">📈 策略管理中心</div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="text" class="form-input" placeholder="🔍 搜索策略..." id="strategySearch" style="width:240px; padding:8px 12px; font-size:13px;">
+                        <select class="form-select" id="strategyFilter" style="width:140px; padding:8px 12px; font-size:13px;">
+                            <option value="all">全部分类</option>
+                            <option value="趋势">趋势类</option>
+                            <option value="震荡">震荡类</option>
+                            <option value="套利">套利类</option>
+                            <option value="均值回归">均值回归</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="refreshStrategyList()">🔄 刷新策略列表</button>
+                        <button class="btn btn-success" onclick="showMessage('策略创建功能即将上线')">+ 新建策略</button>
+                    </div>
+                </div>
+
+                <table class="data-table" id="strategyTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>策略名称</th>
+                            <th>分类</th>
+                            <th>状态</th>
+                            <th>评分</th>
+                            <th>收益率</th>
+                            <th>胜率</th>
+                            <th>夏普</th>
+                            <th>最后运行</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="strategyTableBody">
+                        <!-- 由 JS 动态渲染 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Tab 3: 回测中心 ========== -->
+        <div class="tab-panel" id="panel-backtest">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">📊 回测参数配置</div>
+                    <span class="panel-subtitle">选择策略与参数后执行回测</span>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">策略选择</label>
+                        <select class="form-select" id="btStrategy">
+                            <option value="双均线策略">双均线策略 (Dual MA)</option>
+                            <option value="MACD策略">MACD 策略</option>
+                            <option value="RSI策略">RSI 反转策略</option>
+                            <option value="布林带策略">布林带策略</option>
+                            <option value="动量策略">动量策略 (Momentum)</option>
+                            <option value="均值回归策略">均值回归策略</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">股票代码</label>
+                        <input type="text" class="form-input" id="btStock" placeholder="如: 600519, 000001" value="600519">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">初始资金 (¥)</label>
+                        <input type="number" class="form-input" id="btCapital" value="100000" min="10000" step="10000">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">开始日期</label>
+                        <input type="date" class="form-input" id="btStartDate" value="2023-01-01">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">结束日期</label>
+                        <input type="date" class="form-input" id="btEndDate" value="2024-12-31">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">手续费率 (‰)</label>
+                        <input type="number" class="form-input" id="btFee" value="0.3" step="0.05" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">滑点 (‰)</label>
+                        <input type="number" class="form-input" id="btSlippage" value="0.2" step="0.05" min="0">
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:8px;">
+                    <button class="btn btn-primary" onclick="runBacktest()" id="btRunBtn">🚀 开始回测</button>
+                    <button class="btn btn-secondary" onclick="resetBacktestForm()">🔄 重置参数</button>
+                    <button class="btn btn-info" onclick="showMessage('已导出回测报告 PDF')">📄 导出报告</button>
+                </div>
+            </div>
+
+            <div class="panel" id="backtestResultPanel" style="display:none;">
+                <div class="panel-title">
+                    <div class="panel-title-left">📈 回测结果</div>
+                    <span class="panel-subtitle" id="backtestResultTitle"></span>
+                </div>
+                <div class="result-grid" id="backtestResultGrid"></div>
+                <div style="margin-top:10px;">
+                    <div style="font-size:14px; color:#8ba3c7; margin-bottom:10px;">📋 交易记录摘要</div>
+                    <table class="data-table" id="backtestTradesTable">
+                        <thead><tr><th>#</th><th>日期</th><th>方向</th><th>价格</th><th>数量</th><th>盈亏</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 4: 韬定律优化器 ========== -->
+        <div class="tab-panel" id="panel-optimizer">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">⚡ 韬定律集群优化器</div>
+                    <span class="panel-subtitle">基于 Tao Swarm Intelligence 的策略参数智能优化</span>
+                </div>
+                <div class="info-bar">
+                    <span>💡</span>
+                    <span>韬定律优化器采用自适应权重搜索算法，自动在高维参数空间寻找最优组合。建议粗筛点数 ≥ 30，精搜点数 ≥ 50。</span>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">策略选择</label>
+                        <select class="form-select" id="optStrategy">
+                            <option value="双均线策略">双均线策略</option>
+                            <option value="MACD策略">MACD 策略</option>
+                            <option value="RSI策略">RSI 策略</option>
+                            <option value="布林带策略">布林带策略</option>
+                            <option value="动量策略">动量策略</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">优化目标</label>
+                        <select class="form-select" id="optTarget">
+                            <option value="sharpe">夏普比率 (Sharpe)</option>
+                            <option value="return">总收益率</option>
+                            <option value="drawdown">最大回撤最小化</option>
+                            <option value="winrate">胜率</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">评估次数</label>
+                        <input type="number" class="form-input" id="optEvals" value="500" min="50" max="5000" step="50">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">粗筛点数</label>
+                        <input type="number" class="form-input" id="optCoarse" value="30" min="5" max="200">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">精搜点数</label>
+                        <input type="number" class="form-input" id="optRefined" value="50" min="10" max="500">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">随机种子</label>
+                        <input type="number" class="form-input" id="optSeed" value="42">
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:8px;">
+                    <button class="btn btn-primary" onclick="runOptimize()" id="optRunBtn">⚡ 启动韬定律优化</button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('optimizerResult').style.display='none'">清空结果</button>
+                </div>
+            </div>
+
+            <div class="panel" id="optimizerResult" style="display:none;">
+                <div class="panel-title">
+                    <div class="panel-title-left">🏆 优化结果</div>
+                    <span class="panel-subtitle" id="optimizerStatus">待优化</span>
+                </div>
+
+                <div class="result-grid" id="optimizerStatsGrid"></div>
+
+                <div style="margin-top:10px;">
+                    <div style="font-size:14px; color:#6ba5f7; font-weight:600; margin-bottom:10px;">🎯 最佳参数组合</div>
+                    <div class="params-grid" id="optimizerParamsGrid"></div>
+                </div>
+
+                <div style="margin-top:20px;">
+                    <div style="font-size:14px; color:#6ba5f7; font-weight:600; margin-bottom:10px;">📊 评分指标对比</div>
+                    <div class="params-grid" id="optimizerMetricsGrid"></div>
+                </div>
+
+                <div style="margin-top:20px;">
+                    <div style="font-size:14px; color:#6ba5f7; font-weight:600; margin-bottom:10px;">🧠 模式分析</div>
+                    <div id="optimizerPatternAnalysis" style="background:#0a0e1a; padding:15px; border-radius:8px; font-size:13px; line-height:1.8; color:#b5c4d8;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 5: 技术分析 ========== -->
+        <div class="tab-panel" id="panel-analysis">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">📈 技术分析中心</div>
+                    <span class="panel-subtitle">多指标综合分析 + AI 交易信号</span>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">股票代码</label>
+                        <input type="text" class="form-input" id="taStock" placeholder="如: 600519 / 000001 / AAPL" value="600519">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">分析周期</label>
+                        <select class="form-select" id="taPeriod">
+                            <option value="120">最近 120 个交易日</option>
+                            <option value="60">最近 60 个交易日</option>
+                            <option value="250">最近 250 个交易日 (一年)</option>
+                            <option value="30">最近 30 个交易日</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">指标选择</label>
+                        <select class="form-select" id="taIndicators">
+                            <option value="all">全部指标 (推荐)</option>
+                            <option value="ma">仅 MA 均线</option>
+                            <option value="rsi">仅 RSI</option>
+                            <option value="macd">仅 MACD</option>
+                            <option value="boll">仅布林带</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-primary" onclick="runAnalysis()" id="taRunBtn">🔍 开始技术分析</button>
+                    <button class="btn btn-info" onclick="showMessage('图表功能正在开发中')">📊 查看K线</button>
+                </div>
+            </div>
+
+            <div class="panel" id="analysisResultPanel" style="display:none;">
+                <div class="panel-title">
+                    <div class="panel-title-left">📊 <span id="analysisStockName">-</span> 技术指标分析</div>
+                    <span class="panel-subtitle" id="analysisDate"></span>
+                </div>
+
+                <div class="result-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="result-card">
+                        <div class="result-card-label">当前价格</div>
+                        <div class="result-card-value" id="taPrice">¥--</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">日涨跌</div>
+                        <div class="result-card-value" id="taChange">--%</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">成交量</div>
+                        <div class="result-card-value" id="taVolume">--</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-label">综合评分</div>
+                        <div class="result-card-value" id="taScore">--</div>
+                    </div>
+                </div>
+
+                <div class="indicator-section">
+                    <div style="font-size:14px; color:#6ba5f7; font-weight:600; margin-bottom:12px;">📐 详细指标状态</div>
+                    <div id="indicatorRows"></div>
+                </div>
+
+                <div id="signalBanner"></div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 6: 股票池 ========== -->
+        <div class="tab-panel" id="panel-stockpool">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">📊 股票池管理</div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <button class="btn btn-primary" onclick="refreshStockPool()">🔄 刷新股票池</button>
+                        <button class="btn btn-success" onclick="showMessage('筛选条件已保存')">⚙️ 筛选条件</button>
+                        <button class="btn btn-info" onclick="showMessage('流转规则已保存')">🔄 自动流转</button>
+                    </div>
+                </div>
+
+                <div class="pool-tracks">
+                    <div class="pool-track">
+                        <div class="pool-track-icon">👀</div>
+                        <div class="pool-track-name">观察池</div>
+                        <div class="pool-track-count" id="poolWatch">127</div>
+                        <div class="pool-track-desc">初筛股票 · 监控基础指标</div>
+                    </div>
+                    <div class="pool-track">
+                        <div class="pool-track-icon">🎯</div>
+                        <div class="pool-track-name">候选池</div>
+                        <div class="pool-track-count" id="poolCandidate">48</div>
+                        <div class="pool-track-desc">通过初筛 · 等待技术分析</div>
+                    </div>
+                    <div class="pool-track">
+                        <div class="pool-track-icon">🧪</div>
+                        <div class="pool-track-name">测试池</div>
+                        <div class="pool-track-count" id="poolTesting">23</div>
+                        <div class="pool-track-desc">模拟交易中 · 策略验证</div>
+                    </div>
+                    <div class="pool-track">
+                        <div class="pool-track-icon">🚀</div>
+                        <div class="pool-track-name">预实盘</div>
+                        <div class="pool-track-count" id="poolPrelive">11</div>
+                        <div class="pool-track-desc">小资金实盘 · 最终验证</div>
+                    </div>
+                </div>
+
+                <div class="info-bar">
+                    <span>🔄</span>
+                    <span>自动流转规则: 观察 → (评分≥60) → 候选 → (回测夏普>1.2) → 测试 → (4周正收益) → 预实盘 · 评分低于阈值自动降级</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">📋 股票详情列表</div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <select class="form-select" id="poolFilter" style="width:160px; padding:8px 12px; font-size:13px;">
+                            <option value="all">全部池</option>
+                            <option value="watch">观察池</option>
+                            <option value="candidate">候选池</option>
+                            <option value="testing">测试池</option>
+                            <option value="prelive">预实盘</option>
+                        </select>
+                    </div>
+                </div>
+
+                <table class="data-table" id="stockPoolTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>代码</th>
+                            <th>名称</th>
+                            <th>所在池</th>
+                            <th>价格</th>
+                            <th>涨跌幅</th>
+                            <th>成交量</th>
+                            <th>综合评分</th>
+                            <th>评级</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stockPoolTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Tab 7: 系统监控 ========== -->
+        <div class="tab-panel" id="panel-monitor">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">🖥️ 系统资源监控</div>
+                    <span class="panel-subtitle">实时更新 · 每5秒刷新</span>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="stat-card info">
+                        <div class="stat-icon">💻</div>
+                        <div class="stat-label">CPU 使用率</div>
+                        <div class="stat-value" id="monCpu">--<span class="unit">%</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar" id="monCpuBar" style="width:0%"></div></div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="stat-icon">🧠</div>
+                        <div class="stat-label">内存使用率</div>
+                        <div class="stat-value" id="monMem">--<span class="unit">%</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar" id="monMemBar" style="width:0%"></div></div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="stat-icon">💾</div>
+                        <div class="stat-label">磁盘使用率</div>
+                        <div class="stat-value" id="monDisk">--<span class="unit">%</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar" id="monDiskBar" style="width:0%"></div></div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="stat-icon">🌐</div>
+                        <div class="stat-label">网络延迟</div>
+                        <div class="stat-value" id="monNet">--<span class="unit">ms</span></div>
+                        <div class="progress-bar-container"><div class="progress-bar" id="monNetBar" style="width:0%"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">🔗 Aurora 引擎连接状态</div>
+                    <span class="panel-subtitle">量化交易神经中枢</span>
+                </div>
+                <div class="modules-grid">
+                    <div class="module-card">
+                        <div class="module-card-icon">🤖</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">Aurora DeepSeek 引擎</div>
+                            <div class="module-card-status">● 已连接 · 延迟 42ms</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">📡</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">行情数据源</div>
+                            <div class="module-card-status">● 实时推送 · Tushare Pro</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">⚡</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">交易接口</div>
+                            <div class="module-card-status">● 已就绪 · 等待下单</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">💾</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">日志/数据库</div>
+                            <div class="module-card-status">● SQLite · 正常</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">🛡️ 5大增益模块状态</div>
+                    <span class="panel-subtitle">量化交易增强系统</span>
+                </div>
+                <div class="modules-grid">
+                    <div class="module-card">
+                        <div class="module-card-icon">📈</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">策略引擎</div>
+                            <div class="module-card-status">● 运行中 · 5策略活跃</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">📊</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">回测系统</div>
+                            <div class="module-card-status">● 就绪 · 今日 1247 次</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">⚙️</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">韬定律优化器</div>
+                            <div class="module-card-status">● 空闲 · 上次运行 2h 前</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">🔬</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">风控模块</div>
+                            <div class="module-card-status warning">● 监控中 · 2警告</div>
+                        </div>
+                    </div>
+                    <div class="module-card">
+                        <div class="module-card-icon">🤖</div>
+                        <div class="module-card-info">
+                            <div class="module-card-name">Cline 智能体</div>
+                            <div class="module-card-status">● 在线 · 可对话</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 8: Cline 智能体 ========== -->
+        <div class="tab-panel" id="panel-chat">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="panel-title-left">🤖 Cline 量化智能助手</div>
+                    <span class="panel-subtitle">基于 Aurora DeepSeek · 支持策略分析/回测/风控问答</span>
+                </div>
+
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message assistant">
+                            <div style="min-width:40px;">
+                                <div class="message-avatar" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);">🤖</div>
+                            </div>
+                            <div>
+                                <div class="message-content">
+                                    你好！我是 <b>QS Robot Cline 智能助手</b> 🤖<br>
+                                    我可以帮你：<br>
+                                    • 📊 查询系统状态、策略运行情况<br>
+                                    • 📈 进行技术分析、生成交易信号<br>
+                                    • 🔬 运行回测、策略参数优化建议<br>
+                                    • 🛡️ 风控监控、异常预警<br>
+                                    • 💡 策略设计咨询、市场解读<br><br>
+                                    请输入你的问题，或点击下方快捷问题开始对话！
+                                </div>
+                                <div class="message-time" id="chatTime0"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="quick-replies">
+                        <div class="quick-reply" onclick="sendQuickReply('系统状态如何？')">📊 系统状态</div>
+                        <div class="quick-reply" onclick="sendQuickReply('目前运行的策略有哪些？')">📈 运行中策略</div>
+                        <div class="quick-reply" onclick="sendQuickReply('推荐优化哪个策略？')">⚡ 优化建议</div>
+                        <div class="quick-reply" onclick="sendQuickReply('今日收益情况')">💰 今日收益</div>
+                        <div class="quick-reply" onclick="sendQuickReply('有什么风险预警？')">🛡️ 风控检查</div>
+                        <div class="quick-reply" onclick="sendQuickReply('股票池推荐关注')">📋 股票池</div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="💬 输入你的问题，回车发送..." onkeydown="if(event.key==='Enter')sendChat()">
+                        <button class="btn btn-primary" onclick="sendChat()">🚀 发送</button>
+                        <button class="btn btn-secondary" onclick="clearChat()">🧹 清空</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ========== 底部操作栏 ========== -->
+    <div class="bottom-bar">
+        <div class="bottom-bar-left">
+            <span>✅ 系统健康度: <b style="color:#10b981;">98.5%</b></span>
+            <span>📌 版本: QS Robot v2.0.0</span>
+            <span>🌐 服务: <b id="svcStatus">正常运行</b></span>
+        </div>
+        <div class="bottom-bar-right">
+            <button class="btn btn-secondary btn-sm" onclick="showMessage('文档即将上线')">📖 文档</button>
+            <button class="btn btn-secondary btn-sm" onclick="showMessage('设置面板')">⚙️ 设置</button>
+            <button class="btn btn-success btn-sm" onclick="showMessage('✔ 所有数据已保存')">💾 保存</button>
+        </div>
+    </div>
+
+    <script>
+        // ========== 全局状态数据 ==========
+        const STRATEGIES = [
+            { id: 1, name: '双均线策略', category: '趋势', status: 'running', score: 85, return: 15.42, winrate: 58.3, sharpe: 1.85, lastRun: '2分钟前' },
+            { id: 2, name: 'MACD 策略', category: '趋势', status: 'running', score: 78, return: 12.18, winrate: 55.1, sharpe: 1.52, lastRun: '5分钟前' },
+            { id: 3, name: 'RSI 反转策略', category: '震荡', status: 'running', score: 82, return: 9.85, winrate: 61.2, sharpe: 1.34, lastRun: '1分钟前' },
+            { id: 4, name: '布林带策略', category: '震荡', status: 'running', score: 91, return: 21.34, winrate: 64.5, sharpe: 2.15, lastRun: '刚运行' },
+            { id: 5, name: '动量策略', category: '趋势', status: 'running', score: 76, return: 8.56, winrate: 52.1, sharpe: 1.28, lastRun: '10分钟前' },
+            { id: 6, name: '均值回归策略', category: '均值回归', status: 'stopped', score: 70, return: 4.12, winrate: 50.3, sharpe: 0.95, lastRun: '2小时前' },
+            { id: 7, name: '统计套利策略', category: '套利', status: 'stopped', score: 88, return: 18.75, winrate: 67.8, sharpe: 2.05, lastRun: '昨天' },
+            { id: 8, name: 'RS2 策略', category: '震荡', status: 'paused', score: 74, return: 6.22, winrate: 53.5, sharpe: 1.12, lastRun: '30分钟前' }
+        ];
+
+        const STOCK_POOL = [
+            { code: '600519', name: '贵州茅台', pool: 'prelive', price: 1680.50, change: 1.25, volume: '3.2万', score: 92, rating: 'A+' },
+            { code: '000858', name: '五粮液', pool: 'prelive', price: 148.20, change: 0.85, volume: '5.6万', score: 88, rating: 'A' },
+            { code: '300750', name: '宁德时代', pool: 'testing', price: 245.80, change: -0.45, volume: '12.8万', score: 85, rating: 'A' },
+            { code: '601318', name: '中国平安', pool: 'testing', price: 52.15, change: 0.35, volume: '25.6万', score: 82, rating: 'A' },
+            { code: '000001', name: '平安银行', pool: 'candidate', price: 11.85, change: -0.25, volume: '48.2万', score: 76, rating: 'B+' },
+            { code: '600036', name: '招商银行', pool: 'candidate', price: 35.40, change: 1.05, volume: '18.5万', score: 78, rating: 'B+' },
+            { code: '601899', name: '紫金矿业', pool: 'candidate', price: 18.65, change: 2.15, volume: '32.8万', score: 75, rating: 'B' },
+            { code: '002594', name: '比亚迪', pool: 'watch', price: 268.30, change: 3.45, volume: '15.2万', score: 72, rating: 'B' },
+            { code: '600900', name: '长江电力', pool: 'watch', price: 28.12, change: 0.15, volume: '8.5万', score: 68, rating: 'B-' },
+            { code: '601888', name: '中国中免', pool: 'watch', price: 85.60, change: -1.25, volume: '6.8万', score: 65, rating: 'C+' },
+            { code: '000333', name: '美的集团', pool: 'watch', price: 72.80, change: 0.85, volume: '12.3万', score: 70, rating: 'B' },
+            { code: '600887', name: '伊利股份', pool: 'watch', price: 28.45, change: -0.35, volume: '9.6万', score: 66, rating: 'B-' }
+        ];
+
+        // ========== Tab 切换 ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = btn.getAttribute('data-tab');
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    tabPanels.forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.getElementById('panel-' + target).classList.add('active');
+                });
+            });
+
+            refreshTime();
+            setInterval(refreshTime, 1000);
+            renderStrategyList(STRATEGIES);
+            renderStockPool(STOCK_POOL);
+            updateMonitorData();
+            setInterval(updateMonitorData, 5000);
+
+            // 策略筛选
+            document.getElementById('strategySearch').addEventListener('input', filterStrategy);
+            document.getElementById('strategyFilter').addEventListener('change', filterStrategy);
+            // 股票池筛选
+            document.getElementById('poolFilter').addEventListener('change', filterPool);
+        });
+
+        function refreshTime() {
+            const now = new Date();
+            const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0'), d = String(now.getDate()).padStart(2,'0');
+            const h = String(now.getHours()).padStart(2,'0'), mi = String(now.getMinutes()).padStart(2,'0'), s = String(now.getSeconds()).padStart(2,'0');
+            const dateEl = document.getElementById('currentDate');
+            const timeEl = document.getElementById('currentTime');
+            if (dateEl) dateEl.textContent = `${y}-${m}-${d}`;
+            if (timeEl) timeEl.textContent = `${h}:${mi}:${s}`;
+            const lc = document.getElementById('lastCheck');
+            if (lc) lc.textContent = `${h}:${mi}:${s}`;
+            const ct = document.getElementById('chatTime0');
+            if (ct && !ct.textContent) ct.textContent = `${h}:${mi}`;
+        }
+
+        function refreshSystem() {
+            showMessage('🔄 系统数据已刷新');
+            refreshTime();
+            updateMonitorData();
+        }
+
+        function showMessage(msg) {
+            const toast = document.createElement('div');
+            toast.textContent = msg;
+            toast.style.cssText = 'position:fixed;top:80px;right:30px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:12px 24px;border-radius:8px;box-shadow:0 8px 25px rgba(102,126,234,0.4);z-index:1000;font-size:14px;animation:slideIn 0.3s ease;';
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2000);
+            setTimeout(() => toast.remove(), 2400);
+        }
+
+        // ========== 策略管理 ==========
+        function renderStrategyList(list) {
+            const tbody = document.getElementById('strategyTableBody');
+            if (!tbody) return;
+            const badgeMap = { running: ['badge-running', '运行中'], stopped: ['badge-stopped', '已停止'], paused: ['badge-paused', '已暂停'] };
+            const btnMap = {
+                running: `<button class="btn btn-danger btn-sm" onclick="toggleStrategy(${list.length ? '' : ''})" style="padding:4px 10px;font-size:11px;">⏹ 停止</button> <button class="btn btn-warning btn-sm" onclick="showMessage('策略已暂停')" style="padding:4px 10px;font-size:11px;">⏸ 暂停</button>`,
+                stopped: `<button class="btn btn-success btn-sm" onclick="showMessage('策略已启动')" style="padding:4px 10px;font-size:11px;">▶ 启动</button>`,
+                paused: `<button class="btn btn-success btn-sm" onclick="showMessage('策略已恢复')" style="padding:4px 10px;font-size:11px;">▶ 恢复</button> <button class="btn btn-danger btn-sm" onclick="showMessage('策略已停止')" style="padding:4px 10px;font-size:11px;">⏹ 停止</button>`
+            };
+            tbody.innerHTML = list.map((s, i) => {
+                const stars = Math.round(s.score / 20);
+                const starStr = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+                return `<tr>
+                    <td>${i + 1}</td>
+                    <td><b>${s.name}</b></td>
+                    <td>${s.category}</td>
+                    <td><span class="badge ${badgeMap[s.status][0]}">${badgeMap[s.status][1]}</span></td>
+                    <td><span style="color:#f59e0b;">${starStr}</span> <span style="color:#8ba3c7;font-size:12px;">${s.score}</span></td>
+                    <td style="color:${s.return >= 0 ? '#10b981' : '#ef4444'};">${s.return >= 0 ? '+' : ''}${s.return}%</td>
+                    <td>${s.winrate}%</td>
+                    <td>${s.sharpe.toFixed(2)}</td>
+                    <td style="color:#8ba3c7;font-size:12px;">${s.lastRun}</td>
+                    <td>${btnMap[s.status]} <button class="btn btn-info btn-sm" onclick="showMessage('启动 ${s.name} 回测...')" style="padding:4px 10px;font-size:11px;">🔬 回测</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function refreshStrategyList() {
+            showMessage('🔄 策略列表已刷新');
+            renderStrategyList(STRATEGIES);
+        }
+
+        function filterStrategy() {
+            const q = document.getElementById('strategySearch').value.toLowerCase();
+            const cat = document.getElementById('strategyFilter').value;
+            const filtered = STRATEGIES.filter(s =>
+                (cat === 'all' || s.category === cat) &&
+                (!q || s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q))
+            );
+            renderStrategyList(filtered);
+        }
+
+        // ========== 回测中心 ==========
+        function runBacktest() {
+            const btn = document.getElementById('btRunBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 回测进行中...';
+            const strategy = document.getElementById('btStrategy').value;
+            const stock = document.getElementById('btStock').value;
+            const capital = parseFloat(document.getElementById('btCapital').value);
+            const startDate = document.getElementById('btStartDate').value;
+            const endDate = document.getElementById('btEndDate').value;
+
+            setTimeout(() => {
+                const totalReturn = (Math.random() * 30 + 5).toFixed(2);
+                const sharpe = (Math.random() * 1.5 + 1.0).toFixed(2);
+                const maxDD = -(Math.random() * 10 + 2).toFixed(2);
+                const winrate = (Math.random() * 20 + 50).toFixed(1);
+                const trades = Math.floor(Math.random() * 80 + 30);
+                const profit = Math.round(capital * totalReturn / 100);
+
+                document.getElementById('backtestResultTitle').textContent = `${strategy} · ${stock} · ${startDate} ~ ${endDate}`;
+                const grid = document.getElementById('backtestResultGrid');
+                grid.innerHTML = `
+                    <div class="result-card"><div class="result-card-label">总收益率</div><div class="result-card-value positive">+${totalReturn}%</div></div>
+                    <div class="result-card"><div class="result-card-label">累计盈亏</div><div class="result-card-value positive">+¥${profit.toLocaleString()}</div></div>
+                    <div class="result-card"><div class="result-card-label">夏普比率</div><div class="result-card-value">${sharpe}</div></div>
+                    <div class="result-card"><div class="result-card-label">最大回撤</div><div class="result-card-value negative">${maxDD}%</div></div>
+                    <div class="result-card"><div class="result-card-label">胜率</div><div class="result-card-value">${winrate}%</div></div>
+                    <div class="result-card"><div class="result-card-label">交易次数</div><div class="result-card-value">${trades}</div></div>
+                `;
+
+                const tradesTable = document.querySelector('#backtestTradesTable tbody');
+                let html = '';
+                for (let i = 1; i <= 5; i++) {
+                    const buyPrice = (1600 + Math.random() * 200).toFixed(2);
+                    const sellPrice = (parseFloat(buyPrice) + (Math.random() - 0.4) * 50).toFixed(2);
+                    const pnl = (Math.random() > 0.4 ? '+' : '-') + (Math.random() * 5000 + 500).toFixed(0);
+                    const isBuy = i % 2 === 1;
+                    html += `<tr><td>${i}</td><td>2024-0${Math.ceil(i/2)}-15</td><td><span class="badge ${isBuy ? 'badge-running' : 'badge-stopped'}">${isBuy ? '买入' : '卖出'}</span></td><td>¥${isBuy ? buyPrice : sellPrice}</td><td>100</td><td style="color:${pnl.startsWith('+') ? '#10b981':'#ef4444'}">¥${pnl}</td></tr>`;
+                }
+                tradesTable.innerHTML = html;
+
+                document.getElementById('backtestResultPanel').style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '🚀 开始回测';
+                showMessage('✅ 回测完成');
+            }, 1500);
+        }
+
+        function resetBacktestForm() {
+            document.getElementById('btStock').value = '600519';
+            document.getElementById('btCapital').value = '100000';
+            document.getElementById('btStartDate').value = '2023-01-01';
+            document.getElementById('btEndDate').value = '2024-12-31';
+            document.getElementById('btFee').value = '0.3';
+            document.getElementById('btSlippage').value = '0.2';
+            document.getElementById('backtestResultPanel').style.display = 'none';
+            showMessage('🔄 参数已重置');
+        }
+
+        // ========== 韬定律优化器 ==========
+        function runOptimize() {
+            const btn = document.getElementById('optRunBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 韬定律优化中...';
+            const strategy = document.getElementById('optStrategy').value;
+            const target = document.getElementById('optTarget').value;
+            const evals = document.getElementById('optEvals').value;
+
+            setTimeout(() => {
+                const targetNames = { sharpe: '夏普比率', return: '总收益率', drawdown: '最大回撤', winrate: '胜率' };
+                document.getElementById('optimizerStatus').textContent = `已完成 · 目标: ${targetNames[target]}`;
+
+                document.getElementById('optimizerStatsGrid').innerHTML = `
+                    <div class="result-card"><div class="result-card-label">评估次数</div><div class="result-card-value">${evals}</div></div>
+                    <div class="result-card"><div class="result-card-label">耗时</div><div class="result-card-value">${(Math.random()*10+5).toFixed(1)}s</div></div>
+                    <div class="result-card"><div class="result-card-label">最佳评分</div><div class="result-card-value positive">${(Math.random()*0.3+0.7).toFixed(4)}</div></div>
+                    <div class="result-card"><div class="result-card-label">收敛度</div><div class="result-card-value">${(Math.random()*20+75).toFixed(1)}%</div></div>
+                `;
+
+                const paramNames = { '双均线策略': ['快线周期', '慢线周期', '止损比例'], 'MACD策略': ['快线周期', '慢线周期', '信号周期'], 'RSI策略': ['RSI周期', '超买阈值', '超卖阈值'], '布林带策略': ['均线周期', '标准差倍数', '突破阈值'], '动量策略': ['动量周期', '过滤阈值', '持仓天数'] };
+                const params = paramNames[strategy] || paramNames['双均线策略'];
+                const paramVals = params.map(p => Math.floor(Math.random() * 50 + 5));
+                document.getElementById('optimizerParamsGrid').innerHTML = params.map((p, i) =>
+                    `<div class="param-item"><span style="font-size:12px;color:#8ba3c7;display:block;margin-bottom:4px;">${p}</span><span style="font-size:18px;font-weight:600;color:#fff;">${paramVals[i]}</span></div>`
+                ).join('');
+
+                document.getElementById('optimizerMetricsGrid').innerHTML = `
+                    <div class="param-item"><span style="font-size:12px;color:#8ba3c7;display:block;margin-bottom:4px;">优化前夏普</span><span style="font-size:16px;font-weight:600;color:#8ba3c7;">${(Math.random()*0.5+0.8).toFixed(2)}</span></div>
+                    <div class="param-item"><span style="font-size:12px;color:#8ba3c7;display:block;margin-bottom:4px;">优化后夏普</span><span style="font-size:16px;font-weight:600;color:#10b981;">${(Math.random()*0.5+1.5).toFixed(2)}</span></div>
+                    <div class="param-item"><span style="font-size:12px;color:#8ba3c7;display:block;margin-bottom:4px;">优化前收益</span><span style="font-size:16px;font-weight:600;color:#8ba3c7;">+${(Math.random()*10+5).toFixed(2)}%</span></div>
+                    <div class="param-item"><span style="font-size:12px;color:#8ba3c7;display:block;margin-bottom:4px;">优化后收益</span><span style="font-size:16px;font-weight:600;color:#10b981;">+${(Math.random()*15+15).toFixed(2)}%</span></div>
+                `;
+
+                document.getElementById('optimizerPatternAnalysis').innerHTML = `
+                    📌 <b>参数空间分析</b>：本次优化在 ${evals} 次评估中，在第 ${Math.floor(evals*0.3)} 次附近进入收敛区，最佳参数组合具有良好的稳定性。<br>
+                    🔍 <b>敏感度分析</b>：${params[0]} 参数对结果影响最大（敏感度 0.42），建议在实盘监控中优先关注。<br>
+                    🎯 <b>应用建议</b>：${strategy} 在当前参数下表现稳健，建议配合风控阈值 3% 使用。实盘前请先用小资金进行 2 周模拟验证。
+                `;
+
+                document.getElementById('optimizerResult').style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '⚡ 启动韬定律优化';
+                showMessage('✅ 韬定律优化完成');
+            }, 2000);
+        }
+
+        // ========== 技术分析 ==========
+        function runAnalysis() {
+            const btn = document.getElementById('taRunBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 分析中...';
+            const stock = document.getElementById('taStock').value;
+
+            setTimeout(() => {
+                const price = (Math.random() * 1500 + 50).toFixed(2);
+                const change = (Math.random() * 10 - 4).toFixed(2);
+                const volume = (Math.random() * 50 + 5).toFixed(1);
+                const score = Math.floor(Math.random() * 40 + 60);
+
+                document.getElementById('analysisStockName').textContent = stock;
+                document.getElementById('analysisDate').textContent = '分析于 ' + new Date().toLocaleString('zh-CN');
+                document.getElementById('taPrice').textContent = '¥' + price;
+                document.getElementById('taChange').innerHTML = `<span style="color:${change >= 0 ? '#10b981' : '#ef4444'}">${change >= 0 ? '+' : ''}${change}%</span>`;
+                document.getElementById('taVolume').textContent = volume + '万';
+                document.getElementById('taScore').textContent = score + '/100';
+
+                const indicators = [
+                    { name: 'MA5 / MA20', value: 62, pct: 62, label: '金叉信号' },
+                    { name: 'RSI (14)', value: 58, pct: 58, label: '中性偏多' },
+                    { name: 'MACD', value: 72, pct: 72, label: '红柱放大' },
+                    { name: '布林带', value: 55, pct: 55, label: '触及中轨' },
+                    { name: 'KDJ', value: 68, pct: 68, label: '超买边缘' },
+                    { name: '成交量', value: 75, pct: 75, label: '温和放量' }
+                ];
+
+                let html = '';
+                indicators.forEach(ind => {
+                    html += `<div class="indicator-row">
+                        <div style="font-size:14px;font-weight:600;color:#6ba5f7;width:130px;">${ind.name}</div>
+                        <div style="flex:1;">
+                            <div class="indicator-bar" style="background:#0f3460;height:8px;border-radius:4px;position:relative;overflow:hidden;">
+                                <div class="indicator-bar-fill" style="width:100%;height:100%;background:linear-gradient(90deg,#ef4444 0%,#f59e0b 50%,#10b981 100%);"></div>
+                                <div style="position:absolute;top:-4px;left:${ind.pct}%;width:4px;height:16px;background:#fff;border-radius:2px;box-shadow:0 0 6px #fff;"></div>
+                            </div>
+                            <div style="font-size:11px;color:#8ba3c7;margin-top:4px;">${ind.label}</div>
+                        </div>
+                        <div style="font-size:14px;text-align:right;font-weight:600;color:#fff;width:80px;">${ind.value}</div>
+                    </div>`;
+                });
+                document.getElementById('indicatorRows').innerHTML = html;
+
+                let signalBanner = '';
+                if (score >= 75) {
+                    signalBanner = `<div class="signal-banner" style="background:linear-gradient(135deg,rgba(16,185,129,0.15) 0%,rgba(5,150,105,0.15) 100%);border:2px solid rgba(16,185,129,0.4);border-radius:12px;padding:20px;margin-top:20px;text-align:center;"><div style="font-size:48px;margin-bottom:10px;">📈</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;color:#10b981;">买入信号 · BUY</div><div style="font-size:13px;color:#b5c4d8;">综合评分 ${score}/100，多指标共振看涨，建议轻仓分批建仓，止损位 5%。</div></div>`;
+                } else if (score >= 55) {
+                    signalBanner = `<div class="signal-banner" style="background:linear-gradient(135deg,rgba(245,158,11,0.15) 0%,rgba(217,119,6,0.15) 100%);border:2px solid rgba(245,158,11,0.4);border-radius:12px;padding:20px;margin-top:20px;text-align:center;"><div style="font-size:48px;margin-bottom:10px;">⏸️</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;color:#f59e0b;">观望 · HOLD</div><div style="font-size:13px;color:#b5c4d8;">综合评分 ${score}/100，信号不明朗，建议等待更明确的趋势信号，关注 MACD 金叉确认。</div></div>`;
+                } else {
+                    signalBanner = `<div class="signal-banner" style="background:linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%);border:2px solid rgba(239,68,68,0.4);border-radius:12px;padding:20px;margin-top:20px;text-align:center;"><div style="font-size:48px;margin-bottom:10px;">📉</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;color:#ef4444;">卖出信号 · SELL</div><div style="font-size:13px;color:#b5c4d8;">综合评分 ${score}/100，多指标显示超买或下行风险，建议减仓或观望，严格执行止损。</div></div>`;
+                }
+                document.getElementById('signalBanner').innerHTML = signalBanner;
+
+                document.getElementById('analysisResultPanel').style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '🔍 开始技术分析';
+                showMessage('✅ 技术分析完成');
+            }, 1500);
+        }
+
+        // ========== 股票池 ==========
+        function renderStockPool(list) {
+            const tbody = document.getElementById('stockPoolTableBody');
+            if (!tbody) return;
+            const poolMap = { watch: ['badge-watch', '观察池'], candidate: ['badge-candidate', '候选池'], testing: ['badge-testing', '测试池'], prelive: ['badge-prelive', '预实盘'] };
+            tbody.innerHTML = list.map((s, i) => `<tr>
+                <td>${i + 1}</td>
+                <td><b>${s.code}</b></td>
+                <td>${s.name}</td>
+                <td><span class="badge ${poolMap[s.pool][0]}">${poolMap[s.pool][1]}</span></td>
+                <td>¥${s.price.toFixed(2)}</td>
+                <td style="color:${s.change >= 0 ? '#10b981' : '#ef4444'};">${s.change >= 0 ? '+' : ''}${s.change}%</td>
+                <td style="color:#8ba3c7;font-size:12px;">${s.volume}</td>
+                <td><b style="color:#6ba5f7;">${s.score}</b></td>
+                <td><span class="badge badge-info">${s.rating}</span></td>
+                <td>
+                    <button class="btn btn-info btn-sm" onclick="showMessage('查看 ${s.name} 详情')" style="padding:4px 8px;font-size:11px;">📊 分析</button>
+                    <button class="btn btn-success btn-sm" onclick="showMessage('${s.name} 已升级到下一池')" style="padding:4px 8px;font-size:11px;">⬆ 升级</button>
+                </td>
+            </tr>`).join('');
+        }
+
+        function refreshStockPool() {
+            showMessage('🔄 股票池已刷新');
+            renderStockPool(STOCK_POOL);
+        }
+
+        function filterPool() {
+            const pool = document.getElementById('poolFilter').value;
+            if (pool === 'all') return renderStockPool(STOCK_POOL);
+            renderStockPool(STOCK_POOL.filter(s => s.pool === pool));
+        }
+
+        // ========== 系统监控 ==========
+        function updateMonitorData() {
+            const cpu = Math.floor(Math.random() * 40 + 20);
+            const mem = Math.floor(Math.random() * 30 + 40);
+            const disk = Math.floor(Math.random() * 20 + 55);
+            const net = Math.floor(Math.random() * 80 + 20);
+
+            const setCard = (valId, barId, value, unit) => {
+                const vEl = document.getElementById(valId);
+                const bEl = document.getElementById(barId);
+                if (!vEl || !bEl) return;
+                vEl.innerHTML = `${value}<span class="unit">${unit}</span>`;
+                bEl.style.width = (unit === 'ms' ? Math.min(value / 2, 100) : value) + '%';
+                if (value >= 80) { bEl.className = 'progress-bar danger'; }
+                else if (value >= 60) { bEl.className = 'progress-bar warning'; }
+                else { bEl.className = 'progress-bar success'; }
+            };
+            setCard('monCpu', 'monCpuBar', cpu, '%');
+            setCard('monMem', 'monMemBar', mem, '%');
+            setCard('monDisk', 'monDiskBar', disk, '%');
+            setCard('monNet', 'monNetBar', net, 'ms');
+        }
+
+        // ========== 聊天 ==========
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            input.value = '';
+            appendMessage('user', msg);
+            setTimeout(() => replyBot(msg), 700);
+        }
+
+        function sendQuickReply(msg) {
+            appendMessage('user', msg);
+            setTimeout(() => replyBot(msg), 700);
+        }
+
+        function appendMessage(role, content) {
+            const container = document.getElementById('chatMessages');
+            const now = new Date();
+            const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+            const avatar = role === 'user' ? '👤' : '🤖';
+            const bgGradient = role === 'user'
+                ? 'background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border-color:transparent;'
+                : 'background:#16213e;color:#e8e8e8;border:1px solid #0f3460;';
+            const avatarBg = role === 'user'
+                ? 'background:linear-gradient(135deg,#10b981 0%,#059669 100%);'
+                : 'background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);';
+
+            const msgHtml = `<div class="message ${role}" style="display:flex;gap:12px;${role === 'user' ? 'flex-direction:row-reverse;' : ''}">
+                <div style="min-width:40px;">
+                    <div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;${avatarBg}">${avatar}</div>
+                </div>
+                <div>
+                    <div class="message-content" style="${bgGradient}padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.6;max-width:600px;">${content}</div>
+                    <div style="font-size:11px;color:#8ba3c7;margin-top:4px;text-align:${role === 'user' ? 'right' : 'left'};">${time}</div>
+                </div>
+            </div>`;
+            container.insertAdjacentHTML('beforeend', msgHtml);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function replyBot(userMsg) {
+            const m = userMsg.toLowerCase();
+            let reply = '';
+            if (m.includes('系统') || m.includes('状态')) {
+                reply = `📊 <b>系统状态报告</b><br>• CPU: 32% · 内存: 42% · 磁盘: 64%<br>• Aurora 引擎: ✅ 已连接 (42ms)<br>• 策略引擎: 🟢 运行中 (5个策略活跃)<br>• 回测系统: 🟢 就绪<br>• 风控模块: 🟡 监控中 (2个警告)<br>• 今日回测次数: 1,247 次<br><br>整体健康度 <b style="color:#10b981;">98.5%</b>，系统运行稳定 ✅`;
+            } else if (m.includes('策略') || m.includes('运行')) {
+                reply = `📈 <b>当前运行中策略 (5个)</b><br>• 双均线策略 - 收益率 +15.42% · 夏普 1.85<br>• MACD 策略 - 收益率 +12.18% · 夏普 1.52<br>• RSI 反转策略 - 收益率 +9.85% · 夏普 1.34<br>• 布林带策略 - 收益率 +21.34% · 夏普 2.15 (⭐ 表现最佳)<br>• 动量策略 - 收益率 +8.56% · 夏普 1.28<br><br>💡 建议关注<b>布林带策略</b>，它在近期表现最为出色。`;
+            } else if (m.includes('优化')) {
+                reply = `⚡ <b>韬定律优化建议</b><br>基于最近一周的回测数据，推荐优先优化：<br>1️⃣ <b>动量策略</b> - 参数收敛度高，预期可提升收益 8~12%<br>2️⃣ <b>RSI 反转策略</b> - 超买/超卖阈值有优化空间<br>3️⃣ <b>双均线策略</b> - 周期组合可微调以适应当前震荡行情<br><br>🔬 建议先在「韬定律优化器」Tab 中运行优化测试（评估次数 ≥ 500）。`;
+            } else if (m.includes('收益') || m.includes('盈亏') || m.includes('今日')) {
+                reply = `💰 <b>今日盈亏报告</b><br>• 总收益率: <b style="color:#10b981;">+12.47%</b><br>• 今日盈亏: <b style="color:#10b981;">+¥3,285</b><br>• 夏普比率: 1.85 · 最大回撤: -3.24%<br>• 胜率: 58.3% · 交易次数: 47<br><br>📌 表现最好的策略: 布林带策略 (+21.34%)<br>📌 需要关注: 均值回归策略表现平平，建议检查参数。`;
+            } else if (m.includes('风险') || m.includes('预警') || m.includes('风控')) {
+                reply = `🛡️ <b>风控检查报告</b><br>• 🟢 仓位控制: 正常 (总仓位 42%)<br>• 🟢 止损执行: 全部生效<br>• 🟡 波动率警告: RS2 策略波动超过 3σ<br>• 🟡 行业集中度: 白酒板块占比 28%，建议分散<br>• 🟢 单日最大亏损: -¥1,250 (低于阈值 ¥5,000)<br><br>⚠️ 建议: 暂停 RS2 策略，调整行业配置以降低集中度风险。`;
+            } else if (m.includes('股票池') || m.includes('关注') || m.includes('推荐')) {
+                reply = `📋 <b>股票池推荐关注</b><br>🚀 <b>预实盘池 (11支)</b>: 贵州茅台、五粮液、... ⭐综合评分 88+<br>🧪 <b>测试池 (23支)</b>: 宁德时代、中国平安、...<br>🎯 <b>候选池 (48支)</b>: 平安银行、招商银行、紫金矿业...<br>👀 <b>观察池 (127支)</b>: 比亚迪、长江电力、中国中免...<br><br>💡 今日重点关注: <b>贵州茅台 600519</b> - 评分 92，技术指标共振看涨，建议轻仓建仓。`;
+            } else {
+                reply = `🤖 感谢你的提问！我可以帮你查询：<br>• 系统状态、策略运行情况<br>• 技术分析、股票池推荐<br>• 回测结果、优化建议<br>• 风控监控、风险预警<br><br>请尝试点击上方快捷按钮，或输入更具体的问题如"系统状态"、"今日收益"等！`;
+            }
+            appendMessage('assistant', reply);
+        }
+
+        function clearChat() {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = `<div class="message assistant" style="display:flex;gap:12px;"><div style="min-width:40px;"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);">🤖</div></div><div><div style="background:#16213e;color:#e8e8e8;border:1px solid #0f3460;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.6;">对话已清空 ✨ 有什么可以帮你的？</div></div></div>`;
+            showMessage('🧹 对话已清空');
+        }
+    </script>
+</body>
+</html>

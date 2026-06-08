@@ -1,0 +1,41 @@
+{
+  "llm_providers": {
+    "ollama": {
+      "enabled": true,
+      "api_base": "http://localhost:11434",
+      "default_model": "qwen2.5-coder:1.5b"
+    },
+    "echobird": {
+      "enabled": true,
+      "api_base": "http://localhost:8080/v1",
+      "default_model": "gpt-4o",
+      "api_key": ""
+    },
+    "cline": {
+      "enabled": true,
+      "default_model": "claude-3-5-sonnet",
+      "provider": "anthropic"
+    }
+  },
+  "aurora_system": {
+    "base_path": "d:\\Gupiao\\量化交易测试设备方案\\攒机\\最后评估01\\DS-V3.2T量化交易专用工作站配置深度研判与采购决策报告02_files\\攒机配置\\Aurora",
+    "web_api_base": "http://localhost:5000",
+    "auto_connect": false
+  },
+  "ui": {
+    "theme": "dark",
+    "font_size": 14,
+    "float_position": "bottom_right"
+  },
+  "extensions": {
+    "tools": [],
+    "hooks": [],
+    "capabilities": [],
+    "data_sources": []
+  },
+  "memory": {
+    "enabled": true,
+    "auto_save": true,
+    "save_interval": 60
+  }
+}

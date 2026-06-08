@@ -16,15 +16,33 @@
                 <span class="logo-text">QS Robot</span>
             </div>
             <div class="nav-menu">
-                <a href="/dashboard" class="nav-link">🏠 首页</a>
-                <a href="/" class="nav-link">🤖 智能助手</a>
+                <a href="/" class="nav-link">🏠 首页（主系统）</a>
                 <a href="/stock_pool" class="nav-link active">📊 股票池</a>
-                <a href="#" class="nav-link disabled">📈 技术分析</a>
+                <a href="/technical_analysis" class="nav-link">📈 技术分析</a>
             </div>
         </div>
     </nav>
 
     <div class="container">
+        <!-- 系统切换区域 -->
+        <div class="system-switch-section" style="background:#1a2744; padding:20px; border-radius:12px; margin-bottom:20px; border:1px solid #2a3f5f;">
+            <div class="switch-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <span class="switch-title" style="color:#00d4ff; font-size:16px;">🔄 系统切换</span>
+                <span class="current-system" style="color:#8ba3c7;">当前系统: <span id="currentSystem" style="color:#fff;">股票池管理</span></span>
+            </div>
+            <div class="switch-buttons" style="display:flex; gap:10px;">
+                <button class="system-btn" id="btnStrategy" onclick="switchSystem('strategy')" style="padding:10px 20px; border-radius:6px; border:1px solid #3a5a8f; background:#0d1526; color:#8ba3c7; cursor:pointer;">
+                    🎯 策略优化系统
+                </button>
+                <button class="system-btn" id="btnAnalysis" onclick="switchSystem('analysis')" style="padding:10px 20px; border-radius:6px; border:1px solid #3a5a8f; background:#0d1526; color:#8ba3c7; cursor:pointer;">
+                    📈 技术分析系统
+                </button>
+                <button class="system-btn active" id="btnPool" onclick="switchSystem('pool')" style="padding:10px 20px; border-radius:6px; border:1px solid #3a5a8f; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; cursor:pointer;">
+                    📊 股票池系统
+                </button>
+            </div>
+        </div>
+
         <!-- 主内容区 -->
         <main class="main-content">
             <!-- 页面标题和操作按钮 -->
@@ -36,6 +54,7 @@
                 <div class="page-actions">
                     <button id="btn-refresh" class="btn btn-primary">刷新数据</button>
                     <button id="btn-run-pipeline" class="btn btn-success">运行筛选流程</button>
+                    <button id="btn-auto-flow" class="btn btn-warning" onclick="runStockPoolAutoFlow()">⚙️ 一键股票池自动流转</button>
                 </div>
             </section>
 
@@ -171,6 +190,60 @@
         <span class="loading-text">正在运行筛选评估流程...</span>
     </div>
 
+    <script>
+        // 系统切换函数 - 三个系统互跳
+        function switchSystem(systemType) {
+            const currentSystem = document.getElementById('currentSystem');
+            if (systemType === 'strategy') {
+                window.location.href = '/';
+            } else if (systemType === 'analysis') {
+                window.location.href = '/technical_analysis';
+            } else if (systemType === 'pool') {
+                currentSystem.textContent = '股票池管理';
+            }
+        }
+
+        // 股票池一键自动流转（调用集成总线）
+        function runStockPoolAutoFlow() {
+            const strategyName = prompt('请输入策略名称（用于股票池匹配），留空则使用默认策略:', 'GyroStrategyV7');
+            if (strategyName === null) {
+                return;
+            }
+
+            alert('正在执行股票池自动流转流程...\n策略: ' + (strategyName || '(无策略)') + '\n\n请在服务器控制台查看详细执行日志');
+
+            const endpoint = strategyName && strategyName.trim() !== ''
+                ? '/api/integration/stock_pool'
+                : '/api/stock_pool/run_pipeline';
+
+            const body = strategyName && strategyName.trim() !== ''
+                ? JSON.stringify({strategy: strategyName, strategy_name: strategyName})
+                : JSON.stringify({count: 20});
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: body
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('股票池流程执行结果:', data);
+                if (data.success || data.filtered || data.passed) {
+                    alert('✅ 股票池自动流转执行成功!\n\n详细信息请查看服务器日志');
+                    // 刷新数据
+                    const refreshBtn = document.getElementById('btn-refresh');
+                    if (refreshBtn) refreshBtn.click();
+                } else {
+                    alert('⚠️ 流程执行完成，详情请查看服务器日志');
+                }
+            })
+            .catch(error => {
+                console.error('流程执行错误:', error);
+                alert('❌ 调用失败，请确保Web服务已启动\n\n错误信息: ' + error.message);
+            });
+        }
+    </script>
     <script src="/static/js/stock_pool.js"></script>
+    <script src="/static/robot-widget.js"></script>
 </body>
 </html>

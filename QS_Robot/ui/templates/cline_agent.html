@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cline智能体 - Aurora量化交易系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #0a0e1a;
+            color: #e8e8e8;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #1a2744 0%, #0d1526 100%);
+            padding: 12px 30px;
+            border-bottom: 2px solid #2a3f5f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            font-size: 18px;
+            font-weight: 600;
+            color: #6ba5f7;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-links a {
+            color: #8ba3c7;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 15px;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: #fff;
+            background: #1a2744;
+        }
+
+        .main-container {
+            display: flex;
+            height: calc(100vh - 60px);
+        }
+
+        .sidebar {
+            width: 280px;
+            background: #0d1526;
+            border-right: 1px solid #2a3f5f;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            color: #8ba3c7;
+            margin-bottom: 12px;
+            padding-left: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .model-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .model-item {
+            padding: 10px 12px;
+            background: #1a2744;
+            border: 1px solid #2a3f5f;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .model-item:hover {
+            border-color: #667eea;
+            background: #2a3f5f;
+        }
+
+        .model-item.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.2);
+        }
+
+        .model-name {
+            font-size: 13px;
+            color: #e8e8e8;
+        }
+
+        .model-provider {
+            font-size: 11px;
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .provider-status {
+            padding: 12px;
+            background: #1a2744;
+            border-radius: 8px;
+            border: 1px solid #2a3f5f;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .status-item:last-child { margin-bottom: 0; }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .status-dot.offline { background: #ef4444; }
+        .status-dot.connecting { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; animation: pulse 1s infinite; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .status-text {
+            font-size: 13px;
+            color: #8ba3c7;
+        }
+
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0a0e1a;
+        }
+
+        .chat-header {
+            padding: 20px 30px;
+            background: #1a2744;
+            border-bottom: 1px solid #2a3f5f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e8e8e8;
+        }
+
+        .chat-subtitle {
+            font-size: 13px;
+            color: #8ba3c7;
+            margin-top: 4px;
+        }
+
+        .chat-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary {
+            background: #2a3f5f;
+            color: #e8e8e8;
+        }
+
+        .btn-secondary:hover {
+            background: #3a5a8f;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .message-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 80%;
+            display: flex;
+            gap: 12px;
+        }
+
+        .message.user {
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            margin-right: auto;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .message.user .avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .message.assistant .avatar {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .message-content {
+            background: #1a2744;
+            border: 1px solid #2a3f5f;
+            border-radius: 12px;
+            padding: 14px 18px;
+            line-height: 1.6;
+            font-size: 14px;
+            color: #e8e8e8;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #5a6a85;
+            margin-top: 6px;
+            text-align: right;
+        }
+
+        .input-area {
+            padding: 20px 30px;
+            background: #1a2744;
+            border-top: 1px solid #2a3f5f;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-textarea {
+            flex: 1;
+            background: #0d1526;
+            border: 1px solid #2a3f5f;
+            border-radius: 12px;
+            padding: 14px 18px;
+            color: #e8e8e8;
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+            min-height: 48px;
+            max-height: 150px;
+            overflow-y: auto;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-textarea:focus {
+            border-color: #667eea;
+        }
+
+        .input-textarea::placeholder {
+            color: #5a6a85;
+        }
+
+        .send-btn {
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .quick-btn {
+            padding: 6px 12px;
+            background: #0d1526;
+            border: 1px solid #2a3f5f;
+            border-radius: 20px;
+            color: #8ba3c7;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .quick-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 6px;
+            padding: 8px 0;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .system-message {
+            text-align: center;
+            padding: 10px 20px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 20px;
+            font-size: 12px;
+            color: #8ba3c7;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { width: 200px; }
+            .message { max-width: 95%; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span>🤝</span>
+            <span>Cline智能体</span>
+        </div>
+        <div class="nav-links">
+            <a href="/">🏠 首页</a>
+            <a href="/cline-agent" class="active">🤝 Cline智能体</a>
+            <a href="/model-switch">🔄 模型切换</a>
+            <a href="/stock_pool">📊 股票池</a>
+            <a href="/technical_analysis">📈 技术分析</a>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <div class="section-title">当前模型</div>
+                <div class="provider-status">
+                    <div class="status-item">
+                        <div class="status-dot online" id="echobirdStatus"></div>
+                        <span class="status-text" id="currentModel">GPT-4o (EchoBird)</span>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-dot online" id="clineStatus"></div>
+                        <span class="status-text">Cline智能体: 已连接</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-title">可用模型</div>
+                <div class="model-list" id="modelList">
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-title">快捷命令</div>
+                <div class="quick-actions">
+                    <button class="quick-btn" onclick="sendQuickMessage('系统状态')">系统状态</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('策略列表')">策略列表</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('优化策略')">优化策略</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('股票池')">股票池</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <div class="chat-header">
+                <div>
+                    <div class="chat-title">Cline智能体聊天</div>
+                    <div class="chat-subtitle">通过EchoBird实现大模型切换</div>
+                </div>
+                <div class="chat-controls">
+                    <button class="btn btn-secondary" onclick="clearChat()">🗑️ 清空对话</button>
+                    <button class="btn btn-primary" onclick="window.location.href='/model-switch'">🔄 模型配置</button>
+                </div>
+            </div>
+
+            <div class="message-container" id="messageContainer">
+                <div class="system-message">欢迎使用Cline智能体！我可以帮你管理量化策略、执行优化任务、分析市场数据。</div>
+                <div class="message assistant">
+                    <div class="avatar">🤖</div>
+                    <div>
+                        <div class="message-content">
+                            你好！我是Cline智能体，通过EchoBird连接多种大语言模型。我可以帮你：
+                            <ul style="margin: 10px 0 0 20px; padding: 0;">
+                                <li>查询量化系统状态和策略信息</li>
+                                <li>执行韬定律参数优化</li>
+                                <li>分析股票池和市场数据</li>
+                                <li>管理交易配置和风控设置</li>
+                            </ul>
+                            请问有什么可以帮你的？
+                        </div>
+                        <div class="message-time">刚刚</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea 
+                        class="input-textarea" 
+                        id="messageInput" 
+                        placeholder="输入你的问题或指令..."
+                        onkeydown="handleKeydown(event)"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                </div>
+                <div class="quick-actions">
+                    <span style="color: #5a6a85; font-size: 12px; margin-right: 10px;">快捷操作:</span>
+                    <button class="quick-btn" onclick="sendQuickMessage('运行韬定律优化')">运行韬定律优化</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('检查系统健康')">检查系统健康</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('股票池分析')">股票池分析</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('技术分析')">技术分析</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messages = [];
+        let isTyping = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModels();
+        });
+
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/llm/models');
+                const data = await response.json();
+                
+                if (data.success && data.models) {
+                    const modelList = document.getElementById('modelList');
+                    modelList.innerHTML = '';
+                    
+                    data.models.forEach(model => {
+                        const item = document.createElement('div');
+                        item.className = 'model-item';
+                        item.innerHTML = `
+                            <span class="model-name">${model.name}</span>
+                            <span class="model-provider">${model.provider}</span>
+                        `;
+                        item.addEventListener('click', () => switchModel(model.name));
+                        modelList.appendChild(item);
+                    });
+
+                    if (data.current_model) {
+                        document.getElementById('currentModel').textContent = `${data.current_model} (EchoBird)`;
+                    }
+                }
+            } catch (error) {
+                console.error('加载模型列表失败:', error);
+            }
+        }
+
+        async function switchModel(modelName) {
+            try {
+                const response = await fetch('/api/llm/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: modelName })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('currentModel').textContent = `${modelName} (EchoBird)`;
+                    addSystemMessage(`已切换到模型: ${modelName}`);
+                }
+            } catch (error) {
+                console.error('切换模型失败:', error);
+            }
+        }
+
+        function addMessage(content, role) {
+            const container = document.getElementById('messageContainer');
+            const message = document.createElement('div');
+            message.className = `message ${role}`;
+            
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            
+            message.innerHTML = `
+                <div class="avatar">${role === 'user' ? '👤' : '🤖'}</div>
+                <div>
+                    <div class="message-content">${content}</div>
+                    <div class="message-time">${timeStr}</div>
+                </div>
+            `;
+            
+            container.appendChild(message);
+            container.scrollTop = container.scrollHeight;
+            
+            messages.push({ role, content });
+        }
+
+        function addSystemMessage(content) {
+            const container = document.getElementById('messageContainer');
+            const message = document.createElement('div');
+            message.className = 'system-message';
+            message.textContent = content;
+            container.appendChild(message);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addTypingIndicator() {
+            const container = document.getElementById('messageContainer');
+            const indicator = document.createElement('div');
+            indicator.className = 'message assistant';
+            indicator.innerHTML = `
+                <div class="avatar">🤖</div>
+                <div>
+                    <div class="message-content">
+                        <div class="typing-indicator">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            indicator.id = 'typingIndicator';
+            container.appendChild(indicator);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const btn = document.getElementById('sendBtn');
+            const content = input.value.trim();
+            
+            if (!content || isTyping) return;
+
+            input.value = '';
+            btn.disabled = true;
+            
+            addMessage(content, 'user');
+            addTypingIndicator();
+            isTyping = true;
+
+            try {
+                const response = await fetch('/api/cline/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: content })
+                });
+                const data = await response.json();
+
+                removeTypingIndicator();
+                
+                if (data.success) {
+                    addMessage(data.response, 'assistant');
+                } else {
+                    addMessage(`[错误] ${data.error || '请求失败'}`, 'assistant');
+                }
+            } catch (error) {
+                removeTypingIndicator();
+                addMessage(`[错误] 网络错误: ${error.message}`, 'assistant');
+            } finally {
+                isTyping = false;
+                btn.disabled = false;
+            }
+        }
+
+        function sendQuickMessage(message) {
+            document.getElementById('messageInput').value = message;
+            sendMessage();
+        }
+
+        function handleKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function clearChat() {
+            if (confirm('确定要清空对话吗？')) {
+                document.getElementById('messageContainer').innerHTML = `
+                    <div class="system-message">欢迎使用Cline智能体！我可以帮你管理量化策略、执行优化任务、分析市场数据。</div>
+                    <div class="message assistant">
+                        <div class="avatar">🤖</div>
+                        <div>
+                            <div class="message-content">
+                                你好！我是Cline智能体，通过EchoBird连接多种大语言模型。我可以帮你：
+                                <ul style="margin: 10px 0 0 20px; padding: 0;">
+                                    <li>查询量化系统状态和策略信息</li>
+                                    <li>执行韬定律参数优化</li>
+                                    <li>分析股票池和市场数据</li>
+                                    <li>管理交易配置和风控设置</li>
+                                </ul>
+                                请问有什么可以帮你的？
+                            </div>
+                            <div class="message-time">刚刚</div>
+                        </div>
+                    </div>
+                `;
+                messages = [];
+            }
+        }
+    </script>
+    <script src="/static/robot-widget.js"></script>
+</body>
+</html>

@@ -332,10 +332,27 @@ class SimulatedFallbackEngine:
         quality_score = 0.5
         params = params or {}
         name_lower = str(name).lower()
+        is_gyro = any(k in name_lower for k in ['gyro', '陀螺仪', '陀螺', 'gyroscopic', 'gyro_v7'])
+        is_fourier = any(k in name_lower for k in ['fourier', '傅里叶', 'ppo', 'rl', '强化学习'])
         is_bernoulli = any(k in name_lower for k in ['bernoulli', 'coanda', '伯努利', '康达'])
         is_shepherd = any(k in name_lower for k in ['shepherd', 'rotation', '轮动', '标的'])
 
-        if params:
+        # 陀螺仪/傅里叶策略：优先使用专用评分模块（避免因参数名称不同而漏评分）
+        if is_gyro or is_fourier:
+            try:
+                from .tau_optimizer_cluster import GyroModule, FourierRLStrategyModule
+                if is_gyro:
+                    mod = GyroModule()
+                else:
+                    mod = FourierRLStrategyModule()
+                module_score = mod.estimate_quality(params)
+                # module_score 是 0-10 金融级，归一化为 0-1
+                quality_score = max(0.0, min(1.0, module_score / 10.0))
+                quality_score += random.uniform(-0.03, 0.03)
+            except Exception:
+                pass  # 失败则退回下面的通用逻辑
+
+        if params and quality_score == 0.5:  # 仅当专用模块未覆盖时才走通用评分
             # 计算参数合理性得分（0-1范围，1=最佳）
             param_scores = []
 
@@ -510,7 +527,11 @@ class SimulatedFallbackEngine:
                 quality_score = max(0.0, min(1.0, quality_score))
         else:
             # 无参数，使用策略名称相关的基础评分 + 随机
-            if is_bernoulli:
+            if is_gyro:
+                quality_score = 0.7 + random.uniform(-0.05, 0.1)
+            elif is_fourier:
+                quality_score = 0.7 + random.uniform(-0.05, 0.1)
+            elif is_bernoulli:
                 quality_score = 0.65 + random.uniform(-0.05, 0.1)
             elif is_shepherd:
                 quality_score = 0.6 + random.uniform(-0.05, 0.1)
@@ -591,22 +612,373 @@ class SimulatedFallbackEngine:
 
 
 # ============================================================
+# 真实K线回测引擎（基于AKShare数据源）
+# ============================================================
+
+class RealKlineBacktestEngine:
+    """基于真实K线数据的策略回测引擎。
+
+    调用链：enhanced_strategy_manager → AKShareDataSource → 东方财富/新浪财经 API
+
+    输出格式与 SimulatedFallbackEngine.run_backtest 保持完全一致，
+    这样 GUI/优化器/集成总线的调用代码无需修改。
+    """
+
+    def __init__(self):
+        self._kline_cache = {}
+        self._ak_ds = None  # 延迟初始化 AKShareDataSource
+
+    # --------- AKShare 数据源连接 ---------
+    def _get_akshare(self):
+        if self._ak_ds is None or self._ak_ds is False:
+            try:
+                import importlib
+                mod = importlib.import_module("extensions.data_sources.akshare_data_source")
+                cls = getattr(mod, "AKShareDataSource")
+                self._ak_ds = cls({"cache_enabled": True, "cache_ttl_days": 1})
+                self._ak_ds.connect()
+            except Exception as e:
+                print(f"[WARN] AKShare初始化失败: {e}")
+                self._ak_ds = False
+        return self._ak_ds
+
+    def _fetch_kline(self, symbol: str, days: int = 500):
+        key = (symbol, days)
+        if key in self._kline_cache:
+            return self._kline_cache[key]
+        ds = self._get_akshare()
+        if not ds:
+            return None
+        try:
+            r = ds.get_stock_kline(symbol=symbol, period="daily", days=days)
+            if r and r.get("count", 0) > 50:
+                self._kline_cache[key] = r
+                return r
+        except Exception as e:
+            print(f"[WARN] 获取K线失败 {symbol}: {e}")
+        return None
+
+    # --------- 主入口：与 SimulatedFallbackEngine 同签名 ---------
+    def run_backtest(self, name: str, days: int = 300, balance: float = 100000.0,
+                     params: dict = None, symbol: str = "000001") -> dict:
+        """真实K线回测。与 SimulatedFallbackEngine.run_backtest 返回结构完全一致。"""
+        import numpy as np
+        params = params or {}
+        kline = self._fetch_kline(symbol, max(days, 200))
+        if kline is None or len(kline.get("closes", [])) < 60:
+            return {
+                "success": True,
+                "data": {
+                    "strategy_name": name,
+                    "summary": {
+                        "initial_balance": balance,
+                        "final_balance": balance,
+                        "total_return_pct": 0.0,
+                        "sharpe_ratio": 0.0,
+                        "max_drawdown": 0.0,
+                        "win_rate": 50.0,
+                        "total_trades": 0,
+                        "days": days,
+                        "quality_score": 0.5
+                    },
+                    "db_saved": False,
+                    "note": "K线数据不可用（网络/AKShare未安装？），改用模拟模式"
+                }
+            }
+
+        closes = np.array(kline["closes"], dtype=np.float64)
+        n = len(closes)
+        name_lower = str(name).lower()
+        is_trend = any(k in name_lower for k in ['trend', '趋势', 'movingavg', '均线'])
+        is_grid = any(k in name_lower for k in ['grid', '网格', 'highreturngrid', 'adaptiverange'])
+        is_ml = any(k in name_lower for k in ['ml', 'machine', '自适应ML', 'adaptiveml'])
+        is_mfactor = any(k in name_lower for k in ['multifactor', '多因子', 'resonance', '共振'])
+        is_rl = any(k in name_lower for k in ['ppo', 'rl', 'fourier', '傅里叶', '强化'])
+        is_value = any(k in name_lower for k in ['value', '价值', 'huijin', '汇金'])
+        is_defense = any(k in name_lower for k in ['defense', '防御', 'downmarket', '下跌'])
+        is_bernoulli = any(k in name_lower for k in ['bernoulli', 'coanda', '伯努利', '康达', '陀螺仪', 'gyro'])
+        is_shepherd = any(k in name_lower for k in ['shepherd', 'rotation', '轮动', '标的'])
+        is_ensemble = any(k in name_lower for k in ['ensemble', 'optimized', '综合', 'final'])
+
+        signals = self._gen_signals(name_lower, closes, params,
+                                    is_trend, is_grid, is_ml, is_mfactor, is_rl,
+                                    is_value, is_defense, is_bernoulli,
+                                    is_shepherd, is_ensemble)
+
+        metrics = self._simulate_trades(closes, signals, balance)
+
+        return {
+            "success": True,
+            "data": {
+                "strategy_name": name,
+                "summary": {
+                    "initial_balance": balance,
+                    "final_balance": round(float(metrics["final_balance"]), 2),
+                    "total_return_pct": round(float(metrics["total_return_pct"]), 2),
+                    "sharpe_ratio": round(float(metrics["sharpe"]), 4),
+                    "max_drawdown": round(float(metrics["max_drawdown"]), 2),
+                    "win_rate": round(float(metrics["win_rate"]), 1),
+                    "total_trades": int(metrics["total_trades"]),
+                    "days": n,
+                    "quality_score": round(float(metrics["quality_score"]), 4)
+                },
+                "db_saved": False,
+                "note": f"真实K线回测 ({symbol}, {n}个交易日, 源:AKShare)"
+            }
+        }
+
+    # --------- 信号生成 ---------
+    def _gen_signals(self, name_lower, closes, params,
+                     is_trend, is_grid, is_ml, is_mfactor, is_rl,
+                     is_value, is_defense, is_bernoulli, is_shepherd, is_ensemble):
+        import numpy as np
+        n = len(closes)
+        signals = np.zeros(n)
+
+        short_p = max(3, int(params.get("short_period", 10)))
+        long_p = max(short_p + 5, int(params.get("long_period", 30)))
+        mid_p = max(short_p + 3, int(params.get("mid_period", 20)))
+        threshold = float(params.get("threshold", 0.03))
+        stop_loss = float(params.get("stop_loss_pct", 0.05))
+        pos_size = float(params.get("position_size", 0.3))
+        bernoulli_thresh = float(params.get("bernoulli_threshold", 0.05))
+        coanda_att = float(params.get("coanda_attachment", 0.5))
+        pressure_sens = float(params.get("pressure_sensitivity", 0.8))
+        curvature_sens = float(params.get("curvature_sensitivity", 0.5))
+        separation_thresh = float(params.get("separation_threshold", 1.0))
+        momentum_alpha = float(params.get("momentum_alpha", 0.8))
+        confirmation_bars = max(1, int(params.get("confirmation_bars", 3)))
+
+        def sma(arr, w):
+            if w >= len(arr):
+                return np.full(len(arr), arr[0])
+            weights = np.ones(w) / w
+            return np.convolve(arr, weights, mode="same")
+
+        def compute_rsi(arr, period=14):
+            deltas = np.diff(arr, prepend=arr[0])
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+            ag = sma(gains, period)
+            al = sma(losses, period)
+            rs = np.where(al > 0, ag / (al + 1e-10), 100.0)
+            return 100.0 - (100.0 / (1.0 + rs))
+
+        short_ma = sma(closes, short_p)
+        long_ma = sma(closes, long_p)
+        mid_ma = sma(closes, mid_p)
+        rsi = compute_rsi(closes, 14)
+        returns = np.diff(closes, prepend=closes[0]) / (closes + 1e-10)
+        vol = np.zeros(n)
+        for i in range(20, n):
+            vol[i] = float(np.std(returns[i-20:i]))
+        vol[:20] = vol[20] if n > 20 else 0.02
+        avg_vol = float(np.mean(vol[vol > 0])) if np.any(vol > 0) else 0.02
+
+        if is_trend or 'moving' in name_lower:
+            diff = short_ma - long_ma
+            for i in range(1, n):
+                if diff[i-1] <= 0 < diff[i]:
+                    signals[i] = pos_size
+                elif diff[i-1] >= 0 > diff[i]:
+                    signals[i] = 0.0
+            smooth = np.zeros(n)
+            running = 0
+            for i in range(n):
+                if signals[i] > 0:
+                    running = confirmation_bars
+                if running > 0:
+                    smooth[i] = pos_size
+                    running -= 1
+            signals = smooth
+
+        elif is_grid:
+            lookback = 60
+            for i in range(lookback, n):
+                lo = float(np.min(closes[i-lookback:i]))
+                hi = float(np.max(closes[i-lookback:i]))
+                rng = max(hi - lo, hi * 0.02)
+                position = (float(closes[i]) - lo) / rng
+                signals[i] = max(0.0, min(pos_size, pos_size * (1.0 - position * 1.5)))
+
+        elif is_ml:
+            for i in range(1, n):
+                rsi_ok = rsi[i] < 55
+                mom_ok = closes[i] > closes[max(0, i-5)]
+                vol_ok = vol[i] < avg_vol * 1.5
+                if rsi_ok and mom_ok and vol_ok:
+                    signals[i] = pos_size
+                elif rsi[i] > 70:
+                    signals[i] = 0.0
+
+        elif is_mfactor:
+            for i in range(1, n):
+                trend_ok = short_ma[i] > long_ma[i]
+                rsi_ok = 40 <= rsi[i] <= 70
+                mom_ok = closes[i] > closes[max(0, i-10)]
+                if trend_ok and rsi_ok and mom_ok:
+                    signals[i] = pos_size
+
+        elif is_rl:
+            momentum = np.zeros(n)
+            for i in range(10, n):
+                momentum[i] = (closes[i] - closes[i-10]) / (closes[i-10] + 1e-10)
+            for i in range(n):
+                if momentum[i] > threshold:
+                    signals[i] = min(pos_size, pos_size * (1 + momentum[i] * momentum_alpha))
+                elif momentum[i] < -threshold:
+                    signals[i] = 0.0
+
+        elif is_value:
+            for i in range(long_p, n):
+                dev = (closes[i] - long_ma[i]) / (long_ma[i] + 1e-10)
+                if dev < -0.03:
+                    signals[i] = pos_size
+                elif dev > 0.05:
+                    signals[i] = 0.0
+
+        elif is_defense:
+            for i in range(n):
+                if vol[i] < avg_vol * 0.8:
+                    signals[i] = pos_size * 0.5
+                elif vol[i] > avg_vol * 1.5:
+                    signals[i] = 0.0
+
+        elif is_bernoulli:
+            for i in range(5, n):
+                pressure = abs(closes[i] - closes[i-5]) / (closes[i-5] + 1e-10)
+                curvature = abs(closes[i] - 2 * closes[i-1] + closes[i-2]) / (closes[i-1] + 1e-10)
+                if pressure > bernoulli_thresh * 0.5 and curvature > curvature_sens * 0.003:
+                    signals[i] = pos_size
+                elif pressure < bernoulli_thresh * 0.2:
+                    signals[i] = signals[i-1]
+
+        elif is_shepherd:
+            for i in range(20, n):
+                mom20 = (closes[i] - closes[i-20]) / (closes[i-20] + 1e-10)
+                vol_score = 1.0 / (1 + vol[i])
+                signals[i] = max(0.0, min(pos_size, (mom20 * momentum_alpha + vol_score * 0.3) * 0.5))
+
+        elif is_ensemble:
+            trend_vote = (short_ma > long_ma).astype(float)
+            rsi_vote = ((rsi > 30) & (rsi < 70)).astype(float)
+            momentum_vote = np.zeros(n)
+            for i in range(10, n):
+                momentum_vote[i] = 1.0 if closes[i] > closes[i-10] else 0.0
+            avg_vote = (trend_vote + rsi_vote + momentum_vote) / 3.0
+            signals = np.where(avg_vote > 0.5, pos_size, 0.0)
+
+        else:
+            diff = short_ma - long_ma
+            for i in range(1, n):
+                if diff[i-1] <= 0 < diff[i]:
+                    signals[i] = pos_size
+
+        return signals
+
+    # --------- 交易模拟 ---------
+    def _simulate_trades(self, closes, signals, balance):
+        import numpy as np
+        n = len(closes)
+        fee_rate = 0.0003
+        slippage = 0.001
+        cash = np.zeros(n)
+        shares = np.zeros(n)
+        equity = np.zeros(n)
+        cash[0] = balance
+        equity[0] = balance
+        trade_logs = []
+
+        for i in range(1, n):
+            cash[i] = cash[i-1]
+            shares[i] = shares[i-1]
+            target_pos = float(signals[i])
+            total_equity = cash[i] + shares[i] * closes[i]
+            current_pos = (shares[i] * closes[i]) / total_equity if total_equity > 0 else 0
+
+            if abs(target_pos - current_pos) > 0.05:
+                target_value = total_equity * target_pos
+                current_value = shares[i] * closes[i]
+                delta_value = target_value - current_value
+
+                if abs(delta_value) > 10:
+                    trade_price = closes[i] * (1 + slippage) if delta_value > 0 else closes[i] * (1 - slippage)
+                    trade_shares = delta_value / trade_price
+                    fee = abs(delta_value) * fee_rate
+
+                    if trade_shares > 0:
+                        cost = trade_shares * trade_price + fee
+                        if cash[i] >= cost:
+                            cash[i] -= cost
+                            shares[i] += trade_shares
+                            trade_logs.append(("buy", i, float(trade_price), float(trade_shares)))
+                    else:
+                        sell_shares = min(-trade_shares, shares[i])
+                        if sell_shares > 0:
+                            proceeds = sell_shares * trade_price - fee
+                            cash[i] += proceeds
+                            shares[i] -= sell_shares
+                            trade_logs.append(("sell", i, float(trade_price), float(sell_shares)))
+
+            equity[i] = cash[i] + shares[i] * closes[i]
+
+        if n < 2:
+            return {"final_balance": balance, "total_return_pct": 0, "sharpe": 0,
+                    "max_drawdown": 0, "win_rate": 50, "total_trades": 0, "quality_score": 0.5}
+
+        total_return_pct = (equity[-1] - balance) / balance * 100
+        daily_r = np.diff(equity) / (equity[:-1] + 1e-10)
+        sharpe = float(np.mean(daily_r) / np.std(daily_r) * np.sqrt(252)) if np.std(daily_r) > 0 else 0.0
+        peak = np.maximum.accumulate(equity)
+        dd = (equity - peak) / (peak + 1e-10)
+        max_drawdown = abs(float(min(dd))) * 100
+
+        if len(trade_logs) >= 2:
+            wins = 0
+            closed = 0
+            buys = [t for t in trade_logs if t[0] == "buy"]
+            sells = [t for t in trade_logs if t[0] == "sell"]
+            for b, s in zip(buys[:len(sells)], sells):
+                pnl = (s[2] - b[2]) * min(b[3], s[3])
+                if pnl > 0:
+                    wins += 1
+                closed += 1
+            win_rate = (wins / closed * 100) if closed > 0 else 50.0
+        else:
+            win_rate = 50.0
+
+        quality_score = max(0.0, min(1.0, 0.5 + float(total_return_pct) / 100.0 + sharpe / 10.0))
+        return {
+            "final_balance": float(equity[-1]),
+            "total_return_pct": float(total_return_pct),
+            "sharpe": sharpe,
+            "max_drawdown": max_drawdown,
+            "win_rate": win_rate,
+            "total_trades": len(trade_logs),
+            "quality_score": quality_score
+        }
+
+
+# ============================================================
 # 核心：增强型策略管理器
 # ============================================================
 
 class EnhancedStrategyManager:
     """
     QS Robot 增强型策略管理器
-    
-    双核架构:
+
+    三核架构:
     - 当Aurora在线 → 通过AuroraAPIClient调用Aurora的DeepSeek引擎
-    - 当Aurora离线 → 使用SimulatedFallbackEngine本地模拟
+    - 当Aurora离线 → 使用SimulatedFallbackEngine本地模拟（参数感知评分）
+    - 真实K线模式 → 使用RealKlineBacktestEngine（基于AKShare数据源跑真实行情）
     """
 
     def __init__(self, aurora_base_url: str = "http://localhost:5000"):
-        # 双核心
+        # 三核心
         self.aurora = AuroraAPIClient(base_url=aurora_base_url)
         self.fallback = SimulatedFallbackEngine()
+        self.real_engine = RealKlineBacktestEngine()
+        self._data_mode = "auto"  # "auto" | "real" | "simulated"
 
         # 状态管理
         self._mode = SystemMode.STANDALONE
@@ -704,24 +1076,51 @@ class EnhancedStrategyManager:
                 )
         return None
 
-    def start_strategy(self, name: str, balance: float = 100000.0) -> Tuple[bool, str]:
-        """启动策略"""
+    def start_strategy(self, name: str, balance: float = 100000.0,
+                        use_optimized_params: bool = True) -> Tuple[bool, str]:
+        """启动策略（自动应用最新优化参数）"""
+        # 自动加载并应用最新优化参数
+        best_params_info = ""
+        if use_optimized_params:
+            try:
+                from .tau_optimizer_cluster import get_parameter_store
+                _ps = get_parameter_store()
+                best_params = _ps.get_best_params(name)
+                if best_params:
+                    best_score = _ps.get_best_score(name)
+                    info = _ps.get_strategy(name)
+                    version = info.get('current_version', 0) if info else 0
+                    best_params_info = f"（使用优化参数 v{version}, score={best_score:.2f}）"
+                    # 同步到 active_strategies 缓存
+                    self._active_strategies[name] = type('obj', (object,), {
+                        'name': name, 'label': name, 'category': '',
+                        'description': f'v{version}, score={best_score:.2f}',
+                        'status': StrategyStatus.RUNNING,
+                        'best_params': best_params, 'best_score': best_score,
+                        'version': version
+                    })()
+            except Exception as e:
+                print(f"[WARN] 加载优化参数失败，使用默认: {e}")
+
         if self.is_aurora_available():
-            result = self.aurora.start_strategy(name, balance)
-            if result.get('success'):
+            # 即使aurora启动，也先确保已记录最佳参数
+            if not name in self._active_strategies:
                 self._active_strategies[name] = StrategyInfo(
                     name=name, label=name, category='', description='',
                     status=StrategyStatus.RUNNING
                 )
-                return True, f"策略 {name} 已通过Aurora启动"
+            result = self.aurora.start_strategy(name, balance)
+            if result.get('success'):
+                return True, f"策略 {name} 已通过Aurora启动{best_params_info}"
             return False, result.get('error', '启动失败')
 
         # 模拟模式
-        self._active_strategies[name] = StrategyInfo(
-            name=name, label=name, category='', description='',
-            status=StrategyStatus.RUNNING
-        )
-        return True, f"策略 {name} 已启动（模拟模式）"
+        if not name in self._active_strategies:
+            self._active_strategies[name] = StrategyInfo(
+                name=name, label=name, category='', description='',
+                status=StrategyStatus.RUNNING
+            )
+        return True, f"策略 {name} 已启动（模拟模式）{best_params_info}"
 
     def stop_strategy(self) -> Tuple[bool, str]:
         """停止所有策略"""
@@ -734,11 +1133,77 @@ class EnhancedStrategyManager:
 
     # ---- 回测管理 ----
 
+    # ---- 数据模式管理 ----
+    def set_data_mode(self, mode: str):
+        """设置数据模式：'auto' 先试真实K线，失败回退到模拟；'real' 仅真实K线；'simulated' 仅模拟"""
+        valid = {"auto", "real", "simulated"}
+        if mode not in valid:
+            raise ValueError(f"data_mode 必须是 {valid}")
+        self._data_mode = mode
+
+    def get_data_mode(self) -> str:
+        return self._data_mode
+
     def run_backtest(self, name: str, days: int = 30, balance: float = 100000.0,
-                     params: dict = None, symbol: str = 'BTCUSDT') -> BacktestResult:
-        """执行回测"""
+                     params: dict = None, symbol: str = 'BTCUSDT',
+                     use_optimized_params: bool = True,
+                     data_mode: str = None) -> BacktestResult:
+        """执行回测 —— 自动应用最新优化参数
+
+        Args:
+            use_optimized_params: 若为True且params=None，自动从参数存储加载最佳参数
+            data_mode: 'auto'|'real'|'simulated'，None 表示使用 self._data_mode
+        """
+        effective_params = params
+        if params is None and use_optimized_params:
+            try:
+                from .tau_optimizer_cluster import get_parameter_store
+                _ps = get_parameter_store()
+                best_params = _ps.get_best_params(name)
+                if best_params:
+                    best_score = _ps.get_best_score(name)
+                    info = _ps.get_strategy(name)
+                    version = info.get('current_version', 0) if info else 0
+                    print(f"  [Backtest] 已加载 {name} 最新优化参数 "
+                          f"(v{version}, score={best_score:.2f})")
+                    effective_params = best_params
+            except Exception as e:
+                print(f"  [Backtest] 加载优化参数失败，使用默认: {e}")
+
+        mode = data_mode if data_mode else self._data_mode
+
+        # 真实K线模式尝试（real/auto）
+        if mode in ("real", "auto"):
+            try:
+                result = self.real_engine.run_backtest(name, days, balance, effective_params, symbol)
+                note = result.get("data", {}).get("note", "")
+                # 真实K线引擎成功（有交易发生，或虽空但非 fallback 提示）
+                if result.get("success") and "K线数据不可用" not in note and "改用模拟模式" not in note:
+                    summary = result["data"]["summary"]
+                    bt = BacktestResult(
+                        strategy_name=name,
+                        total_return_pct=summary.get('total_return_pct', 0),
+                        sharpe_ratio=summary.get('sharpe_ratio', 0),
+                        max_drawdown=summary.get('max_drawdown', 0),
+                        win_rate=summary.get('win_rate', 0),
+                        total_trades=summary.get('total_trades', 0),
+                        start_date=datetime.now().isoformat(),
+                        end_date=datetime.now().isoformat(),
+                        db_saved=summary.get('db_saved', False)
+                    )
+                    self._backtest_results.append(bt)
+                    return bt
+            except Exception as e:
+                print(f"  [Backtest] 真实K线模式失败: {e}")
+            if mode == "real":
+                # 'real' 模式不回退到模拟——直接返回空结果
+                bt = BacktestResult(name, 0, 0, 0, 0, 0, "", "", False)
+                self._backtest_results.append(bt)
+                return bt
+
+        # Aurora 远程引擎（若可用）
         if self.is_aurora_available():
-            result = self.aurora.run_backtest(name, days, balance, params, symbol)
+            result = self.aurora.run_backtest(name, days, balance, effective_params, symbol)
             if result.get('success'):
                 data = result.get('data', {})
                 summary = data.get('summary', {})
@@ -756,8 +1221,8 @@ class EnhancedStrategyManager:
                 self._backtest_results.append(bt)
                 return bt
 
-        # 模拟模式
-        result = self.fallback.run_backtest(name, days, balance, params, symbol)
+        # 模拟模式（参数感知评分）
+        result = self.fallback.run_backtest(name, days, balance, effective_params, symbol)
         data = result.get('data', {}).get('summary', {})
         bt = BacktestResult(
             strategy_name=name,
@@ -772,6 +1237,56 @@ class EnhancedStrategyManager:
         )
         self._backtest_results.append(bt)
         return bt
+
+    def get_optimization_status(self, strategy_name: str = None) -> Any:
+        """查询策略优化状态（返回最佳评分/版本/更新时间等）"""
+        try:
+            from .tau_optimizer_cluster import get_parameter_store
+            _ps = get_parameter_store()
+            if strategy_name:
+                info = _ps.get_strategy(strategy_name)
+                if info:
+                    return {
+                        'success': True,
+                        'strategy': strategy_name,
+                        'best_score': round(info.get('best_score', 0), 4),
+                        'current_version': info.get('current_version', 0),
+                        'best_params': _ps.get_best_params(strategy_name),
+                        'history_count': len(info.get('optimization_history', [])),
+                        'last_updated': info.get('last_updated', '-'),
+                        'status': info.get('status', 'new')
+                    }
+                return {'success': False, 'error': '策略未优化'}
+            # 返回所有策略优化状态
+            return {'success': True, 'strategies': _ps.get_all_strategies_info()}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def apply_optimized_params(self, strategy_name: str) -> dict:
+        """将最新优化参数应用到策略（返回当前最佳参数字典）"""
+        try:
+            from .tau_optimizer_cluster import get_parameter_store
+            _ps = get_parameter_store()
+            best_params = _ps.get_best_params(strategy_name)
+            if not best_params:
+                return {'success': False, 'error': f'{strategy_name} 无优化记录'}
+            best_score = _ps.get_best_score(strategy_name)
+            info = _ps.get_strategy(strategy_name)
+            version = info.get('current_version', 0) if info else 0
+            # 同步到 active_strategies 缓存（供GUI/运行时使用）
+            self._active_strategies[strategy_name] = type('obj', (object,), {
+                'name': strategy_name, 'label': strategy_name,
+                'category': 'optimized', 'description': f'v{version}, score={best_score:.2f}',
+                'best_params': best_params, 'best_score': best_score,
+                'version': version, 'status': 'optimized'
+            })()
+            return {
+                'success': True, 'strategy': strategy_name,
+                'best_params': best_params, 'best_score': round(best_score, 4),
+                'version': version, 'message': f'{strategy_name} 已应用 v{version} 优化参数'
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
     def get_backtest_history(self, name: str = None, limit: int = 20) -> List[BacktestResult]:
         """获取回测历史"""
@@ -835,7 +1350,8 @@ class EnhancedStrategyManager:
                             'cluster_status': data.get('cluster_status', {}),
                             'total_evals': data.get('total_evals', 0),
                             'time_elapsed': round(time.time() - start_time, 3),
-                            'mode': 'aurora'
+                            'mode': 'aurora',
+                            'pattern_analysis': data.get('pattern_analysis'),
                         }
                     }
             except Exception as e:
@@ -867,6 +1383,7 @@ class EnhancedStrategyManager:
             best_result = fold_result.get('best_result')
             _best_score = round(best_result.score(), 4) if best_result else 0.0
             _total_evals = fold_result.get('total_evaluations', 0)
+            _pattern_analysis = fold_result.get('pattern_analysis')
 
             # 记录优化结果到持久化存储
             try:
@@ -899,7 +1416,8 @@ class EnhancedStrategyManager:
                     'cluster_status': fold_result.get('cluster_status', {}),
                     'total_evals': _total_evals,
                     'time_elapsed': round(time.time() - start_time, 3),
-                    'mode': 'tau_cluster_fallback'
+                    'mode': 'tau_cluster_fallback',
+                    'pattern_analysis': _pattern_analysis,
                 }
             }
         except Exception as e:
@@ -1189,13 +1707,23 @@ class EnhancedStrategyManager:
         返回: 可用模块信息 + 当前策略推荐的模块
         """
         from .tau_optimizer_cluster import (
-            BernoulliCoandaModule, ShepherdRotationModule,
+            BernoulliCoandaModule, ShepherdRotationModule, FourierRLStrategyModule,
+            GyroModule,
         )
         b = BernoulliCoandaModule()
         s = ShepherdRotationModule()
+        f = FourierRLStrategyModule()
+        g = GyroModule()
         return {
             'success': True,
             'modules': [
+                {
+                    'name': f.name,
+                    'description': f.description,
+                    'params_count': len(f.param_ranges),
+                    'keywords': ['fourier', 'rl', 'ppo', '傅里叶', '强化学习', 'fourier_rl'],
+                    'groups': list(f.get_param_groups().keys()),
+                },
                 {
                     'name': b.name,
                     'description': b.description,
@@ -1209,6 +1737,13 @@ class EnhancedStrategyManager:
                     'params_count': s.count_params(),
                     'keywords': ['shepherd', 'rotation', '标的轮动', '智能标的轮动'],
                     'groups': list(s.get_param_groups().keys()),
+                },
+                {
+                    'name': g.name,
+                    'description': g.description,
+                    'params_count': len(g.param_ranges),
+                    'keywords': ['gyro', 'gyro_v7', '陀螺仪', '陀螺', 'gyroscopic', 'gyro_optimized'],
+                    'groups': list(g.get_param_groups().keys()),
                 },
                 {
                     'name': 'generic',

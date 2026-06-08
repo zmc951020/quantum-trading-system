@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora 量化交易系统 - 登录</title>
+    <style>
+        :root {
+            --primary: #00d4ff;
+            --success: #00c853;
+            --danger: #ff5252;
+            --warning: #ffab00;
+            --bg-dark: #0a0e1a;
+            --bg-card: #111827;
+            --border: #2a3f5f;
+            --text-primary: #e8e8e8;
+            --text-secondary: #8ba3c7;
+            --accent-cyan: #00d4ff;
+            --accent-blue: #4a7dff;
+            --accent-purple: #a855f7;
+            --accent-pink: #fa709a;
+            --accent-green: #43e97b;
+            --accent-orange: #ffa726;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-dark);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        #particleCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+        }
+
+        .grid-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: 1;
+        }
+
+        .radial-glow {
+            position: fixed; border-radius: 50%; filter: blur(100px); opacity: 0.4; z-index: 0;
+        }
+        .glow-1 { width: 600px; height: 600px; background: radial-gradient(circle, rgba(0, 212, 255, 0.3) 0%, transparent 70%); top: -200px; left: -100px; }
+        .glow-2 { width: 500px; height: 500px; background: radial-gradient(circle, rgba(74, 125, 255, 0.2) 0%, transparent 70%); bottom: -100px; right: -100px; }
+        .glow-3 { width: 400px; height: 400px; background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%, -50%); }
+
+        /* 登录卡片 */
+        .login-wrapper {
+            position: relative; z-index: 10;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 20px;
+        }
+
+        .login-card {
+            width: 100%; max-width: 480px;
+            background: rgba(17, 24, 39, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 48px;
+            box-shadow: 0 0 60px rgba(0, 212, 255, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Logo区域 */
+        .brand-section {
+            text-align: center; margin-bottom: 40px;
+        }
+        .logo-icon {
+            width: 80px; height: 80px; margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 24px; display: flex; align-items: center; justify-content: center;
+            font-size: 36px; box-shadow: 0 10px 40px rgba(0, 212, 255, 0.3);
+        }
+        .brand-title { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+        .brand-subtitle { font-size: 14px; color: var(--text-secondary); }
+
+        /* 按钮层级区域 */
+        .button-tier-section {
+            margin-bottom: 32px;
+        }
+        .tier-header {
+            text-align: center; margin-bottom: 20px;
+            font-size: 13px; color: var(--text-secondary);
+        }
+
+        /* 层级按钮 */
+        .tier-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .tier-btn {
+            aspect-ratio: 1;
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tier-btn::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .tier-btn:hover {
+            border-color: var(--accent-cyan);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 212, 255, 0.2);
+        }
+
+        .tier-btn:hover::before { opacity: 0.1; }
+
+        .tier-btn.active {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .tier-btn-icon { font-size: 24px; }
+        .tier-btn-label { font-size: 11px; color: var(--text-secondary); }
+
+        .tier-btn[data-tier="1"] { --accent-color: var(--accent-green); }
+        .tier-btn[data-tier="2"] { --accent-color: var(--accent-blue); }
+        .tier-btn[data-tier="3"] { --accent-color: var(--accent-purple); }
+        .tier-btn[data-tier="4"] { --accent-color: var(--accent-pink); }
+        .tier-btn[data-tier="5"] { --accent-color: var(--accent-orange); }
+        .tier-btn[data-tier="6"] { --accent-color: var(--accent-cyan); }
+
+        /* 确认按钮 */
+        .confirm-section {
+            display: flex; flex-direction: column; gap: 16px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 16px 32px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-primary.loading { opacity: 0.7; cursor: not-allowed; }
+
+        .btn-secondary {
+            width: 100%;
+            padding: 14px 32px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        /* 错误提示 */
+        .error-message {
+            display: none;
+            padding: 12px 16px;
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            border-radius: 10px;
+            color: var(--danger);
+            font-size: 13px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .error-message.show { display: block; }
+
+        .error-icon { margin-right: 8px; }
+
+        /* 安全状态 */
+        .security-status {
+            margin-top: 24px;
+            padding: 16px;
+            background: linear-gradient(135deg, rgba(0, 212, 200, 0.08), rgba(74, 125, 255, 0.05));
+            border-radius: 12px;
+            border: 1px solid rgba(0, 212, 200, 0.15);
+        }
+
+        .security-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .security-title {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: var(--text-primary);
+        }
+
+        .security-badge {
+            padding: 6px 12px;
+            background: rgba(0, 200, 83, 0.1);
+            border-radius: 20px;
+            font-size: 12px; color: var(--success);
+        }
+
+        .security-details {
+            font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+        }
+
+        /* 版本信息 */
+        .version-info {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        /* 粒子动画 */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <div class="grid-overlay"></div>
+    <div class="radial-glow glow-1"></div>
+    <div class="radial-glow glow-2"></div>
+    <div class="radial-glow glow-3"></div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="brand-section">
+                <div class="logo-icon">⚡</div>
+                <div class="brand-title">Aurora 量化交易</div>
+                <div class="brand-subtitle">智能量化 · 稳健收益</div>
+            </div>
+
+            <div class="error-message" id="errorMessage">
+                <span class="error-icon">⚠</span>
+                <span id="errorText">登录失败，请重试</span>
+            </div>
+
+            <div class="button-tier-section">
+                <div class="tier-header">点击选择您的用户层级进行登录</div>
+                <div class="tier-grid">
+                    <button class="tier-btn" data-tier="1" data-username="admin">
+                        <span class="tier-btn-icon">👑</span>
+                        <span class="tier-btn-label">管理员</span>
+                    </button>
+                    <button class="tier-btn" data-tier="2" data-username="trader">
+                        <span class="tier-btn-icon">📈</span>
+                        <span class="tier-btn-label">交易员</span>
+                    </button>
+                    <button class="tier-btn" data-tier="3" data-username="analyst">
+                        <span class="tier-btn-icon">📊</span>
+                        <span class="tier-btn-label">分析师</span>
+                    </button>
+                    <button class="tier-btn" data-tier="4" data-username="risk">
+                        <span class="tier-btn-icon">🛡️</span>
+                        <span class="tier-btn-label">风控员</span>
+                    </button>
+                    <button class="tier-btn" data-tier="5" data-username="viewer">
+                        <span class="tier-btn-icon">👁️</span>
+                        <span class="tier-btn-label">查看员</span>
+                    </button>
+                    <button class="tier-btn" data-tier="6" data-username="guest">
+                        <span class="tier-btn-icon">👤</span>
+                        <span class="tier-btn-label">访客</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="confirm-section">
+                <button class="btn-primary" id="loginBtn" disabled>
+                    <span class="btn-icon">🔑</span>
+                    <span class="btn-text">请选择用户层级</span>
+                </button>
+                <button class="btn-secondary" onclick="window.location.href='/register'">
+                    注册新账号
+                </button>
+            </div>
+
+            <div class="security-status">
+                <div class="security-header">
+                    <div class="security-title">
+                        <span>🛡️</span>
+                        <span>系统防护</span>
+                    </div>
+                    <span class="security-badge">安全</span>
+                </div>
+                <div class="security-details" id="securityDetails">
+                    IP验证: 保护中 · 全天候: 已开启 · 允许城市: 烟台, 北京, 上海, 深圳
+                </div>
+            </div>
+
+            <div class="version-info">
+                Aurora v2.0 · Powered by DeepSeek AI
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTier = null;
+        let selectedUsername = null;
+
+        const tierButtons = document.querySelectorAll('.tier-btn');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+
+        tierButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tierButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                selectedTier = btn.dataset.tier;
+                selectedUsername = btn.dataset.username;
+                
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = `<span class="btn-icon">🔑</span><span class="btn-text">登录 ${btn.querySelector('.tier-btn-label').textContent}</span>`;
+            });
+        });
+
+        loginBtn.addEventListener('click', async () => {
+            if (!selectedUsername) return;
+
+            loginBtn.classList.add('loading');
+            errorMessage.classList.remove('show');
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: selectedUsername,
+                        password: 'password',
+                        city: '烟台',
+                        remember_device: true
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    localStorage.setItem('session_id', data.session_id);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    const expires = new Date();
+                    expires.setTime(expires.getTime() + 24 * 60 * 60 * 1000);
+                    document.cookie = `session_id=${data.session_id}; path=/; expires=${expires.toUTCString()}; SameSite=Strict`;
+
+                    window.location.href = '/';
+                } else {
+                    showError(data.message || '登录失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            } finally {
+                loginBtn.classList.remove('loading');
+            }
+        });
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.add('show');
+            setTimeout(() => errorMessage.classList.remove('show'), 3000);
+        }
+
+        // 粒子动画
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        class Particle {
+            constructor() { this.reset(); }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.radius = Math.random() * 2 + 1;
+                this.opacity = Math.random() * 0.5 + 0.2;
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 212, 255, ${this.opacity})`;
+                ctx.fill();
+            }
+        }
+
+        for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = `rgba(74, 125, 255, ${0.15 * (1 - dist / 120)})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>

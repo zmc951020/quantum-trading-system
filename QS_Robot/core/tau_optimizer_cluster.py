@@ -22,6 +22,7 @@ from typing import Dict, Optional, List, Any, Tuple
 from collections import OrderedDict
 from enum import Enum
 import threading
+import statistics
 
 # ============================================================
 # Windows控制台UTF-8编码补丁 (解决'gbk' codec无法编码emoji的问题)
@@ -54,10 +55,35 @@ class BacktestResult:
     is_approximate: bool = False  # 是否为插值估算结果
 
     def score(self) -> float:
-        """综合评分: 收益×0.4 + 夏普×0.3 + (1-回撤)×0.3"""
-        return (self.total_return * 0.4 +
-                self.sharpe_ratio * 0.3 +
-                (1 - self.max_drawdown) * 0.3)
+        """
+        金融级综合评分（0-10+，基于风险调整后收益）
+        计算公式:
+          score = annualized_return × 权重 + sharpe × 权重 + (1-max_drawdown/50) × 权重 + win_rate × 权重
+        评分参考:
+          <0: 亏损策略 (不可用)
+          0-3: 一般策略
+          3-6: 良好策略
+          6-9: 优秀策略
+          9+: 金融级策略 (优秀)
+        """
+        # 1. 收益率评分 (0-3分, 假设total_return为小数如0.3=30%)
+        tr = float(self.total_return)
+        ret_score = min(3.0, max(0.0, tr * 5.0))  # 60%+收益 → 3.0分
+
+        # 2. 夏普比率评分 (0-3分)
+        sh = float(self.sharpe_ratio)
+        sharpe_score = min(3.0, max(0.0, sh))  # Sharpe=3 → 3.0分
+
+        # 3. 回撤控制评分 (0-2分)
+        dd = float(self.max_drawdown)
+        dd_score = max(0.0, 2.0 - dd * 4.0)  # 50%回撤→0分, 0%回撤→2分
+
+        # 4. 胜率评分 (0-2分)
+        wr = float(self.win_rate)
+        win_score = min(2.0, max(0.0, (wr - 0.4) * 5.0))  # 40%胜率→0分, 80%胜率→2分
+
+        total = round(ret_score + sharpe_score + dd_score + win_score, 4)
+        return total
 
 
 @dataclass
@@ -743,15 +769,34 @@ class TauOptimizerCluster:
                 )
                 compute_time = (time.time() - start_time) * 1000
 
-                # 统一转换为 TauOptimizerCluster 内部的 BacktestResult
+                # 兼容处理: bt 可能是对象或 dict, 正确提取百分比值
+                # EnhancedStrategyManager.BacktestResult 使用百分比值
+                def _get(obj, key, default=0.0):
+                    if isinstance(obj, dict):
+                        # dict路径: data.summary.key
+                        data = obj.get('data', {})
+                        if isinstance(data, dict):
+                            summary = data.get('summary', {})
+                            if isinstance(summary, dict):
+                                return float(summary.get(key, default))
+                        return float(obj.get(key, default))
+                    return float(getattr(obj, key, default))
+
+                tr_pct = _get(bt, 'total_return_pct', 0.0)  # 百分比, 如 31.95
+                sh = _get(bt, 'sharpe_ratio', 0.0)
+                dd_pct = _get(bt, 'max_drawdown', 0.0)
+                wr_pct = _get(bt, 'win_rate', 0.0)
+                tt = _get(bt, 'total_trades', 0)
+
+                # 统一转换为 TauOptimizerCluster 内部的 BacktestResult (使用小数)
                 result = BacktestResult(
                     strategy_name=self.strategy_name,
                     params=params.copy(),
-                    total_return=getattr(bt, 'total_return_pct', 0) / 100.0,
-                    sharpe_ratio=getattr(bt, 'sharpe_ratio', 0),
-                    max_drawdown=getattr(bt, 'max_drawdown', 0) / 100.0,
-                    win_rate=getattr(bt, 'win_rate', 0) / 100.0,
-                    total_trades=getattr(bt, 'total_trades', 0),
+                    total_return=tr_pct / 100.0,   # 百分比 → 小数
+                    sharpe_ratio=sh,               # 夏普比率保持原值
+                    max_drawdown=dd_pct / 100.0,   # 百分比 → 小数
+                    win_rate=wr_pct / 100.0,       # 百分比 → 小数
+                    total_trades=int(tt),
                     is_approximate=False
                 )
                 return result, compute_time
@@ -762,20 +807,41 @@ class TauOptimizerCluster:
         # 2) 降级: 优先使用策略感知的 estimate_quality，失败时退回到通用模拟
         compute_time = random.uniform(150.0, 350.0)
         quality = None
+        # 关键标志: True=模块返回 0-10 分, False=返回 0-1 分
+        # (gyro/fourier 用 0-10, bernoulli/shepherd/_simulate 用 0-1)
+        is_0_to_10_scale = False
 
         # 检查当前策略是否有专用的 estimate_quality 方法 (通过 strategy_module)
         try:
             if not hasattr(self, '_quality_module') or self._quality_module is None:
                 # 根据策略名自动选择评分模块
                 sn = self.strategy_name.lower() if self.strategy_name else ''
-                if 'bernoulli' in sn or 'coanda' in sn or '伯努利' in sn or '康达' in sn:
-                    module = BernoulliCoandaModule()
+                # --- 陀螺仪策略 (刚体动力学 + SAC强化学习): 0-10 分 ---
+                if 'gyro' in sn or '陀螺仪' in sn or '陀螺' in sn or 'gyroscopic' in sn:
+                    module = GyroModule()
                     self._quality_module = module
+                    self._quality_is_0_to_10 = True
                     if hasattr(module, 'estimate_quality'):
                         quality = module.estimate_quality(params)
+                # --- 傅里叶强化学习策略: 0-10 分 ---
+                elif 'fourier' in sn or '傅里叶' in sn or 'ppo' in sn or 'rl' in sn:
+                    module = FourierRLStrategyModule()
+                    self._quality_module = module
+                    self._quality_is_0_to_10 = True
+                    if hasattr(module, 'estimate_quality'):
+                        quality = module.estimate_quality(params)
+                # --- 伯努利-康达策略: 0-1 分 ---
+                elif 'bernoulli' in sn or 'coanda' in sn or '伯努利' in sn or '康达' in sn:
+                    module = BernoulliCoandaModule()
+                    self._quality_module = module
+                    self._quality_is_0_to_10 = False
+                    if hasattr(module, 'estimate_quality'):
+                        quality = module.estimate_quality(params)
+                # --- 智能标的轮动策略: 0-1 分 (estimate_overall_quality 已 /10) ---
                 elif 'shepherd' in sn or 'rotation' in sn or '轮动' in sn or '标的' in sn:
                     module = ShepherdRotationModule()
                     self._quality_module = module
+                    self._quality_is_0_to_10 = False
                     if hasattr(module, 'estimate_overall_quality'):
                         quality = module.estimate_overall_quality(params)
                     elif hasattr(module, 'estimate_quality'):
@@ -792,16 +858,27 @@ class TauOptimizerCluster:
             quality = None  # 忽略模块错误，继续用通用模拟
 
         if quality is None or quality <= 0:
-            # 退回到通用模拟评分（为双均线策略设计的）
+            # 退回到通用模拟评分（为双均线策略设计的）— 这是 0-1 分
             quality = self._simulate_param_quality(params)
+            self._quality_is_0_to_10 = False
+
+        # --- 归一化到 0-1 范围 (根据模块类型, 而非数值大小) ---
+        # gyro/fourier 模块: 0-10 → 除以 10
+        # bernoulli/shepherd/_simulate: 已经是 0-1 → 直接用
+        quality_raw = float(quality)
+        use_0_to_10 = getattr(self, '_quality_is_0_to_10', False)
+        if use_0_to_10:
+            quality_norm = max(0.0, min(1.0, quality_raw / 10.0))
+        else:
+            quality_norm = max(0.0, min(1.0, quality_raw))
 
         result = BacktestResult(
             strategy_name=self.strategy_name,
             params=params.copy(),
-            total_return=quality * random.uniform(-0.1, 0.3),
-            sharpe_ratio=max(0, quality * random.uniform(0.5, 2.0)),
-            max_drawdown=max(0.02, (1 - quality * 0.5) * random.uniform(0.05, 0.25)),
-            win_rate=min(0.9, max(0.2, quality * random.uniform(0.4, 0.7))),
+            total_return=quality_norm * random.uniform(-0.1, 0.3),
+            sharpe_ratio=max(0, quality_norm * random.uniform(0.5, 2.0)),
+            max_drawdown=max(0.02, (1 - quality_norm * 0.5) * random.uniform(0.05, 0.25)),
+            win_rate=min(0.9, max(0.2, quality_norm * random.uniform(0.4, 0.7))),
             total_trades=random.randint(10, 200),
             is_approximate=True
         )
@@ -818,6 +895,7 @@ class TauOptimizerCluster:
         # 这样优化器应该能找到这些区域
         quality = 0.5
 
+        # 通用均线参数
         if 'short_period' in params:
             sp = params['short_period']
             if 10 <= sp <= 30:
@@ -835,6 +913,22 @@ class TauOptimizerCluster:
         if 'threshold' in params:
             t = params['threshold']
             if 0.02 <= t <= 0.08:
+                quality += 0.1
+
+        # 傅里叶RL参数支持
+        if 'learning_rate' in params:
+            lr = params['learning_rate']
+            if 0.0005 <= lr <= 0.003:
+                quality += 0.2
+
+        if 'gamma' in params:
+            g = params['gamma']
+            if 0.95 <= g <= 0.995:
+                quality += 0.1
+
+        if 'stop_loss' in params:
+            sl = params['stop_loss']
+            if 0.03 <= sl <= 0.08:
                 quality += 0.1
 
         return min(1.0, quality)
@@ -862,7 +956,8 @@ class TauOptimizerCluster:
     def run_folding_optimization(self,
                                  coarse_points: int = 50,
                                  refined_points_per_region: int = 30,
-                                 validation_points: int = 5) -> Dict[str, Any]:
+                                 validation_points: int = 5,
+                                 run_analysis: bool = True) -> Dict[str, Any]:
         """
         运行完整的"空间折叠"优化流程
 
@@ -870,8 +965,14 @@ class TauOptimizerCluster:
           1. 粗筛: 大粒度网格, 发现热点
           2. 精搜: 热点区域密集采样
           3. 验证: 最优参数高精度验证
+          4. (新增) 模式分析: 坏参数模式 + 范围收缩建议 + 参数锁定建议
         """
         results = []
+
+        # === 模式分析器 (新增): 记录所有评估点供后续分析
+        analyzer = PatternAnalyzer(
+            param_ranges=getattr(self, 'param_ranges', {}),
+            strategy_name=self.strategy_name)
 
         # Phase 1: 粗筛
         print(f"  [Phase 1] 粗筛层: 探索 {coarse_points} 个参数点...")
@@ -883,6 +984,7 @@ class TauOptimizerCluster:
             result, _ = self.optimize(params)
             self.folding.record_coarse_result(params, result)
             results.append((params, result))
+            analyzer.record_point(params, result.score())
 
         hot_regions = self.folding.analyze_coarse_results()
         print(f"    → 发现 {len(hot_regions)} 个热点区域")
@@ -899,6 +1001,7 @@ class TauOptimizerCluster:
             for params in refined_params:
                 result, _ = self.optimize(params)
                 results.append((params, result))
+                analyzer.record_point(params, result.score())
 
         # Phase 3: 验证
         print(f"  [Phase 3] 验证层: 高精度验证 TOP{validation_points}...")
@@ -912,6 +1015,7 @@ class TauOptimizerCluster:
             result, compute_time = self._full_backtest(params)
             self._total_compute_time_ms += compute_time
             best_results.append((params, result))
+            analyzer.record_point(params, result.score())
 
         # 汇总最优结果
         all_sorted = sorted(results + best_results,
@@ -941,12 +1045,19 @@ class TauOptimizerCluster:
                       f"(当前最佳 {self._parameter_store.get_best_score(self.strategy_name):.4f})")
         # === 持久化结束 ===
 
+        # === 模式分析层 (新增) ===
+        if run_analysis:
+            analysis = analyzer.analyze()
+            report_text = analyzer.format_report(analysis)
+            print(report_text)
+
         return {
             "best_params": best_params,
             "best_result": best_result,
             "top_results": all_sorted[:10],
             "total_evaluations": total_evaluations,
-            "cluster_status": self.get_status()
+            "cluster_status": self.get_status(),
+            "pattern_analysis": analysis if run_analysis else None
         }
 
 
@@ -955,6 +1066,175 @@ class TauOptimizerCluster:
 # ============================================================
 # 专长: 多周期共振参数优化 (均线/趋势/动量协同)
 # ============================================================
+
+class FourierRLStrategyModule:
+    """
+    傅里叶强化学习策略专用评分模块 - 韬定律策略感知模块
+
+    核心思想: 傅里叶变换提取市场周期性特征 + PPO强化学习决策
+    参数合理性评分维度:
+      1. 傅里叶频率参数 (0-3分): 周期/谐波数合理性
+      2. 强化学习超参 (0-3分): 学习率/折扣因子/探索率
+      3. 神经网络架构 (0-2分): 隐藏层/激活函数合理性
+      4. 风控参数 (0-2分): 仓位/止损/止盈配置
+
+    评分输出: 0-10分 (金融级评分, 与伯努利-康达策略统一标度)
+    """
+
+    DEFAULT_PARAM_RANGES = {
+        # 傅里叶变换参数
+        'fourier_order': (2, 20),
+        'lookback_window': (30, 300),
+        'frequency_threshold': (0.01, 0.5),
+        # 强化学习超参
+        'learning_rate': (0.0001, 0.01),
+        'gamma': (0.90, 0.999),
+        'epsilon_clip': (0.1, 0.4),
+        'batch_size': (32, 2048),
+        # 神经网络参数
+        'hidden_layers': (1, 5),
+        'hidden_units': (32, 512),
+        # 交易与风控参数
+        'max_position': (0.1, 1.0),
+        'stop_loss': (0.01, 0.15),
+        'take_profit': (0.02, 0.30),
+    }
+
+    def __init__(self, param_ranges: Dict[str, Tuple[float, float]] = None):
+        self.param_ranges = param_ranges or self.DEFAULT_PARAM_RANGES
+        self.name = "fourier_rl"
+        self.description = "傅里叶变换+PPO强化学习策略优化"
+
+    def get_param_groups(self) -> Dict[str, List[str]]:
+        return {
+            'fourier_params': ['fourier_order', 'lookback_window', 'frequency_threshold'],
+            'rl_hyperparams': ['learning_rate', 'gamma', 'epsilon_clip', 'batch_size'],
+            'neural_arch': ['hidden_layers', 'hidden_units'],
+            'risk_control': ['max_position', 'stop_loss', 'take_profit'],
+        }
+
+    def estimate_quality(self, params: Dict[str, float]) -> float:
+        """傅里叶强化学习策略的参数质量评分（0-10分，金融级）"""
+        params = params or {}
+        scores = []
+
+        # 1. 傅里叶频率参数评分 (0-3分)
+        f_order = float(params.get('fourier_order', 0))
+        if f_order > 0:
+            if 4 <= f_order <= 10:
+                scores.append(3.0)
+            elif 2 <= f_order <= 20:
+                scores.append(2.0)
+            else:
+                scores.append(1.0)
+
+        lb = float(params.get('lookback_window', 0))
+        if lb > 0:
+            if 60 <= lb <= 180:
+                scores.append(3.0)
+            elif 30 <= lb <= 300:
+                scores.append(2.0)
+            else:
+                scores.append(1.0)
+
+        freq_th = float(params.get('frequency_threshold', 0))
+        if freq_th > 0:
+            if 0.05 <= freq_th <= 0.2:
+                scores.append(2.5)
+            elif 0.01 <= freq_th <= 0.5:
+                scores.append(1.5)
+            else:
+                scores.append(0.5)
+
+        # 2. 强化学习超参评分 (0-3分)
+        lr = float(params.get('learning_rate', 0))
+        if lr > 0:
+            if 0.0005 <= lr <= 0.003:
+                scores.append(2.5)
+            elif 0.0001 <= lr <= 0.01:
+                scores.append(1.8)
+            else:
+                scores.append(0.5)
+
+        gamma_val = float(params.get('gamma', 0))
+        if gamma_val > 0:
+            if 0.95 <= gamma_val <= 0.995:
+                scores.append(2.5)
+            elif 0.90 <= gamma_val <= 0.999:
+                scores.append(1.8)
+            else:
+                scores.append(0.5)
+
+        eps = float(params.get('epsilon_clip', 0))
+        if eps > 0:
+            if 0.15 <= eps <= 0.3:
+                scores.append(2.0)
+            elif 0.1 <= eps <= 0.4:
+                scores.append(1.5)
+            else:
+                scores.append(0.5)
+
+        # 3. 神经网络架构评分 (0-2分)
+        hl = float(params.get('hidden_layers', 0))
+        if hl > 0:
+            if 2 <= hl <= 3:
+                scores.append(1.8)
+            elif 1 <= hl <= 5:
+                scores.append(1.2)
+            else:
+                scores.append(0.3)
+
+        hu = float(params.get('hidden_units', 0))
+        if hu > 0:
+            if 64 <= hu <= 256:
+                scores.append(1.8)
+            elif 32 <= hu <= 512:
+                scores.append(1.2)
+            else:
+                scores.append(0.3)
+
+        # 4. 风控参数评分 (0-2分)
+        mp = float(params.get('max_position', 0))
+        if mp > 0:
+            if 0.3 <= mp <= 0.6:
+                scores.append(1.8)
+            elif 0.1 <= mp <= 1.0:
+                scores.append(1.2)
+            else:
+                scores.append(0.3)
+
+        sl = float(params.get('stop_loss', 0))
+        if sl > 0:
+            if 0.03 <= sl <= 0.08:
+                scores.append(1.8)
+            elif 0.01 <= sl <= 0.15:
+                scores.append(1.2)
+            else:
+                scores.append(0.3)
+
+        tp = float(params.get('take_profit', 0))
+        if tp > 0:
+            if 0.05 <= tp <= 0.15:
+                scores.append(1.8)
+            elif 0.02 <= tp <= 0.30:
+                scores.append(1.2)
+            else:
+                scores.append(0.3)
+
+        # 综合评分
+        if scores:
+            raw_score = sum(scores) / len(scores) * 2.5  # 归一化到0-10
+        else:
+            # 无识别参数, 使用默认中等评分
+            raw_score = 3.0
+
+        return round(max(0.0, min(10.0, raw_score)), 4)
+
+    def estimate_overall_quality(self, params: Dict[str, float]) -> float:
+        """FactorSpaceFolding 兼容接口: 返回0-1归一化值"""
+        raw = self.estimate_quality(params)
+        return raw / 10.0  # 0-10 → 0-1
+
 
 class BernoulliCoandaModule:
     """
@@ -1658,9 +1938,485 @@ class FactorSpaceFolding:
             "total_factors": self.shepherd.count_params()
         }
 
+    def run_optimization(self, coarse_points: int = 5,
+                         refined_points_per_group: int = 3) -> Dict[str, Any]:
+        """便捷入口：一次性执行三层因子空间折叠优化"""
+        start = time.time()
+
+        # Phase 1: 组级粗筛
+        p1_points = self.generate_group_screen_points(points_per_group=max(3, coarse_points // 5))
+        p1_results = []
+        for p in p1_points:
+            score = self.shepherd.estimate_overall_quality(p)
+            p1_results.append((p, score))
+            self.best_params_history.append(p)
+
+        # Phase 2: 组内精搜
+        hot_groups = self.rank_groups_by_score(p1_results)[:3]
+        p2_points = self.generate_intra_group_points(hot_groups, points_per_group=refined_points_per_group)
+        best_params = None
+        best_score = -999.0
+        for p in p2_points:
+            score = self.shepherd.estimate_overall_quality(p)
+            if score > best_score:
+                best_score = score
+                best_params = p
+            self.best_params_history.append(p)
+
+        # Phase 3: 验证 (top-k 候选参数滚动窗口验证)
+        if best_params is not None:
+            p3_points = self.generate_validation_points(top_n=3, windows=3)
+            for p in p3_points:
+                score = self.shepherd.estimate_overall_quality(p)
+                if score > best_score:
+                    best_score = score
+                    best_params = p
+
+        elapsed = time.time() - start
+        total_evals = len(p1_points) + len(p2_points) + (len(p3_points) if best_params else 0)
+
+        return {
+            "success": True,
+            "best_score": float(best_score),
+            "best_params": best_params or {},
+            "total_evaluations": total_evals,
+            "elapsed_seconds": round(elapsed, 3),
+            "hot_groups": hot_groups,
+            "phase1_points": len(p1_points),
+            "phase2_points": len(p2_points)
+        }
+
 
 # ============================================================
-# 策略感知模块 4: 策略优化器总线 (StrategyOptimizerBus)
+# 策略感知模块 4: 陀螺仪策略专用优化模块 (GyroModule)
+# ============================================================
+# 基于刚体动力学原理的策略优化 - 陀螺仪进动效应用于趋势跟踪
+# 核心思想: 陀螺仪自旋保持方向稳定 + 进动响应市场变化
+# ============================================================
+
+class GyroModule:
+    """
+    陀螺仪策略专用优化模块 - 韬定律策略感知模块
+
+    核心思想: 刚体动力学原理类比
+      - 自旋保持: 陀螺仪绕轴高速旋转, 对抗外力保持方向稳定
+        (类比: 主要趋势线, 对抗噪声保持趋势判断)
+      - 进动效应: 外力矩作用下自旋轴绕另一轴缓慢旋转
+        (类比: 趋势变化信号, 动量阈值触发方向调整)
+      - 章动修正: 自旋轴的微小周期性振荡
+        (类比: 小周期波动过滤, 确认机制)
+
+    参数规模: 约 15-20个参数
+    评分输出: 0-10分 (金融级评分)
+    """
+
+    DEFAULT_PARAM_RANGES = {
+        # 陀螺仪核心参数 - 自旋与进动
+        'spin_speed': (0.5, 3.0),              # 自旋角速度: 趋势线响应速度
+        'precession_gain': (0.1, 1.5),         # 进动增益: 趋势变化响应强度
+        'nutation_threshold': (0.005, 0.05),   # 章动阈值: 小波动过滤
+        # 动量与趋势识别
+        'momentum_window': (5.0, 60.0),        # 动量计算窗口
+        'momentum_threshold': (0.005, 0.05),   # 动量信号阈值
+        'trend_strength_min': (0.2, 0.8),      # 趋势强度最低要求
+        # 滤波器参数
+        'filter_period': (10.0, 100.0),        # 主滤波器周期
+        'filter_alpha': (0.1, 0.9),            # 滤波器平滑系数
+        'sensitivity': (0.3, 2.0),             # 信号灵敏度
+        # 风险管理
+        'stop_loss_pct': (0.01, 0.10),         # 止损百分比
+        'take_profit_pct': (0.02, 0.20),       # 止盈百分比
+        'position_size': (0.1, 0.5),           # 仓位大小
+        'confirmation_bars': (1.0, 5.0),       # 确认K线数
+        # 强化学习参数 (若使用)
+        'learning_rate': (0.0001, 0.01),       # SAC学习率
+        'buffer_size': (1000.0, 100000.0),     # 经验回放池大小
+    }
+
+    def __init__(self, param_ranges=None):
+        self.param_ranges = param_ranges or self.DEFAULT_PARAM_RANGES
+        self.name = "gyro"
+        self.description = "陀螺仪刚体动力学+SAC强化学习策略优化"
+
+    def get_param_groups(self):
+        return {
+            'gyro_core': ['spin_speed', 'precession_gain', 'nutation_threshold'],
+            'momentum_trend': ['momentum_window', 'momentum_threshold', 'trend_strength_min'],
+            'filter_params': ['filter_period', 'filter_alpha', 'sensitivity'],
+            'risk_control': ['stop_loss_pct', 'take_profit_pct', 'position_size', 'confirmation_bars'],
+            'rl_hyperparams': ['learning_rate', 'buffer_size'],
+        }
+
+    def estimate_quality(self, params):
+        """
+        陀螺仪策略的参数质量评分（0-10分，金融级）
+
+        评分维度（每个维度 0-2.5分，总计0-10分）:
+          1. 陀螺仪核心参数合理性: 自旋/进动/章动参数协调
+          2. 动量与趋势参数: 动量窗口与阈值的合理性
+          3. 滤波器配置: 过滤周期和灵敏度
+          4. 风险控制: 止损/止盈/仓位管理
+        """
+        params = params or {}
+        scores = []
+
+        # === 1. 陀螺仪核心 (0-2.5分) ===
+        gyro_score = 0.5
+        ss = float(params.get('spin_speed', 1.5))
+        pg = float(params.get('precession_gain', 0.8))
+        nt = float(params.get('nutation_threshold', 0.02))
+        if 0.8 <= ss <= 2.5: gyro_score += 0.8
+        else: gyro_score += 0.4
+        if 0.2 <= pg <= 1.2: gyro_score += 0.7
+        else: gyro_score += 0.3
+        if 0.008 <= nt <= 0.04: gyro_score += 0.5
+        else: gyro_score += 0.2
+        # 进动 < 自旋的合理性
+        if pg < ss: gyro_score += 0.5
+        scores.append(min(2.5, gyro_score))
+
+        # === 2. 动量与趋势 (0-2.5分) ===
+        mom_score = 0.5
+        mw = float(params.get('momentum_window', 20))
+        mt = float(params.get('momentum_threshold', 0.02))
+        tsm = float(params.get('trend_strength_min', 0.5))
+        if 10 <= mw <= 40: mom_score += 0.8
+        elif 5 <= mw <= 60: mom_score += 0.4
+        if 0.008 <= mt <= 0.04: mom_score += 0.7
+        else: mom_score += 0.3
+        if 0.3 <= tsm <= 0.7: mom_score += 0.5
+        else: mom_score += 0.2
+        scores.append(min(2.5, mom_score))
+
+        # === 3. 滤波器配置 (0-2.5分) ===
+        filt_score = 0.5
+        fp = float(params.get('filter_period', 30))
+        fa = float(params.get('filter_alpha', 0.5))
+        sen = float(params.get('sensitivity', 1.2))
+        if 15 <= fp <= 60: filt_score += 0.8
+        elif 10 <= fp <= 100: filt_score += 0.4
+        if 0.2 <= fa <= 0.7: filt_score += 0.7
+        else: filt_score += 0.3
+        if 0.5 <= sen <= 1.8: filt_score += 0.5
+        else: filt_score += 0.2
+        scores.append(min(2.5, filt_score))
+
+        # === 4. 风险控制 (0-2.5分) ===
+        risk_score = 0.5
+        sl = float(params.get('stop_loss_pct', 0.03))
+        tp = float(params.get('take_profit_pct', 0.08))
+        ps = float(params.get('position_size', 0.3))
+        cb = float(params.get('confirmation_bars', 2))
+        if 0.02 <= sl <= 0.08: risk_score += 0.7
+        else: risk_score += 0.2
+        if 0.03 <= tp <= 0.15: risk_score += 0.6
+        else: risk_score += 0.2
+        if 0.15 <= ps <= 0.4: risk_score += 0.7
+        else: risk_score += 0.2
+        if 1.5 <= cb <= 3.5: risk_score += 0.5
+        else: risk_score += 0.2
+        # 止盈>止损的合理性检查
+        if tp > sl * 1.5: risk_score += 0.0
+        else: risk_score -= 0.3
+        scores.append(max(0.0, min(2.5, risk_score)))
+
+        total = round(sum(scores), 4)
+        return min(10.0, total)
+
+
+# ============================================================
+# 策略感知模块 6: 模式分析器 (PatternAnalyzer)
+# ============================================================
+# 功能:
+#   ② 参数范围收缩建议 (基于历史优化数据收窄搜索空间)
+#   ③ 参数锁定建议 (发现无影响参数, 从优化变量中移除)
+#   策略改进方向提示 (从参数-评分模式中提炼可操作建议)
+# ============================================================
+
+class PatternAnalyzer:
+    """
+    坏参数模式分析器 - 韬定律优化器集群的"智能分析层"
+
+    每次优化结束后, 对所有评估点进行统计分析, 自动输出:
+      1. 参数范围收缩建议 (下次优化在更小更准的空间里搜索)
+      2. 参数锁定建议 (对评分无显著影响的参数, 固定为默认值, 降维)
+      3. 策略改进方向提示 (从参数模式中提炼可能的架构改进点)
+    """
+
+    # 参数语义分类 —— 用于生成针对性的改进建议
+    PARAM_KEYWORDS = {
+        'window': ['window', 'period', 'lookback', 'order', 'bar'],
+        'gain': ['gain', 'sensitivity', 'alpha', 'threshold', 'pressure'],
+        'rl': ['learning_rate', 'gamma', 'epsilon', 'buffer', 'batch'],
+        'risk': ['stop_loss', 'take_profit', 'position_size', 'risk'],
+        'filter': ['filter', 'smooth', 'ema', 'moving'],
+        'momentum': ['momentum', 'trend_strength', 'ma_', 'slope'],
+        'gyro': ['spin_speed', 'precession', 'nutation', 'gyro'],
+    }
+
+    def __init__(self, param_ranges: Dict[str, Tuple[float, float]],
+                 strategy_name: str = ""):
+        self.param_ranges = param_ranges
+        self.strategy_name = strategy_name
+        self.eval_points: List[Tuple[Dict[str, float], float]] = []
+
+    def record_point(self, params: Dict[str, float], score: float):
+        """记录一个评估点供后续分析"""
+        self.eval_points.append((params, float(score)))
+
+    # ---------- 核心分析 ----------
+
+    def analyze(self, top_pct: float = 0.25,
+                bottom_pct: float = 0.25) -> Dict[str, Any]:
+        """执行完整分析, 返回结构化结果"""
+        if len(self.eval_points) < 10:
+            return {'error': '评估点不足 (< 10), 无法进行模式分析',
+                    'num_points': len(self.eval_points)}
+
+        sorted_pts = sorted(self.eval_points, key=lambda x: x[1], reverse=True)
+        n = len(sorted_pts)
+        top_n = max(3, int(n * top_pct))
+        bot_n = max(3, int(n * bottom_pct))
+        top_group = sorted_pts[:top_n]
+        bot_group = sorted_pts[-bot_n:]
+
+        # -------- ② 参数范围收缩建议 --------
+        range_suggestions = []
+        for pname in self.param_ranges.keys():
+            top_vals = [p[pname] for p, _ in top_group if pname in p]
+            bot_vals = [p[pname] for p, _ in bot_group if pname in p]
+            if not top_vals or not bot_vals:
+                continue
+            top_mean = statistics.mean(top_vals)
+            top_std = statistics.stdev(top_vals) if len(top_vals) > 1 else 0.0
+            bot_mean = statistics.mean(bot_vals)
+
+            orig_lo, orig_hi = self.param_ranges[pname]
+            orig_range = orig_hi - orig_lo
+
+            # 以好参数区的 mean ± 1.5σ 作为新的建议范围
+            suggested_lo = max(orig_lo, top_mean - 1.5 * (top_std + orig_range * 0.05))
+            suggested_hi = min(orig_hi, top_mean + 1.5 * (top_std + orig_range * 0.05))
+
+            contraction_ratio = 1.0 - (suggested_hi - suggested_lo) / orig_range if orig_range > 0 else 0
+
+            # 好坏参数差异是否显著 (归一化差异 > 0.15 认为有价值)
+            norm_diff = abs(top_mean - bot_mean) / orig_range if orig_range > 0 else 0
+
+            if contraction_ratio > 0.3 and norm_diff > 0.15:
+                range_suggestions.append({
+                    'param': pname,
+                    'original_range': [round(orig_lo, 4), round(orig_hi, 4)],
+                    'suggested_range': [round(suggested_lo, 4), round(suggested_hi, 4)],
+                    'contraction_ratio': round(contraction_ratio, 3),
+                    'top_mean': round(top_mean, 4),
+                    'bottom_mean': round(bot_mean, 4),
+                    'signal': 'STRONG' if contraction_ratio > 0.5 else 'WEAK'
+                })
+
+        # -------- ③ 参数锁定建议 --------
+        lock_suggestions = []
+        for pname in self.param_ranges.keys():
+            all_vals = [p[pname] for p, s in self.eval_points if pname in p]
+            all_scores = [s for p, s in self.eval_points if pname in p]
+            if len(all_vals) < 5:
+                continue
+
+            # 计算参数值和评分的相关系数 (绝对值越小 → 该参数越不重要)
+            try:
+                n = len(all_vals)
+                mean_v = sum(all_vals) / n
+                mean_s = sum(all_scores) / n
+                cov = sum((all_vals[i] - mean_v) * (all_scores[i] - mean_s) for i in range(n))
+                var_v = sum((v - mean_v) ** 2 for v in all_vals)
+                var_s = sum((s - mean_s) ** 2 for s in all_scores)
+                if var_v > 0 and var_s > 0:
+                    correlation = abs(cov / ((var_v * var_s) ** 0.5))
+                else:
+                    correlation = 0.0
+            except Exception:
+                correlation = 0.0
+
+            # 也检查好参数/坏参数的取值是否几乎相同
+            top_vals = [p[pname] for p, _ in top_group if pname in p]
+            bot_vals = [p[pname] for p, _ in bot_group if pname in p]
+            top_mean = statistics.mean(top_vals)
+            bot_mean = statistics.mean(bot_vals)
+            orig_lo, orig_hi = self.param_ranges[pname]
+            orig_range = orig_hi - orig_lo
+            norm_diff = abs(top_mean - bot_mean) / orig_range if orig_range > 0 else 0
+
+            # 双条件: 低相关系数 AND 低好坏差异 → 可以锁定
+            if correlation < 0.15 and norm_diff < 0.1:
+                # 建议锁定为好参数区的均值
+                suggested_value = round(top_mean, 4)
+                lock_suggestions.append({
+                    'param': pname,
+                    'suggested_value': suggested_value,
+                    'correlation': round(correlation, 3),
+                    'norm_diff': round(norm_diff, 3),
+                    'original_range': [round(orig_lo, 4), round(orig_hi, 4)]
+                })
+
+        # -------- 策略改进方向提示 --------
+        arch_suggestions = []
+        for sug in range_suggestions:
+            pname = sug['param']
+            category = self._categorize_param(pname)
+            top_mean = sug['top_mean']
+            bot_mean = sug['bottom_mean']
+            direction = "lower" if top_mean < bot_mean else "higher"
+
+            tip = self._get_arch_tip(category, pname, direction, top_mean, bot_mean)
+            if tip:
+                arch_suggestions.append(tip)
+
+        # 去重
+        seen_tips = set()
+        unique_arch = []
+        for tip in arch_suggestions:
+            key = tip['category'] + tip['short_text'][:30]
+            if key not in seen_tips:
+                seen_tips.add(key)
+                unique_arch.append(tip)
+
+        return {
+            'num_points': len(self.eval_points),
+            'score_range': [round(min(s for _, s in self.eval_points), 2),
+                           round(max(s for _, s in self.eval_points), 2)],
+            'range_contract_suggestions': range_suggestions,   # ②
+            'lock_suggestions': lock_suggestions,              # ③
+            'architecture_suggestions': unique_arch,           # 改进方向
+        }
+
+    # ---------- 辅助: 参数分类 & 生成改进建议 ----------
+
+    def _categorize_param(self, pname: str) -> str:
+        p = pname.lower()
+        for cat, kws in self.PARAM_KEYWORDS.items():
+            for kw in kws:
+                if kw in p:
+                    return cat
+        return 'generic'
+
+    def _get_arch_tip(self, category: str, pname: str, direction: str,
+                     top_mean: float, bot_mean: float) -> Optional[Dict[str, str]]:
+        """根据参数类别和方向生成策略改进建议"""
+        if category == 'window':
+            if direction == 'lower':
+                return {
+                    'category': '📊 周期/窗口类',
+                    'short_text': f"{pname}: 好参数偏好较小值 ({top_mean:.2f} vs 坏参数 {bot_mean:.2f})",
+                    'action_suggestion': f"考虑多 regime 切换: 在高波动时段启用更短的 {pname}，低波动时段用更长窗口"
+                }
+            else:
+                return {
+                    'category': '📊 周期/窗口类',
+                    'short_text': f"{pname}: 好参数偏好较大值 ({top_mean:.2f} vs 坏参数 {bot_mean:.2f})",
+                    'action_suggestion': f"{pname} 在高值时更稳定，考虑加入对短周期噪声的过滤 (如 ATR 滤波器)"
+                }
+        elif category == 'gain':
+            return {
+                'category': '⚡ 增益/阈值类',
+                'short_text': f"{pname}: 好参数偏好偏 {'小' if direction == 'lower' else '大'}值 ({top_mean:.2f} vs {bot_mean:.2f})",
+                'action_suggestion': f"{pname} 不是固定值效果更好。考虑根据 ATR/波动率做自适应, 而非固定常数"
+            }
+        elif category == 'rl':
+            return {
+                'category': '🧠 强化学习超参',
+                'short_text': f"{pname}: 好参数区显著集中于 {top_mean:.4f}",
+                'action_suggestion': f"可锁定 {pname} ≈ {top_mean:.4f} 作为常数, 不再参与优化 (减少搜索维度)"
+            }
+        elif category == 'risk':
+            return {
+                'category': '🛡️  风控参数',
+                'short_text': f"{pname}: 好参数偏好 {'保守值' if direction == 'lower' else '积极值'} ({top_mean:.4f})",
+                'action_suggestion': f"考虑根据仓位/ATR 动态调整 {pname}, 而不是固定百分比"
+            }
+        elif category == 'filter':
+            return {
+                'category': '🔍 滤波器参数',
+                'short_text': f"{pname}: 好参数偏好 {'更低' if direction == 'lower' else '更高'}阶滤波 ({top_mean:.2f})",
+                'action_suggestion': f"信号滤波长度与市场状态相关。可尝试根据 ADX 或 Hurst 指数动态切换滤波强度"
+            }
+        elif category == 'momentum':
+            return {
+                'category': '📈 动量/趋势类',
+                'short_text': f"{pname}: 好参数偏好 {'小周期' if direction == 'lower' else '长周期'} ({top_mean:.2f})",
+                'action_suggestion': f"动量参数的最优值与市场状态强相关。可加入 regime 检测后做参数切换"
+            }
+        elif category == 'gyro':
+            return {
+                'category': '🎯 陀螺仪物理类比',
+                'short_text': f"{pname}: 好参数偏好 {'低值' if direction == 'lower' else '高值'}区 ({top_mean:.3f})",
+                'action_suggestion': f"{pname} 的物理意义在当前市场状态下有限制。考虑做 clipping: 锁定在 [{max(self.param_ranges[pname][0], top_mean * 0.7):.3f}, {min(self.param_ranges[pname][1], top_mean * 1.3):.3f}]"
+            }
+        else:
+            return {
+                'category': '🔧 通用参数',
+                'short_text': f"{pname}: 好参数集中于 {top_mean:.3f} 附近",
+                'action_suggestion': f"{pname} 的优化空间可收缩。下次优化时仅在好参数附近做精细搜索"
+            }
+
+    # ---------- 格式化输出 ----------
+
+    def format_report(self, analysis: Dict[str, Any]) -> str:
+        """将分析结果格式化为人类可读的报告"""
+        if 'error' in analysis:
+            return f"\n  ⚠️  {analysis['error']}"
+
+        lines = []
+        lines.append("\n" + "=" * 68)
+        lines.append(f"  🔍 模式分析报告 — {self.strategy_name or '当前策略'}")
+        lines.append("=" * 68)
+        lines.append(f"  评估点数: {analysis['num_points']}    "
+                      f"评分范围: {analysis['score_range'][0]} ~ {analysis['score_range'][1]}")
+
+        # ② 范围收缩建议
+        rcs = analysis['range_contract_suggestions']
+        lines.append("")
+        lines.append(f"  ── ② 参数范围收缩建议 ({len(rcs)} 项)")
+        if rcs:
+            for r in rcs:
+                sig = "🔴" if r['signal'] == 'STRONG' else "🟡"
+                lines.append(f"    {sig} {r['param']}: "
+                              f"[{r['original_range'][0]}, {r['original_range'][1]}] → "
+                              f"[{r['suggested_range'][0]}, {r['suggested_range'][1]}] "
+                              f"(收缩 {int(r['contraction_ratio']*100)}%)")
+        else:
+            lines.append(f"    ⚪ 当前未发现可收缩的参数 (好/坏参数区分布无显著差异)")
+
+        # ③ 参数锁定建议
+        lks = analysis['lock_suggestions']
+        lines.append("")
+        lines.append(f"  ── ③ 参数锁定/降维建议 ({len(lks)} 项)")
+        if lks:
+            for l in lks:
+                lines.append(f"    🟢 {l['param']}: 建议锁定为 {l['suggested_value']} "
+                              f"(相关系数={l['correlation']}, 好坏差异={l['norm_diff']})")
+                lines.append(f"       → 从优化变量中移除此参数, 降低搜索维度")
+        else:
+            lines.append(f"    ⚪ 所有参数都对评分有显著影响, 暂不建议锁定")
+
+        # 策略改进方向
+        arcs = analysis['architecture_suggestions']
+        lines.append("")
+        lines.append(f"  ── 策略改进方向提示 ({len(arcs)} 项)")
+        if arcs:
+            for a in arcs:
+                lines.append(f"    {a['category']}")
+                lines.append(f"       观察: {a['short_text']}")
+                lines.append(f"       建议: {a['action_suggestion']}")
+                lines.append("")
+        else:
+            lines.append(f"    ⚪ 暂未检测到需要架构级修改的参数模式")
+
+        lines.append("=" * 68)
+        return "\n".join(lines)
+
+
+# ============================================================
+# 策略感知模块 5: 策略优化器总线 (StrategyOptimizerBus)
 # ============================================================
 # 统一调度各策略感知模块
 # ============================================================
@@ -1679,6 +2435,18 @@ class StrategyOptimizerBus:
     """
 
     STRATEGY_TYPE_MAP = {
+        'fourier_rl': FourierRLStrategyModule,
+        'fourier': FourierRLStrategyModule,
+        'fourier_strategy': FourierRLStrategyModule,
+        '傅里叶': FourierRLStrategyModule,
+        '强化学习': FourierRLStrategyModule,
+        'ppo': FourierRLStrategyModule,
+        'gyro': GyroModule,
+        'gyro_v7': GyroModule,
+        'gyro_optimized': GyroModule,
+        '陀螺仪': GyroModule,
+        '陀螺': GyroModule,
+        'gyroscopic': GyroModule,
         'bernoulli_coanda': BernoulliCoandaModule,
         'coanda': BernoulliCoandaModule,
         'bernoulli': BernoulliCoandaModule,

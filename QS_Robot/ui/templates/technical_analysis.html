@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技术分析系统 - QS Robot</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .analysis-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .panel {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #2a2a4a;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 10px;
+            background: #0f0f1a;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            color: #fff;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #4a4a6a, #3a3a5a);
+            color: #fff;
+        }
+
+        .btn-primary:hover, .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+        }
+
+        .analysis-result {
+            background: #0f0f1a;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            color: #00ff88;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .analysis-result .warning { color: #ffd700; }
+        .analysis-result .error { color: #ff6b6b; }
+        .analysis-result .info { color: #00d4ff; }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            background: #2a2a4a;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .score-display {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+
+        .score-item {
+            text-align: center;
+            padding: 15px;
+            background: #0f0f1a;
+            border-radius: 8px;
+            min-width: 100px;
+        }
+
+        .score-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .score-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: #2a2a4a;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+
+        .stock-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stock-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #0f0f1a;
+            border-radius: 6px;
+        }
+
+        .stock-info-label {
+            color: #888;
+        }
+
+        .stock-info-value {
+            color: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-icon">🤖</span>
+                <span class="logo-text">QS Robot</span>
+            </div>
+            <div class="nav-menu">
+                <a href="/" class="nav-link">🏠 首页（主系统）</a>
+                <a href="/stock_pool" class="nav-link">📊 股票池</a>
+                <a href="/technical_analysis" class="nav-link active">📈 技术分析</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content" style="padding: 20px;">
+        <!-- 系统切换区域 -->
+        <div class="system-switch-section">
+            <div class="switch-header">
+                <span class="switch-title">🔄 系统切换</span>
+                <span class="current-system">当前系统: <span id="currentSystem">技术分析系统</span></span>
+            </div>
+            <div class="switch-buttons">
+                <button class="system-btn" id="btnStrategy" onclick="switchSystem('strategy')">
+                    🎯 策略优化系统
+                </button>
+                <button class="system-btn" id="btnPool" onclick="switchSystem('pool')">
+                    📊 股票池系统
+                </button>
+                <button class="system-btn active" id="btnAnalysis" onclick="switchSystem('analysis')">
+                    📈 技术分析系统
+                </button>
+            </div>
+        </div>
+
+        <!-- 固定流程自动化快速入口 -->
+        <div style="background:#0d1526; padding:15px 20px; border-radius:10px; margin-bottom:20px; border:1px solid #2a3f5f;">
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <span style="color:#00d4ff; font-weight:bold;">⚙️ 一键流程:</span>
+                <button onclick="runTechAutoFlow('hybrid')" style="padding:8px 15px; border-radius:6px; border:none; background:#43e97b; color:#0d1526; cursor:pointer; font-size:13px;">⚡ 强强联合工作流</button>
+                <button onclick="runTechAutoFlow('vibe')" style="padding:8px 15px; border-radius:6px; border:none; background:#4facfe; color:#fff; cursor:pointer; font-size:13px;">🤖 港大Vibe选股</button>
+                <button onclick="runTechAutoFlow('full')" style="padding:8px 15px; border-radius:6px; border:none; background:#667eea; color:#fff; cursor:pointer; font-size:13px;">🔄 完整优化工作流</button>
+                <button onclick="runTechAutoFlow('stock_pool')" style="padding:8px 15px; border-radius:6px; border:none; background:#764ba2; color:#fff; cursor:pointer; font-size:13px;">📊 股票池自动流转</button>
+                <button onclick="window.location.href='/'" style="padding:8px 15px; border-radius:6px; border:1px solid #3a5a8f; background:transparent; color:#8ba3c7; cursor:pointer; font-size:13px;">🎯 主系统</button>
+            </div>
+        </div>
+
+        <div class="hero" style="margin-bottom: 20px;">
+            <h1>📈 技术分析系统</h1>
+            <p>综合技术分析 + 港大Vibe AI多智能体投研系统</p>
+        </div>
+
+        <div class="analysis-container">
+            <!-- 左侧：技术分析 -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">🔍 基础技术分析</span>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="ta-symbol" placeholder="股票代码（如：000001）" value="000001">
+                    <input type="number" id="ta-days" placeholder="天数" value="100" min="7" max="365">
+                    <button class="btn btn-primary" onclick="runTechnicalAnalysis()">开始分析</button>
+                </div>
+
+                <div id="ta-result" class="analysis-result">
+                    输入股票代码，点击"开始分析"进行技术指标计算...
+                </div>
+            </div>
+
+            <!-- 右侧：港大智能体分析 -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">🏛️ 港大Vibe智能体分析</span>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="vibe-symbol" placeholder="股票代码" value="000001">
+                    <button class="btn btn-primary" onclick="runVibeAnalysis()">AI分析</button>
+                    <button class="btn btn-secondary" onclick="runVibeEnhanced()">🎯 增强版</button>
+                </div>
+
+                <!-- 评分显示 -->
+                <div class="score-display" id="vibe-scores" style="display: none;">
+                    <div class="score-item">
+                        <div class="score-value" id="score-composite">--</div>
+                        <div class="score-label">综合评分</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-value" id="score-tech">--</div>
+                        <div class="score-label">技术面</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-value" id="score-fund">--</div>
+                        <div class="score-label">基本面</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-value" id="score-risk">--</div>
+                        <div class="score-label">风控</div>
+                    </div>
+                </div>
+
+                <!-- 股票池推荐 -->
+                <div id="pool-recommendation" style="display: none; margin-top: 15px; padding: 10px; background: #0f0f1a; border-radius: 8px;">
+                    <div style="color: #ffd700; font-weight: bold; margin-bottom: 5px;">📦 股票池推荐</div>
+                    <div id="pool-level" style="font-size: 18px; font-weight: bold; color: #00ff88;">--</div>
+                </div>
+
+                <div id="vibe-result" class="analysis-result">
+                    点击"AI分析"调用港大Vibe多智能体进行深度分析...
+                </div>
+            </div>
+
+            <!-- 强强联合流程 -->
+            <div class="panel" style="grid-column: 1 / -1;">
+                <div class="panel-header">
+                    <span class="panel-title">🚀 强强联合流程</span>
+                    <span style="color: #ffd700; font-size: 12px;">韬定律优化 → 港大分析 → 股票池 → 风控 → 交易配置</span>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="hybrid-strategy" placeholder="策略名称" value="伯努利-康达策略">
+                    <button class="btn btn-primary" onclick="runHybridFlow()" style="background: linear-gradient(135deg, #ff6b6b, #ff8e53);">
+                        启动强强联合流程
+                    </button>
+                </div>
+
+                <div id="hybrid-result" class="analysis-result">
+                    选择策略后点击"启动强强联合流程"执行完整自动化流程...
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer" style="position: fixed; bottom: 0; width: 100%;">
+        <p>QS Robot © 2024 - 技术分析系统 | 港大Vibe-Trading AI多智能体投研</p>
+    </footer>
+
+    <script>
+        async function runTechnicalAnalysis() {
+            const symbol = document.getElementById('ta-symbol').value.trim();
+            const days = document.getElementById('ta-days').value;
+            
+            if (!symbol) {
+                document.getElementById('ta-result').innerHTML = '<span class="error">❌ 请输入股票代码</span>';
+                return;
+            }
+
+            document.getElementById('ta-result').innerHTML = '🔄 正在获取数据并分析...';
+
+            try {
+                const response = await fetch('/api/technical/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol, days })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    let result = `📊 技术分析报告 - ${symbol}\n`;
+                    result += '='.repeat(50) + '\n\n';
+                    
+                    if (data.indicators) {
+                        result += '【技术指标】\n';
+                        result += `  MA5: ${data.indicators.ma5 || '--'}\n`;
+                        result += `  MA10: ${data.indicators.ma10 || '--'}\n`;
+                        result += `  RSI(14): ${data.indicators.rsi || '--'}\n`;
+                        result += `  MACD: ${data.indicators.macd || '--'}\n`;
+                        result += `  布林带: ${data.indicators.bollinger || '--'}\n\n`;
+                    }
+
+                    if (data.signals) {
+                        result += '【交易信号】\n';
+                        data.signals.forEach(sig => {
+                            result += `  ${sig.type === 'buy' ? '📈' : sig.type === 'sell' ? '📉' : 'ℹ️'} ${sig.message}\n`;
+                        });
+                        result += '\n';
+                    }
+
+                    if (data.source) {
+                        result += `【数据源】${data.source}\n`;
+                    }
+
+                    document.getElementById('ta-result').innerHTML = result;
+                } else {
+                    document.getElementById('ta-result').innerHTML = `<span class="error">❌ 分析失败: ${data.error || '未知错误'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('ta-result').innerHTML = `<span class="error">❌ 请求失败: ${error.message}</span>`;
+            }
+        }
+
+        async function runVibeAnalysis() {
+            const symbol = document.getElementById('vibe-symbol').value.trim();
+            
+            if (!symbol) {
+                document.getElementById('vibe-result').innerHTML = '<span class="error">❌ 请输入股票代码</span>';
+                return;
+            }
+
+            document.getElementById('vibe-result').innerHTML = '🤖 港大智能体正在分析...（多个智能体并行工作）';
+
+            try {
+                const response = await fetch('/api/vibe/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    let result = `🏛️ 港大Vibe智能体分析报告\n`;
+                    result += '='.repeat(50) + '\n\n';
+                    
+                    if (data.technical) {
+                        result += '【技术分析】\n';
+                        result += `  趋势判断: ${data.technical.trend || '--'}\n`;
+                        result += `  支撑位: ${data.technical.support || '--'}\n`;
+                        result += `  阻力位: ${data.technical.resistance || '--'}\n`;
+                        result += `  RSI: ${data.technical.rsi || '--'}\n`;
+                        result += `  MACD信号: ${data.technical.macd_signal || '--'}\n\n`;
+                    }
+
+                    if (data.fundamental) {
+                        result += '【基本面分析】\n';
+                        result += `  PE: ${data.fundamental.pe || '--'}\n`;
+                        result += `  PB: ${data.fundamental.pb || '--'}\n`;
+                        result += `  ROE: ${data.fundamental.roe || '--'}%\n\n`;
+                    }
+
+                    if (data.sentiment) {
+                        result += '【舆情分析】\n';
+                        result += `  情绪分数: ${data.sentiment.sentiment_score || '--'}\n`;
+                        result += `  市场情绪: ${data.sentiment.market_sentiment || '--'}\n\n`;
+                    }
+
+                    if (data.risk) {
+                        result += '【风控评估】\n';
+                        result += `  风险评分: ${data.risk.risk_score || '--'}\n`;
+                        result += `  最大回撤: ${data.risk.max_drawdown || '--'}%\n`;
+                    }
+
+                    document.getElementById('vibe-result').innerHTML = result;
+                } else {
+                    document.getElementById('vibe-result').innerHTML = `<span class="error">❌ 分析失败: ${data.error || '未知错误'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('vibe-result').innerHTML = `<span class="error">❌ 请求失败: ${error.message}</span>`;
+            }
+        }
+
+        async function runVibeEnhanced() {
+            const symbol = document.getElementById('vibe-symbol').value.trim();
+            
+            if (!symbol) {
+                document.getElementById('vibe-result').innerHTML = '<span class="error">❌ 请输入股票代码</span>';
+                return;
+            }
+
+            document.getElementById('vibe-result').innerHTML = '🎯 正在进行增强版分析（综合评分+股票池推荐）...';
+            document.getElementById('vibe-scores').style.display = 'none';
+            document.getElementById('pool-recommendation').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/vibe/analyze_enhanced', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol })
+                });
+                const data = await response.json();
+
+                if (data.success && data.enhanced_analysis) {
+                    const enhanced = data.enhanced_analysis;
+
+                    // 更新评分显示
+                    document.getElementById('score-composite').textContent = enhanced.comprehensive_score;
+                    document.getElementById('score-tech').textContent = enhanced.technical_score;
+                    document.getElementById('score-fund').textContent = enhanced.fundamental_score;
+                    document.getElementById('score-risk').textContent = enhanced.risk_score;
+                    document.getElementById('vibe-scores').style.display = 'flex';
+
+                    // 更新股票池推荐
+                    document.getElementById('pool-level').textContent = enhanced.pool_recommendation;
+                    document.getElementById('pool-recommendation').style.display = 'block';
+
+                    // 更新详细报告
+                    let result = `🎯 港大Vibe增强版分析报告\n`;
+                    result += '='.repeat(50) + '\n\n';
+                    result += `综合评分: ${enhanced.comprehensive_score} / 100\n`;
+                    result += `可信度: ${enhanced.confidence_level}\n`;
+                    result += `推荐操作: ${enhanced.recommended_action}\n\n`;
+
+                    if (data.technical) {
+                        result += '【技术分析】\n';
+                        result += `  趋势: ${data.technical.trend || '--'}\n`;
+                        result += `  RSI: ${data.technical.rsi || '--'}\n\n`;
+                    }
+
+                    if (data.fundamental) {
+                        result += '【基本面】\n';
+                        result += `  PE: ${data.fundamental.pe || '--'}\n`;
+                        result += `  ROE: ${data.fundamental.roe || '--'}%\n\n`;
+                    }
+
+                    result += `股票池推荐: ${enhanced.pool_recommendation}\n`;
+
+                    document.getElementById('vibe-result').innerHTML = result;
+                } else {
+                    document.getElementById('vibe-result').innerHTML = `<span class="error">❌ 分析失败: ${data.error || '未知错误'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('vibe-result').innerHTML = `<span class="error">❌ 请求失败: ${error.message}</span>`;
+            }
+        }
+
+        async function runHybridFlow() {
+            const strategy = document.getElementById('hybrid-strategy').value.trim();
+            
+            if (!strategy) {
+                document.getElementById('hybrid-result').innerHTML = '<span class="error">❌ 请输入策略名称</span>';
+                return;
+            }
+
+            document.getElementById('hybrid-result').innerHTML = '🚀 正在执行强强联合流程...\n\n【阶段1】韬定律参数优化...';
+
+            try {
+                const response = await fetch('/api/integration/hybrid_power', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('hybrid-result').innerHTML = data.report;
+                } else {
+                    document.getElementById('hybrid-result').innerHTML = `<span class="error">❌ 流程失败: ${data.error || '未知错误'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('hybrid-result').innerHTML = `<span class="error">❌ 请求失败: ${error.message}</span>`;
+            }
+        }
+
+        // 页面加载时自动执行一次技术分析
+        window.onload = function() {
+            // runTechnicalAnalysis();
+        };
+
+        // 系统切换函数 - 三系统互跳
+        function switchSystem(systemType) {
+            const btnStrategy = document.getElementById('btnStrategy');
+            const btnPool = document.getElementById('btnPool');
+            const btnAnalysis = document.getElementById('btnAnalysis');
+            const currentSystem = document.getElementById('currentSystem');
+
+            btnStrategy.classList.remove('active');
+            btnPool.classList.remove('active');
+            btnAnalysis.classList.remove('active');
+
+            if (systemType === 'strategy') {
+                btnStrategy.classList.add('active');
+                currentSystem.textContent = '策略优化系统';
+                window.location.href = '/';
+            } else if (systemType === 'pool') {
+                btnPool.classList.add('active');
+                currentSystem.textContent = '股票池管理';
+                window.location.href = '/stock_pool';
+            } else if (systemType === 'analysis') {
+                btnAnalysis.classList.add('active');
+                currentSystem.textContent = '技术分析系统';
+            }
+        }
+
+        // 技术分析页面 - 固定流程自动化入口
+        function runTechAutoFlow(workflowType) {
+            const endpoints = {
+                'optimize': '/api/integration/full_workflow',
+                'stock_pool': '/api/integration/stock_pool',
+                'full': '/api/integration/full_workflow',
+                'vibe': '/api/vibe/analyze_enhanced',
+                'hybrid': '/api/integration/hybrid_power',
+                'batch': '/api/integration/batch_optimize'
+            };
+
+            const descriptions = {
+                'optimize': '韬定律优化→回测→应用',
+                'stock_pool': '股票池自动流转',
+                'full': '完整工作流（优化→股票池→交易配置）',
+                'vibe': '港大Vibe智能体选股',
+                'hybrid': '强强联合工作流（韬定律+Vibe）',
+                'batch': '批量自动化'
+            };
+
+            const endpoint = endpoints[workflowType];
+            if (!endpoint) {
+                alert('未知的流程类型');
+                return;
+            }
+
+            const strategyName = prompt('请输入策略名称（如: GyroStrategyV7），留空则使用默认策略:', 'GyroStrategyV7');
+            if (strategyName === null) return;
+
+            alert('正在执行: ' + descriptions[workflowType] + '\n策略: ' + strategyName + '\n\n请在服务器控制台查看详细执行日志...');
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    strategy: strategyName,
+                    strategy_name: strategyName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('流程执行结果:', data);
+                if (data.success) {
+                    alert('✅ 流程执行成功!\n\n' + (data.message || '详细信息请查看服务器日志'));
+                } else {
+                    alert('❌ 流程执行失败: ' + (data.error || data.message || '未知错误'));
+                }
+            })
+            .catch(error => {
+                console.error('流程执行错误:', error);
+                alert('⚠️ 调用失败，请确保Web服务已启动\n\n错误信息: ' + error.message);
+            });
+        }
+    </script>
+    <script src="/static/robot-widget.js"></script>
+</body>
+</html>

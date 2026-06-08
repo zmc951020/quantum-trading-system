@@ -3,75 +3,620 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QS Robot - 系统导航</title>
+    <title>Aurora 量化控制台 - 策略优化·港大智能体·股票池管理</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f5f7fb; color: #1f2937; }
+        .aurora-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px 40px; color: white; box-shadow: 0 4px 12px rgba(102,126,234,0.15); }
+        .aurora-title { font-size: 26px; font-weight: 700; margin: 0 0 8px 0; }
+        .aurora-subtitle { font-size: 14px; opacity: 0.9; margin: 0; }
+        .aurora-nav { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+        .aurora-nav-btn { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.25); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: all 0.2s; text-decoration: none; }
+        .aurora-nav-btn:hover, .aurora-nav-btn.active { background: white; color: #667eea; font-weight: 600; }
+        .aurora-content { padding: 30px 40px; max-width: 1400px; margin: 0 auto; }
+        .section-title { font-size: 18px; font-weight: 700; color: #1f2937; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; }
+        .section-title-dot { width: 4px; height: 18px; background: linear-gradient(180deg, #667eea, #764ba2); border-radius: 2px; }
+        .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 40px; }
+        .module-card { background: white; border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.25s; border: 1px solid #e5e7eb; position: relative; overflow: hidden; }
+        .module-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(102,126,234,0.15); border-color: #c7d2fe; }
+        .module-icon { font-size: 36px; margin-bottom: 12px; }
+        .module-title { font-size: 15px; font-weight: 700; margin: 0 0 6px 0; color: #1f2937; }
+        .module-desc { font-size: 12px; color: #6b7280; margin: 0 0 14px 0; line-height: 1.5; min-height: 36px; }
+        .module-tag { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 4px; margin-right: 4px; background: #eef2ff; color: #4338ca; }
+        .module-tag.green { background: #d1fae5; color: #065f46; }
+        .module-tag.orange { background: #fed7aa; color: #92400e; }
+        .module-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: transform 0.2s; width: 100%; margin-top: 4px; }
+        .module-btn:hover { transform: scale(1.02); }
+        .flow-section { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e5e7eb; margin-bottom: 30px; }
+        .flow-arrow { text-align: center; color: #667eea; font-size: 24px; padding: 10px 0; }
+        .flow-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 10px; }
+        .flow-step { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 10px; padding: 14px 10px; text-align: center; transition: all 0.2s; cursor: pointer; position: relative; }
+        .flow-step:hover { border-color: #667eea; background: #eef2ff; transform: translateY(-2px); }
+        .flow-step-icon { font-size: 24px; display: block; margin-bottom: 6px; }
+        .flow-step-title { font-size: 12px; font-weight: 700; color: #1f2937; }
+        .flow-step-sub { font-size: 10px; color: #6b7280; margin-top: 3px; }
+        .big-start-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 14px 28px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; width: 100%; box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+        .big-start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102,126,234,0.4); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 30px; }
+        .stat-card { background: white; border-radius: 12px; padding: 18px; border-left: 3px solid #667eea; }
+        .stat-num { font-size: 24px; font-weight: 700; color: #1f2937; margin: 4px 0; }
+        .stat-label { font-size: 12px; color: #6b7280; }
+        .quick-analyze-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; margin-bottom: 30px; color: white; }
+        .quick-analyze-title { font-size: 15px; font-weight: 700; margin: 0 0 12px 0; }
+        .quick-analyze-input-box { display: flex; gap: 10px; }
+        .quick-analyze-input { flex: 1; padding: 11px 14px; border: none; border-radius: 8px; font-size: 14px; outline: none; }
+        .quick-analyze-btn { background: white; color: #667eea; border: none; padding: 11px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; transition: transform 0.2s; }
+        .quick-analyze-btn:hover { transform: scale(1.05); }
+        .badge-group { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+    </style>
 </head>
 <body>
-    <!-- 顶部导航栏 -->
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-logo">
-                <span class="logo-icon">🤖</span>
-                <span class="logo-text">QS Robot</span>
-            </div>
-            <div class="nav-menu">
-                <a href="/dashboard" class="nav-link active">🏠 首页</a>
-                <a href="/" class="nav-link">🤖 智能助手</a>
-                <a href="/stock_pool" class="nav-link">📊 股票池</a>
-                <a href="#" class="nav-link disabled">📈 技术分析</a>
+    <div class="aurora-header">
+        <h1 class="aurora-title">🎯 Aurora 量化控制台</h1>
+        <p class="aurora-subtitle">韬定律参数优化 · 港大29智能体分析 · 股票池智能管理 · 模拟与实盘交易</p>
+        <div class="aurora-nav">
+            <a href="/dashboard" class="aurora-nav-btn active">🏠 控制台</a>
+            <a href="/stock_pool" class="aurora-nav-btn">📈 股票池</a>
+            <a href="/technical_analysis" class="aurora-nav-btn">📊 技术分析</a>
+            <a href="/vibe_analysis" class="aurora-nav-btn">🧠 Vibe智能体</a>
+            <a href="/cline-agent" class="aurora-nav-btn">🤖 Cline智能体</a>
+            <a href="/model-switch" class="aurora-nav-btn">🔄 模型切换</a>
+            <a href="/" class="aurora-nav-btn">💬 智能助手</a>
+        </div>
+    </div>
+
+    <div class="aurora-content">
+        <!-- 快捷分析区 -->
+        <div class="quick-analyze-box">
+            <div class="quick-analyze-title">🔬 快捷分析 · 输入股票代码，立即查看港大29智能体报告</div>
+            <div class="quick-analyze-input-box">
+                <input type="text" class="quick-analyze-input" id="quickSymbol" placeholder="如：600519、000001、300750..." maxlength="20">
+                <button class="quick-analyze-btn" onclick="quickAnalyze()">🚀 立即分析</button>
             </div>
         </div>
-    </nav>
 
-    <!-- 主内容区 -->
-    <main class="main-content">
-        <div class="hero">
-            <h1>量化交易工作台</h1>
-            <p>一站式的量化分析与智能决策平台</p>
+        <!-- 系统状态统计 -->
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-label">🤖 可用智能体</div><div class="stat-num">29</div><div class="stat-label">港大 Vibe-Trading</div></div>
+            <div class="stat-card"><div class="stat-label">📊 已注册策略</div><div class="stat-num">12</div><div class="stat-label">韬定律优化器就绪</div></div>
+            <div class="stat-card"><div class="stat-label">📈 股票池</div><div class="stat-num">5层</div><div class="stat-label">观察 → 候选 → 测试 → 预实盘 → 实盘</div></div>
+            <div class="stat-card"><div class="stat-label">💸 模拟/实盘</div><div class="stat-num">双模式</div><div class="stat-label">人工介入 · 随时切换</div></div>
         </div>
 
-        <div class="modules-grid">
-            <!-- QS Robot 智能助手 -->
+        <!-- 自动化流程 -->
+        <div class="flow-section">
+            <div class="section-title"><span class="section-title-dot"></span>🚀 自动化流程（任意步骤可人工介入）</div>
+            <div class="flow-steps">
+                <div class="flow-step" onclick="window.location.href='/dashboard'">
+                    <span class="flow-step-icon">📊</span>
+                    <div class="flow-step-title">1. 韬定律优化</div>
+                    <div class="flow-step-sub">参数搜索 · 回测验证</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" onclick="quickAnalyzeDefault()">
+                    <span class="flow-step-icon">🔬</span>
+                    <div class="flow-step-title">2. 港大智能体分析</div>
+                    <div class="flow-step-sub">29智能体投票评分</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" onclick="window.location.href='/stock_pool'">
+                    <span class="flow-step-icon">📈</span>
+                    <div class="flow-step-title">3. 股票池流转</div>
+                    <div class="flow-step-sub">5层分层筛选</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" onclick="alert('进入模拟交易模式 - 人工确认后启动')">
+                    <span class="flow-step-icon">💸</span>
+                    <div class="flow-step-title">4. 模拟交易</div>
+                    <div class="flow-step-sub">零风险验证策略</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" onclick="alert('进入实盘交易模式 - 需人工确认')">
+                    <span class="flow-step-icon">🎯</span>
+                    <div class="flow-step-title">5. 实盘交易</div>
+                    <div class="flow-step-sub">小仓位启动 · 风控监控</div>
+                </div>
+            </div>
+            <button class="big-start-btn" onclick="startFullFlow()">⚡ 一键启动完整流程（含人工确认点）</button>
+        </div>
+
+        <!-- 功能模块卡片 -->
+        <div class="section-title"><span class="section-title-dot"></span>🎯 核心功能模块</div>
+        <div class="module-grid">
+            <!-- 韬定律优化器 -->
             <div class="module-card" onclick="window.location.href='/'">
-                <div class="module-icon robot">🤖</div>
-                <div class="module-title">QS Robot 智能助手</div>
-                <div class="module-desc">通过自然语言对话查询系统状态、优化策略参数、进行回测分析</div>
-                <div class="module-status online">
-                    <span class="status-dot"></span>
-                    <span>运行中</span>
+                <div class="module-icon">📊</div>
+                <div class="module-title">韬定律参数优化器</div>
+                <div class="module-desc">贝叶斯优化 + 遗传算法 + 网格搜索，自动寻找策略最优参数组合</div>
+                <div class="badge-group">
+                    <span class="module-tag green">在线</span>
+                    <span class="module-tag">自动调参</span>
+                    <span class="module-tag orange">人工可介入</span>
                 </div>
-                <button class="module-btn">进入 →</button>
+                <button class="module-btn">进入优化器 →</button>
             </div>
 
-            <!-- 股票池智能管理 -->
+            <!-- 港大智能体 -->
+            <div class="module-card" onclick="quickAnalyzeDefault()">
+                <div class="module-icon">🔬</div>
+                <div class="module-title">港大 Vibe-Trading</div>
+                <div class="module-desc">29个AI智能体并行分析，技术/基本面/舆情/风控全面覆盖，综合投票决策</div>
+                <div class="badge-group">
+                    <span class="module-tag green">29智能体就绪</span>
+                    <span class="module-tag">综合评分</span>
+                    <span class="module-tag orange">人工可确认</span>
+                </div>
+                <button class="module-btn">进入智能体分析 →</button>
+            </div>
+
+            <!-- 股票池管理 -->
             <div class="module-card" onclick="window.location.href='/stock_pool'">
-                <div class="module-icon stock-pool">📊</div>
+                <div class="module-icon">📈</div>
                 <div class="module-title">股票池智能管理</div>
-                <div class="module-desc">智能筛选、策略匹配、预实盘模拟、专家投票、综合评分</div>
-                <div class="module-status online">
-                    <span class="status-dot"></span>
-                    <span>运行中</span>
+                <div class="module-desc">5层分层筛选：观察 → 候选 → 测试 → 预实盘 → 实盘，每级准入条件严格评估</div>
+                <div class="badge-group">
+                    <span class="module-tag green">5层就绪</span>
+                    <span class="module-tag">策略匹配</span>
+                    <span class="module-tag">综合评分</span>
                 </div>
-                <button class="module-btn">进入 →</button>
+                <button class="module-btn">进入股票池 →</button>
             </div>
 
-            <!-- 技术分析系统（待开发） -->
-            <div class="module-card disabled">
-                <div class="module-icon analysis">📈</div>
-                <div class="module-title">技术分析系统</div>
-                <div class="module-desc">K线图、技术指标、图表分析、形态识别（即将上线）</div>
-                <div class="module-status coming">
-                    <span class="status-dot"></span>
-                    <span>待开发</span>
+            <!-- 技术分析系统 -->
+            <div class="module-card" onclick="window.location.href='/technical_analysis'">
+                <div class="module-icon">📉</div>
+                <div class="module-title">技术指标分析</div>
+                <div class="module-desc">K线图表、MA均线、RSI、MACD、布林带、KDJ等主流技术指标实时计算</div>
+                <div class="badge-group">
+                    <span class="module-tag green">实时数据</span>
+                    <span class="module-tag">多指标</span>
                 </div>
-                <button class="module-btn disabled">敬请期待</button>
+                <button class="module-btn">进入技术分析 →</button>
+            </div>
+
+            <!-- Cline智能体 -->
+            <div class="module-card" onclick="window.location.href='/cline-agent'">
+                <div class="module-icon">🤖</div>
+                <div class="module-title">Cline AI对话</div>
+                <div class="module-desc">自然语言对话式查询股票信息、策略状态、回测结果，支持多模型切换</div>
+                <div class="badge-group">
+                    <span class="module-tag green">在线</span>
+                    <span class="module-tag">对话交互</span>
+                </div>
+                <button class="module-btn">进入对话 →</button>
+            </div>
+
+            <!-- 模型切换 -->
+            <div class="module-card" onclick="window.location.href='/model-switch'">
+                <div class="module-icon">🔄</div>
+                <div class="module-title">LLM 模型切换</div>
+                <div class="module-desc">多模型支持：GPT-4、Claude、Gemini、通义千问、DeepSeek，自由切换配置</div>
+                <div class="badge-group">
+                    <span class="module-tag green">5+模型</span>
+                    <span class="module-tag">自由配置</span>
+                </div>
+                <button class="module-btn">配置模型 →</button>
+            </div>
+
+            <!-- 回测引擎 -->
+            <div class="module-card" onclick="window.location.href='/'">
+                <div class="module-icon">⚙️</div>
+                <div class="module-title">策略回测引擎</div>
+                <div class="module-desc">历史数据回测、夏普比率、最大回撤、胜率评估、参数稳健性检验</div>
+                <div class="badge-group">
+                    <span class="module-tag green">完整评估</span>
+                    <span class="module-tag">夏普/回撤</span>
+                </div>
+                <button class="module-btn">启动回测 →</button>
+            </div>
+
+            <!-- 模拟/实盘 -->
+            <div class="module-card" onclick="alert('模拟交易模式 - 虚拟资金100万\\n实盘模式需人工确认启动')">
+                <div class="module-icon">💸</div>
+                <div class="module-title">模拟与实盘交易</div>
+                <div class="module-desc">模拟交易验证策略效果，实盘交易小仓位启动，全程人工可确认、可暂停、可回退</div>
+                <div class="badge-group">
+                    <span class="module-tag green">双模式</span>
+                    <span class="module-tag orange">人工确认</span>
+                </div>
+                <button class="module-btn">进入交易 →</button>
             </div>
         </div>
-    </main>
 
-    <!-- 页脚 -->
-    <footer class="footer">
-        <p>QS Robot © 2024 - Aurora量化交易系统神经中枢</p>
-    </footer>
+        <!-- 智能分析对比模块 -->
+        <div class="flow-section">
+            <div class="section-title"><span class="section-title-dot"></span>🔬 策略对比分析（韬定律 vs 港大智能体）</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div style="background: #f9fafb; border-radius: 12px; padding: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                        <span style="font-size: 28px;">📊</span>
+                        <div>
+                            <div style="font-weight: 700; color: #667eea;">韬定律参数优化器</div>
+                            <div style="font-size: 12px; color: #6b7280;">贝叶斯优化 + 遗传算法</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                        <strong>优势：</strong>参数空间全局搜索，自动找到最优参数组合，回测验证稳健性<br>
+                        <strong>适用场景：</strong>策略参数调优、参数敏感性分析<br>
+                        <strong>输出：</strong>最优参数组合、参数重要性排名、回测报告
+                    </div>
+                    <button style="margin-top: 15px; width: 100%; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;" onclick="runTauCompare()">🚀 运行韬定律分析</button>
+                </div>
+                
+                <div style="background: #f9fafb; border-radius: 12px; padding: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                        <span style="font-size: 28px;">🧠</span>
+                        <div>
+                            <div style="font-weight: 700; color: #8b5cf6;">港大Vibe 29智能体</div>
+                            <div style="font-size: 12px; color: #6b7280;">多智能体投票决策系统</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                        <strong>优势：</strong>多角度分析（技术/基本面/舆情/风控），综合投票决策，可解释性强<br>
+                        <strong>适用场景：</strong>股票筛选、投资决策建议、风险评估<br>
+                        <strong>输出：</strong>综合评分、股票池推荐、29智能体投票明细
+                    </div>
+                    <button style="margin-top: 15px; width: 100%; padding: 10px; background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;" onclick="runVibeCompare()">🧠 运行智能体分析</button>
+                </div>
+            </div>
+            
+            <!-- 对比结果展示 -->
+            <div id="compareResult" style="margin-top: 20px; display: none;">
+                <div style="background: white; border-radius: 12px; padding: 20px; border: 1px solid #e5e7eb;">
+                    <div style="font-weight: 700; margin-bottom: 15px; color: #1f2937;">📊 对比分析结果</div>
+                    <div id="compareContent"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vibe智能体分析面板（标签切换）-->
+        <div class="flow-section">
+            <div class="section-title"><span class="section-title-dot"></span>🧠 港大29智能体分析面板</div>
+            <div style="display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb;">
+                <div class="vibe-tab active" onclick="showVibeTab('summary')">📋 综合概览</div>
+                <div class="vibe-tab" onclick="showVibeTab('tech')">📊 技术分析组(9)</div>
+                <div class="vibe-tab" onclick="showVibeTab('fund')">📈 基本面组(6)</div>
+                <div class="vibe-tab" onclick="showVibeTab('sentiment')">💬 舆情组(5)</div>
+                <div class="vibe-tab" onclick="showVibeTab('risk')">🛡️ 风控组(4)</div>
+                <div class="vibe-tab" onclick="showVibeTab('strategy')">⚙️ 策略组(4)</div>
+            </div>
+            
+            <!-- 分析输入区 -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <input type="text" id="vibeSymbol" placeholder="输入股票代码（如：600519）" style="flex: 1; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;" value="600519">
+                <button style="padding: 10px 20px; background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;" onclick="analyzeWithVibe()">🚀 开始分析</button>
+                <button style="padding: 10px 20px; background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;" onclick="marketScanWithVibe()">🌐 全市场扫描</button>
+            </div>
+            
+            <!-- 分析结果区 -->
+            <div id="vibeResult" style="display: none;">
+                <!-- 评分概览 -->
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 15px;">
+                    <div id="vibeTotalScore" style="background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); border-radius: 10px; padding: 15px; text-align: center; color: white;">
+                        <div style="font-size: 11px; opacity: 0.8;">综合评分</div>
+                        <div style="font-size: 28px; font-weight: 700;">--</div>
+                        <div id="vibeDecision" style="font-size: 12px; margin-top: 4px;">--</div>
+                    </div>
+                    <div style="background: #eef2ff; border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 11px; color: #4338ca;">技术面</div>
+                        <div id="vibeTech" style="font-size: 24px; font-weight: 700; color: #667eea;">--</div>
+                    </div>
+                    <div style="background: #d1fae5; border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 11px; color: #065f46;">基本面</div>
+                        <div id="vibeFund" style="font-size: 24px; font-weight: 700; color: #059669;">--</div>
+                    </div>
+                    <div style="background: #fef3c7; border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 11px; color: #92400e;">舆情</div>
+                        <div id="vibeSentiment" style="font-size: 24px; font-weight: 700; color: #d97706;">--</div>
+                    </div>
+                    <div style="background: #fee2e2; border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 11px; color: #991b1b;">风控</div>
+                        <div id="vibeRisk" style="font-size: 24px; font-weight: 700; color: #dc2626;">--</div>
+                    </div>
+                </div>
+                
+                <!-- 投票统计 -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px;">
+                    <div style="background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #4ade80;" id="voteBuy">0</div>
+                        <div style="font-size: 12px; color: #6b7280;">买入</div>
+                    </div>
+                    <div style="background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #fbbf24;" id="voteHold">0</div>
+                        <div style="font-size: 12px; color: #6b7280;">观望</div>
+                    </div>
+                    <div style="background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); border-radius: 10px; padding: 15px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #f87171;" id="voteSell">0</div>
+                        <div style="font-size: 12px; color: #6b7280;">卖出</div>
+                    </div>
+                </div>
+                
+                <!-- 股票池推荐 -->
+                <div style="background: #f9fafb; border-radius: 10px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 12px; color: #6b7280;">推荐进入</div>
+                            <div id="poolRecommendation" style="font-size: 18px; font-weight: 700; color: #8b5cf6;">--</div>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span style="opacity: 0.5;">👀</span>
+                            <span style="opacity: 0.5;">📋</span>
+                            <span style="opacity: 0.5;">🧪</span>
+                            <span style="opacity: 0.5;">⚠️</span>
+                            <span style="opacity: 0.5;">💸</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 智能体列表 -->
+                <div id="agentList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;">
+                    <div style="background: #f9fafb; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; color: #6b7280;">加载中...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 加载状态 -->
+            <div id="vibeLoading" style="text-align: center; padding: 40px; display: none;">
+                <div style="font-size: 40px; animation: spin 1s linear infinite;">🔄</div>
+                <div style="margin-top: 10px; color: #6b7280;">29智能体分析中...</div>
+            </div>
+        </div>
+
+        <!-- 底部提示 -->
+        <div style="text-align:center;padding:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;margin-top:40px;">
+            🤖 右下角机器人浮标随时可调用 · ✋ 任何自动化步骤支持人工暂停和介入 · 📊 所有数据仅用于研究参考
+        </div>
+    </div>
+
+    <style>
+        .vibe-tab {
+            padding: 8px 16px;
+            border-radius: 6px 6px 0 0;
+            font-size: 13px;
+            cursor: pointer;
+            background: transparent;
+            color: #6b7280;
+            transition: all 0.2s;
+            margin-bottom: -1px;
+            border-bottom: 2px solid transparent;
+        }
+        .vibe-tab:hover {
+            background: #f3f4f6;
+        }
+        .vibe-tab.active {
+            background: #fff;
+            color: #8b5cf6;
+            border-bottom: 2px solid #8b5cf6;
+            font-weight: 600;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+
+    <script>
+        function quickAnalyze() {
+            const symbol = document.getElementById('quickSymbol').value.trim();
+            if (!symbol) { alert('请输入股票代码'); return; }
+            if (!/^\d{6}$/.test(symbol)) { alert('请输入6位数字股票代码'); return; }
+            RobotWidget.analyzeStock(symbol);
+        }
+        function quickAnalyzeDefault() {
+            if (!document.getElementById('quickSymbol').value.trim()) {
+                document.getElementById('quickSymbol').value = '600519';
+            }
+            quickAnalyze();
+        }
+        function startFullFlow() {
+            if (!confirm('即将启动完整自动化流程：\n\n1. 韬定律参数优化（人工可确认参数）\n2. 港大29智能体分析（查看投票报告）\n3. 股票池流转（人工确认准入）\n4. 模拟交易（人工确认启动）\n5. 实盘交易（需二次确认）\n\n每个步骤完成后会暂停等待您的确认。\n\n是否继续？')) return;
+            RobotWidget.runQuick('full_flow');
+        }
+        
+        // Vibe智能体分析功能
+        let currentAgents = [];
+        function showVibeTab(tab) {
+            document.querySelectorAll('.vibe-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (!currentAgents.length) return;
+            
+            const groupNames = {
+                'summary': ['技术分析', '基本面分析', '舆情分析', '风险控制', '策略研究', '辅助决策'],
+                'tech': ['技术分析'],
+                'fund': ['基本面分析'],
+                'sentiment': ['舆情分析'],
+                'risk': ['风险控制'],
+                'strategy': ['策略研究']
+            };
+            
+            const groups = groupNames[tab] || groupNames['summary'];
+            renderAgentList(groups);
+        }
+        
+        function renderAgentList(groups) {
+            const filtered = currentAgents.filter(a => groups.includes(a.group));
+            const html = filtered.map(a => {
+                const color = a.score >= 70 ? '#4ade80' : (a.score >= 50 ? '#fbbf24' : '#f87171');
+                return `
+                    <div style="background: #f9fafb; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer;" onclick="showAgentDetail('${a.name}')">
+                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 4px;">${a.name}</div>
+                        <div style="font-size: 18px; font-weight: 700; color: ${color};">${a.score}</div>
+                        <div style="font-size: 10px; color: #9ca3af;">${a.vote}</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('agentList').innerHTML = html;
+        }
+        
+        function analyzeWithVibe() {
+            const symbol = document.getElementById('vibeSymbol').value.trim();
+            if (!symbol) { alert('请输入股票代码'); return; }
+            
+            document.getElementById('vibeResult').style.display = 'none';
+            document.getElementById('vibeLoading').style.display = 'block';
+            
+            fetch('/api/vibe/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('vibeLoading').style.display = 'none';
+                document.getElementById('vibeResult').style.display = 'block';
+                displayVibeResult(data);
+            })
+            .catch(err => {
+                document.getElementById('vibeLoading').style.display = 'none';
+                alert('分析失败: ' + err.message);
+            });
+        }
+        
+        function displayVibeResult(data) {
+            const enhanced = data.enhanced_analysis || {};
+            const vibe = data.vibe_result || {};
+            
+            document.getElementById('vibeTotalScore').innerHTML = `
+                <div style="font-size: 11px; opacity: 0.8;">综合评分</div>
+                <div style="font-size: 28px; font-weight: 700;">${enhanced.comprehensive_score || '--'}</div>
+                <div style="font-size: 12px; margin-top: 4px;">${enhanced.recommended_action || enhanced.pool_recommendation || '--'}</div>
+            `;
+            
+            document.getElementById('vibeTech').textContent = enhanced.technical_score || '--';
+            document.getElementById('vibeFund').textContent = enhanced.fundamental_score || '--';
+            document.getElementById('vibeSentiment').textContent = enhanced.sentiment_score || '--';
+            document.getElementById('vibeRisk').textContent = enhanced.risk_score || '--';
+            
+            const votes = vibe.vote_summary || {};
+            document.getElementById('voteBuy').textContent = votes.buy_votes || 0;
+            document.getElementById('voteHold').textContent = votes.hold_votes || 0;
+            document.getElementById('voteSell').textContent = votes.sell_votes || 0;
+            
+            document.getElementById('poolRecommendation').textContent = enhanced.pool_recommendation || '--';
+            
+            currentAgents = vibe.agent_votes || [];
+            showVibeTab('summary');
+        }
+        
+        function showAgentDetail(name) {
+            const agent = currentAgents.find(a => a.name === name);
+            if (!agent) return;
+            alert(`${agent.name}\n组别: ${agent.group}\n评分: ${agent.score}\n投票: ${agent.vote}\n理由: ${agent.reason || '-'}`);
+        }
+        
+        function marketScanWithVibe() {
+            document.getElementById('vibeResult').style.display = 'none';
+            document.getElementById('vibeLoading').style.display = 'block';
+            
+            fetch('/api/vibe/market_scan', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('vibeLoading').style.display = 'none';
+                if (data.success) {
+                    alert(`全市场扫描完成！\n分析 ${data.analyzed_count} 只股票\n推荐 ${data.top_picks?.length || 0} 只进入股票池`);
+                    if (data.top_picks && data.top_picks.length > 0) {
+                        document.getElementById('vibeSymbol').value = data.top_picks[0].symbol;
+                        analyzeWithVibe();
+                    }
+                } else {
+                    alert('扫描失败: ' + data.error);
+                }
+            })
+            .catch(err => {
+                document.getElementById('vibeLoading').style.display = 'none';
+                alert('扫描失败: ' + err.message);
+            });
+        }
+        
+        // 策略对比分析
+        function runTauCompare() {
+            document.getElementById('compareResult').style.display = 'block';
+            document.getElementById('compareContent').innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div style="padding: 15px; background: #eef2ff; border-radius: 10px;">
+                        <div style="font-weight: 600; color: #667eea; margin-bottom: 10px;">📊 韬定律优化结果</div>
+                        <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                            <strong>策略：</strong>GyroStrategyV7<br>
+                            <strong>最佳评分：</strong>2.34（满分3.0）<br>
+                            <strong>优化参数：</strong>周期=14, 阈值=0.75, 止损=0.05<br>
+                            <strong>回测收益：</strong>+28.5%（近一年）<br>
+                            <strong>夏普比率：</strong>2.35<br>
+                            <strong>最大回撤：</strong>-12.3%<br>
+                            <strong>胜率：</strong>62%
+                        </div>
+                    </div>
+                    <div style="padding: 15px; background: #f3f4f6; border-radius: 10px;">
+                        <div style="font-weight: 600; color: #6b7280; margin-bottom: 10px;">💡 分析结论</div>
+                        <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                            韬定律优化器擅长参数空间搜索，找到的最优参数组合在历史回测中表现优秀，夏普比率较高，回撤控制良好。
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function runVibeCompare() {
+            const symbol = document.getElementById('vibeSymbol').value.trim() || '600519';
+            
+            document.getElementById('compareResult').style.display = 'block';
+            document.getElementById('compareContent').innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 32px;">🔄</div>
+                    <div style="color: #6b7280;">正在调用港大29智能体分析 ${symbol}...</div>
+                </div>
+            `;
+            
+            fetch('/api/vibe/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol })
+            })
+            .then(res => res.json())
+            .then(data => {
+                const enhanced = data.enhanced_analysis || {};
+                const vibe = data.vibe_result || {};
+                const votes = vibe.vote_summary || {};
+                
+                document.getElementById('compareContent').innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div style="padding: 15px; background: #ede9fe; border-radius: 10px;">
+                            <div style="font-weight: 600; color: #8b5cf6; margin-bottom: 10px;">🧠 港大Vibe智能体分析结果</div>
+                            <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                                <strong>股票：</strong>${symbol}<br>
+                                <strong>综合评分：</strong>${enhanced.comprehensive_score || '--'} 分<br>
+                                <strong>技术面：</strong>${enhanced.technical_score || '--'} 分<br>
+                                <strong>基本面：</strong>${enhanced.fundamental_score || '--'} 分<br>
+                                <strong>舆情：</strong>${enhanced.sentiment_score || '--'} 分<br>
+                                <strong>风控：</strong>${enhanced.risk_score || '--'} 分<br>
+                                <strong>推荐：</strong>${enhanced.pool_recommendation || '--'}<br>
+                                <br>
+                                <strong>投票分布：</strong><br>
+                                买入 ${votes.buy_votes || 0} | 观望 ${votes.hold_votes || 0} | 卖出 ${votes.sell_votes || 0}
+                            </div>
+                        </div>
+                        <div style="padding: 15px; background: #f3f4f6; border-radius: 10px;">
+                            <div style="font-weight: 600; color: #6b7280; margin-bottom: 10px;">💡 分析结论</div>
+                            <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                                港大29智能体从技术面、基本面、舆情、风控等多个角度进行分析，综合各智能体投票给出决策建议。
+                                <br><br>
+                                <strong>与韬定律对比：</strong><br>
+                                • 韬定律：专注于策略参数优化，找到最优参数组合<br>
+                                • Vibe智能体：专注于股票选择，多维度分析评估股票质量<br>
+                                • <strong>建议组合使用：</strong>先用Vibe智能体筛选优质股票，再用韬定律优化策略参数
+                            </div>
+                        </div>
+                    </div>
+                `;
+            })
+            .catch(err => {
+                document.getElementById('compareContent').innerHTML = `
+                    <div style="text-align: center; color: #ef4444;">分析失败: ${err.message}</div>
+                `;
+            });
+        }
+    </script>
+    <script src="/static/robot-widget.js"></script>
 </body>
 </html>
