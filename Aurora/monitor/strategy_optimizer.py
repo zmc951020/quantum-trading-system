@@ -290,3 +290,268 @@ class StrategyPerformanceAnalyzer:
             },
             "overall_assessment": "表现优秀" if not self.optimization_suggestions else "需要优化"
         }
+    
+    # ============ 韬定律集群集成方法 ============
+    
+    def optimize_with_tau_cluster(self, strategy_name: str, strategy_instance: Any,
+                                   market_data: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        使用韬定律优化器集群深度优化策略参数
+        
+        这是 Aurora 系统与韬定律集群的核心集成点。
+        该方法会:
+        1. 提取策略的可优化参数
+        2. 使用参数空间折叠技术搜索最优参数组合
+        3. 通过相似参数缓存避免重复计算
+        4. 将优化结果持久化保存到参数存储
+        
+        Args:
+            strategy_name: 策略名称（唯一标识）
+            strategy_instance: 策略实例（StrategyBase子类）
+            market_data: 市场数据（DataFrame或类似结构，可选）
+            
+        Returns:
+            优化结果字典，包含最佳参数、评分、改进幅度等
+        """
+        print(f"\n{'='*80}")
+        print(f"🔬 韬定律集群优化: {strategy_name}")
+        print(f"{'='*80}")
+        
+        # 延迟导入桥接器（避免循环依赖）
+        try:
+            from monitor.tau_cluster_bridge import get_tau_bridge
+            bridge = get_tau_bridge()
+        except ImportError as e:
+            print(f"[WARN] 无法加载韬定律集群桥接器: {e}")
+            return {
+                'success': False,
+                'error': f'桥接器加载失败: {e}',
+                'message': '请确保韬定律集群模块已正确安装'
+            }
+        
+        # 检查桥接器状态
+        status = bridge.get_status_report()
+        print(f"⚙️  桥接器状态:")
+        print(f"   • 韬定律集群: {'✅ 可用' if status['tau_cluster_available'] else '⚠️ 不可用 (使用简化优化器)'}")
+        print(f"   • 参数存储: {'✅ 已连接' if status['param_store_available'] else '⚠️ 未连接'}")
+        
+        # 获取之前的评分
+        previous_score = 0.0
+        if status['param_store_available']:
+            previous_score = bridge._get_previous_score(strategy_name)
+            if previous_score > 0:
+                print(f"   • 历史最佳评分: {previous_score:.4f}")
+        
+        print(f"\n🚀 开始优化...")
+        
+        # 运行优化
+        result = bridge.optimize_strategy(
+            strategy_name=strategy_name,
+            strategy_instance=strategy_instance,
+            market_data=market_data,
+            previous_score=previous_score
+        )
+        
+        # 打印结果
+        print(f"\n📊 优化结果:")
+        if result.success:
+            print(f"   ✅ 成功: {result.optimization_method}")
+            print(f"   📈 最佳评分: {result.best_score:.4f} (改进: {result.improvement:+.4f})")
+            print(f"   ⏱️  优化时间: {result.optimization_time:.2f}秒")
+            
+            if result.best_params:
+                print(f"   ⚙️  最佳参数 ({len(result.best_params)}个):")
+                for i, (k, v) in enumerate(list(result.best_params.items())[:10]):
+                    print(f"      • {k}: {v:.6f}")
+                if len(result.best_params) > 10:
+                    print(f"      ... 还有 {len(result.best_params) - 10} 个参数")
+            
+            print(f"\n📈 回测摘要:")
+            print(f"   • 总收益率: {result.total_return*100:.2f}%")
+            print(f"   • 夏普比率: {result.sharpe_ratio:.4f}")
+            print(f"   • 最大回撤: {result.max_drawdown*100:.2f}%")
+            print(f"   • 胜率: {result.win_rate*100:.2f}%")
+            print(f"   • 交易次数: {result.total_trades}")
+            
+            if result.improvement > 0.01:
+                print(f"\n🔥 策略性能显著改善 ({result.improvement*100:.1f}%)，建议应用新参数")
+            elif result.improvement > 0:
+                print(f"\n✅ 策略性能略有改善 ({result.improvement*100:.1f}%)")
+            else:
+                print(f"\n⚠️  未能找到更好的参数 ({result.improvement*100:.1f}%)，当前参数已近最优")
+        else:
+            print(f"   ❌ 失败: {result.debug_info.get('error', '未知错误')}")
+        
+        print(f"\n{'='*80}")
+        
+        return result.to_dict()
+    
+    def optimize_all_strategies(self, strategy_manager: Any,
+                                 market_data: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        批量优化策略管理器中的所有策略
+        
+        Args:
+            strategy_manager: StrategyManager实例或包含strategies字典的对象
+            market_data: 市场数据（可选）
+            
+        Returns:
+            所有策略的优化结果
+        """
+        print(f"\n{'═'*80}")
+        print(f"🎯 韬定律集群批量优化 - 所有策略")
+        print(f"{'═'*80}")
+        
+        # 延迟导入桥接器
+        try:
+            from monitor.tau_cluster_bridge import get_tau_bridge
+            bridge = get_tau_bridge()
+        except ImportError as e:
+            return {'success': False, 'error': str(e)}
+        
+        # 运行批量优化
+        results = bridge.optimize_all_strategies(strategy_manager, market_data)
+        
+        # 生成汇总报告
+        total = len(results)
+        successful = sum(1 for r in results.values() if r.success)
+        improved = sum(1 for r in results.values() if r.improvement > 0.01)
+        
+        # 按评分排序
+        sorted_results = sorted(results.items(), key=lambda x: x[1].best_score, reverse=True)
+        
+        print(f"\n{'═'*80}")
+        print(f"📊 批量优化摘要")
+        print(f"{'═'*80}")
+        print(f"   总策略数: {total}")
+        print(f"   成功优化: {successful}")
+        print(f"   显著改善: {improved}")
+        
+        if sorted_results:
+            print(f"\n🏆 排名 (最佳评分):")
+            for rank, (name, result) in enumerate(sorted_results[:5], 1):
+                icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "  "
+                print(f"   {icon} {rank}. {name}: {result.best_score:.4f}")
+        
+        print(f"{'═'*80}")
+        
+        return {
+            'success': True,
+            'total_strategies': total,
+            'successful': successful,
+            'improved': improved,
+            'results': {name: r.to_dict() for name, r in results.items()},
+            'ranking': [(name, r.best_score) for name, r in sorted_results]
+        }
+    
+    def apply_tau_optimization(self, strategy_name: str, strategy_instance: Any) -> bool:
+        """
+        将韬定律优化的最佳参数应用到策略实例
+        
+        Args:
+            strategy_name: 策略名称
+            strategy_instance: 策略实例
+            
+        Returns:
+            是否成功应用
+        """
+        try:
+            from monitor.tau_cluster_bridge import get_tau_bridge
+            bridge = get_tau_bridge()
+            return bridge.apply_optimization(strategy_name, strategy_instance)
+        except Exception as e:
+            print(f"[WARN] 应用优化参数失败: {e}")
+            return False
+
+
+# ============ 便捷函数 ============
+
+def get_performance_analyzer() -> StrategyPerformanceAnalyzer:
+    """获取策略性能分析器实例"""
+    return StrategyPerformanceAnalyzer()
+
+
+def run_tau_optimization(strategy_name: str, strategy_instance: Any,
+                         market_data: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    便捷函数：运行韬定律集群优化
+    
+    Args:
+        strategy_name: 策略名称
+        strategy_instance: 策略实例
+        market_data: 市场数据（可选）
+        
+    Returns:
+        优化结果字典
+    """
+    analyzer = StrategyPerformanceAnalyzer()
+    return analyzer.optimize_with_tau_cluster(strategy_name, strategy_instance, market_data)
+
+
+def run_batch_tau_optimization(strategy_manager: Any,
+                                market_data: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    便捷函数：批量运行韬定律集群优化
+    
+    Args:
+        strategy_manager: 策略管理器
+        market_data: 市场数据（可选）
+        
+    Returns:
+        批量优化结果
+    """
+    analyzer = StrategyPerformanceAnalyzer()
+    return analyzer.optimize_all_strategies(strategy_manager, market_data)
+
+
+# ============ 韬定律集群模块检测 ============
+
+def check_tau_cluster_available() -> Dict[str, Any]:
+    """
+    检测韬定律集群是否可用
+    
+    Returns:
+        检测结果字典
+    """
+    try:
+        from monitor.tau_cluster_bridge import get_tau_bridge
+        bridge = get_tau_bridge()
+        return {
+            'available': True,
+            'status': bridge.get_status_report(),
+            'message': '韬定律集群桥接器已就绪'
+        }
+    except Exception as e:
+        return {
+            'available': False,
+            'error': str(e),
+            'message': '韬定律集群桥接器不可用，请检查安装'
+        }
+
+
+# ============ 模块初始化 ============
+
+if __name__ == "__main__":
+    print("=" * 80)
+    print("策略性能分析器与韬定律集群集成 - 自检")
+    print("=" * 80)
+    
+    # 检测韬定律集群
+    tau_status = check_tau_cluster_available()
+    print(f"\n🔍 韬定律集群检测: {'✅ 可用' if tau_status['available'] else '⚠️ 不可用'}")
+    
+    if tau_status['available']:
+        print(f"   详情: {tau_status['status']}")
+    else:
+        print(f"   原因: {tau_status.get('error', '未知')}")
+    
+    # 初始化分析器
+    analyzer = StrategyPerformanceAnalyzer()
+    print(f"\n✅ 策略性能分析器初始化完成")
+    
+    print("\n" + "=" * 80)
+    print("💡 使用方法:")
+    print("   analyzer = StrategyPerformanceAnalyzer()")
+    print("   result = analyzer.optimize_with_tau_cluster('策略名', strategy_instance)")
+    print("   analyzer.apply_tau_optimization('策略名', strategy_instance)")
+    print("=" * 80)

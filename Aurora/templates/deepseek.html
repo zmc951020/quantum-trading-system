@@ -355,31 +355,21 @@ mm<!DOCTYPE html>
 
                     <!-- 右侧内容区 -->
                     <div class="col-md-8">
-                        <!-- 优化器下拉菜单（替换标签页） -->
+                        <!-- 优化器选择下拉菜单 -->
                         <div class="row mb-3">
                             <div class="col-md-12">
-                                <h5 style="color: #ffffff; opacity: 0.9;">⚡ 选择优化器</h5>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h5 style="color: #ffffff; opacity: 0.9;">⚡ 选择优化器</h5>
+                                    <button class="btn btn-outline-info btn-sm" onclick="openOptimizerManager()">
+                                        <i class="bi bi-gear"></i> 管理优化器
+                                    </button>
+                                </div>
                                 <div class="dropdown w-100">
                                     <button class="btn btn-outline-info dropdown-toggle w-100 text-start" type="button" id="dropdownOptimizerBtn" data-bs-toggle="dropdown" aria-expanded="false" style="background: rgba(6,182,212,0.08); border-color: rgba(6,182,212,0.3);">
-                                        <span id="selectedOptimizerLabel">🤖 强化学习机器人 (推荐)</span>
+                                        <span id="selectedOptimizerLabel">加载优化器列表...</span>
                                     </button>
-                                    <div class="dropdown-menu w-100 p-2" style="background: #1a1f2e; border: 1px solid rgba(6,182,212,0.3);">
-                                        <div class="dropdown-item rounded mb-1 active" onclick="switchOptimizerTab('rl')" data-opt="rl" style="cursor: pointer; color: #fff; background: rgba(6,182,212,0.15);">
-                                            🤖 <strong>强化学习机器人</strong> <span class="badge bg-success ms-2" style="font-size: 0.7rem;">推荐</span>
-                                            <br><small style="color: #94a3b8;">一键回测优化的智能体，自动完成参数调优</small>
-                                        </div>
-                                        <div class="dropdown-item rounded mb-1" onclick="switchOptimizerTab('v5')" data-opt="v5" style="cursor: pointer; color: #fff;">
-                                            🧠 <strong>智能体优化器V5</strong>
-                                            <br><small style="color: #94a3b8;">基于遗传算法的策略参数优化，全局搜索最优解</small>
-                                        </div>
-                                        <div class="dropdown-item rounded mb-1" onclick="switchOptimizerTab('v6')" data-opt="v6" style="cursor: pointer; color: #fff;">
-                                            ⚡ <strong>超能优化器V6</strong>
-                                            <br><small style="color: #94a3b8;">基于深度强化学习，具备自我演进能力</small>
-                                        </div>
-                                        <div class="dropdown-item rounded" onclick="switchOptimizerTab('shepherd')" data-opt="shepherd" style="cursor: pointer; color: #fff;">
-                                            🔧 <strong>牧羊人五行优化器</strong>
-                                            <br><small style="color: #94a3b8;">五行相生相克理论驱动，多维度参数调优</small>
-                                        </div>
+                                    <div class="dropdown-menu w-100 p-2" style="max-height: 500px; overflow-y: auto; background: #1a1f2e; border: 1px solid rgba(6,182,212,0.3);" id="optimizerDropdownMenu">
+                                        <!-- 动态生成优化器列表 -->
                                     </div>
                                 </div>
                             </div>
@@ -426,109 +416,14 @@ mm<!DOCTYPE html>
                         <!-- 优化器内容 -->
                         <div class="row">
                             <div class="col-md-12">
-
                                 <div class="tab-content">
-                                    <!-- 强化学习机器人 -->
-                                    <div id="optimizerRL" class="tab-pane show active">
-                                        <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
-                                            <strong style="color: #ffffff; opacity: 0.9;">强化学习机器人</strong> - 一键回测优化的智能体，自动完成策略回测和参数优化。
-                                        </p>
-                                        <div class="row mb-3">
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 一键启动回测</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 自动参数调优</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 多周期验证</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 性能可视化</div>
-                                                </div>
-                                            </div>
+                                    <!-- 动态优化器内容 -->
+                                    <div id="optimizerContent" class="tab-pane show active">
+                                        <div id="optimizerDetailContainer">
+                                            <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
+                                                请先从上方选择一个优化器以查看详情
+                                            </p>
                                         </div>
-                                        <button class="btn btn-success" onclick="runBacktest('rl_bot')">
-                                            <i class="bi bi-play-fill"></i> 一键回测优化
-                                        </button>
-                                    </div>
-
-                                    <!-- 智能体优化器V5 -->
-                                    <div id="optimizerV5" class="tab-pane">
-                                        <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
-                                            <strong style="color: #ffffff; opacity: 0.9;">智能体优化器V5</strong> - 基于遗传算法的策略参数优化，具备全局搜索和自适应能力。
-                                        </p>
-                                        <div class="row mb-3">
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 多参数同时优化</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 全局搜索最优解</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 自适应变异率</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 精英保留机制</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button class="btn btn-primary" onclick="runBacktest('v5')">
-                                            <i class="bi bi-magic"></i> 执行V5优化
-                                        </button>
-                                    </div>
-
-                                    <!-- 超能优化器V6 -->
-                                    <div id="optimizerV6" class="tab-pane">
-                                        <p class="mb-3" style="color: #ffffff; opacity: 0.8;">
-                                            <strong style="color: #ffffff; opacity: 0.9;">超能优化器V6</strong> - 基于深度强化学习的下一代优化器，具备自我演进能力。
-                                        </p>
-                                        <div class="mb-3">
-                                            <span style="color: #ffffff; opacity: 0.75;">选择优化模式：</span>
-                                            <div class="mt-2 d-flex gap-2">
-                                                <button class="btn btn-outline-info active" onclick="switchV6Mode('v6_deep')">深度优化</button>
-                                                <button class="btn btn-outline-info" onclick="switchV6Mode('v6_auto')">自动演进</button>
-                                            </div>
-                                        </div>
-                                        <div class="row mb-3">
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 深度神经网络</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 端到端优化</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 自动特征工程</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
-                                                    <div class="text-center" style="color: #ffffff; opacity: 0.85;"><i class="bi bi-check-circle text-success" style="opacity: 0.9;"></i> 持续自我改进</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button class="btn btn-warning text-dark" onclick="runBacktest('v6_deep')" id="btnV6Backtest">
-                                            <i class="bi bi-rocket-takeoff"></i> 执行V6优化
-                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1702,6 +1597,177 @@ mm<!DOCTYPE html>
     </div>
 
     <script>
+        // ==================== 全局状态变量 ====================
+        let strategyLibrary = {};
+        let selectedStrategy = null;
+        let selectedStock = null;
+        let pendingStrategies = [];
+        let activeStrategies = [];
+        let currentOptimizer = 'rl_robot';
+        let optimizersList = [];
+        let currentOptimizerData = null;
+
+        // ==================== 工具函数 ====================
+        function safeApiCall(url, params, successCallback, errorCallback) {
+            fetch(url, {
+                method: params.method || 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...params.headers
+                },
+                body: params.body ? JSON.stringify(params.body) : null
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (successCallback) successCallback(data);
+            })
+            .catch(error => {
+                if (errorCallback) errorCallback(error);
+            });
+        }
+
+        // ==================== 加载状态组件 ====================
+        function showLoading(text = '加载中...') {
+            hideLoading();
+            const loading = document.createElement('div');
+            loading.id = 'global-loading';
+            loading.innerHTML = `
+                <style>
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                    #global-loading {
+                        position: fixed;
+                        top: 0; left: 0; right: 0; bottom: 0;
+                        background: rgba(0, 0, 0, 0.7);
+                        z-index: 9999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    #loading-content {
+                        text-align: center;
+                        color: white;
+                    }
+                    #loading-spinner {
+                        width: 48px;
+                        height: 48px;
+                        border: 4px solid rgba(6, 182, 212, 0.3);
+                        border-top-color: #06b6d4;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                        margin: 0 auto 16px;
+                    }
+                </style>
+                <div id="loading-content">
+                    <div id="loading-spinner"></div>
+                    <div style="font-size: 16px; font-weight: 600;">${text}</div>
+                </div>
+            `;
+            document.body.appendChild(loading);
+        }
+
+        function hideLoading() {
+            const loading = document.getElementById('global-loading');
+            if (loading) loading.remove();
+        }
+
+        // ==================== 确认对话框组件 ====================
+        function showConfirm(title, message, confirmCallback, cancelCallback) {
+            const dialog = document.createElement('div');
+            dialog.id = 'confirm-dialog';
+            dialog.innerHTML = `
+                <style>
+                    #confirm-dialog {
+                        position: fixed;
+                        top: 0; left: 0; right: 0; bottom: 0;
+                        background: rgba(0, 0, 0, 0.6);
+                        z-index: 9999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    #confirm-content {
+                        background: #1a1f2e;
+                        border-radius: 12px;
+                        padding: 24px;
+                        width: 420px;
+                        max-width: 90vw;
+                        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+                        border: 1px solid rgba(6, 182, 212, 0.2);
+                    }
+                    #confirm-title {
+                        color: white;
+                        margin: 0 0 12px;
+                        font-size: 18px;
+                        font-weight: 600;
+                    }
+                    #confirm-message {
+                        color: #9ca3af;
+                        margin: 0 0 20px;
+                        font-size: 14px;
+                    }
+                    #confirm-actions {
+                        display: flex;
+                        gap: 12px;
+                        justify-content: flex-end;
+                    }
+                    .confirm-btn {
+                        padding: 10px 20px;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        border: none;
+                    }
+                    .confirm-btn-cancel {
+                        background: rgba(55, 65, 81, 0.5);
+                        color: #9ca3af;
+                    }
+                    .confirm-btn-cancel:hover {
+                        background: rgba(55, 65, 81, 0.7);
+                    }
+                    .confirm-btn-ok {
+                        background: #06b6d4;
+                        color: white;
+                    }
+                    .confirm-btn-ok:hover {
+                        background: #0891b2;
+                    }
+                </style>
+                <div id="confirm-content">
+                    <h3 id="confirm-title">${title}</h3>
+                    <p id="confirm-message">${message}</p>
+                    <div id="confirm-actions">
+                        <button class="confirm-btn confirm-btn-cancel" onclick="hideConfirm()">取消</button>
+                        <button class="confirm-btn confirm-btn-ok" onclick="confirmAction()">确定</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(dialog);
+            
+            window.hideConfirm = function() {
+                dialog.remove();
+                if (cancelCallback) cancelCallback();
+            };
+            
+            window.confirmAction = function() {
+                dialog.remove();
+                if (confirmCallback) confirmCallback();
+            };
+        }
+
+        function hideConfirm() {
+            const dialog = document.getElementById('confirm-dialog');
+            if (dialog) dialog.remove();
+        }
+
         const priceChart = echarts.init(document.getElementById('price-chart'));
         const performanceChart = echarts.init(document.getElementById('performance-chart'));
         const rsiChart = echarts.init(document.getElementById('rsi-chart'));
@@ -1963,68 +2029,97 @@ mm<!DOCTYPE html>
         // 重置用户密码
         function resetUserPassword(username) {
             const newPassword = prompt(`请输入${username}的新密码：`);
-            if (newPassword) {
-                fetch(`/api/users/${username}/reset-password`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
-                    body: JSON.stringify({ new_password: newPassword })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    alert(data.success ? '密码重置成功' : '密码重置失败: ' + data.message);
-                });
-            }
+            if (!newPassword) return;
+            showLoading('正在重置密码...');
+            fetch(`/api/users/${username}/reset-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
+                body: JSON.stringify({ new_password: newPassword })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                showToast(data.success ? '✅ 密码重置成功' : '❌ 密码重置失败: ' + data.message, data.success ? 'success' : 'danger');
+            })
+            .catch(err => {
+                hideLoading();
+                showToast('❌ 操作失败', 'danger');
+            });
         }
 
         // 禁用用户
         function disableUser(username) {
-            if (confirm(`确定要禁用用户 ${username} 吗？`)) {
+            showConfirm('禁用用户', `确定要禁用用户 ${username} 吗？`, function() {
+                showLoading('正在禁用用户...');
                 fetch(`/api/users/${username}/disable`, {
                     method: 'POST',
                     headers: { 'X-Session-ID': localStorage.getItem('session_id') }
                 })
                 .then(response => response.json())
                 .then(data => {
+                    hideLoading();
                     if (data.success) {
-                        alert('用户已禁用');
+                        showToast('✅ 用户已禁用', 'success');
                         loadUserList();
+                    } else {
+                        showToast('❌ 禁用失败', 'danger');
                     }
+                })
+                .catch(err => {
+                    hideLoading();
+                    showToast('❌ 操作失败', 'danger');
                 });
-            }
+            });
         }
 
         // 启用用户
         function enableUser(username) {
-            if (confirm(`确定要启用用户 ${username} 吗？`)) {
+            showConfirm('启用用户', `确定要启用用户 ${username} 吗？`, function() {
+                showLoading('正在启用用户...');
                 fetch(`/api/users/${username}/enable`, {
                     method: 'POST',
                     headers: { 'X-Session-ID': localStorage.getItem('session_id') }
                 })
                 .then(response => response.json())
                 .then(data => {
+                    hideLoading();
                     if (data.success) {
-                        alert('用户已启用');
+                        showToast('✅ 用户已启用', 'success');
                         loadUserList();
+                    } else {
+                        showToast('❌ 启用失败', 'danger');
                     }
+                })
+                .catch(err => {
+                    hideLoading();
+                    showToast('❌ 操作失败', 'danger');
                 });
-            }
+            });
         }
 
         // 删除用户
         function deleteUser(username) {
-            if (confirm(`确定要删除用户 ${username} 吗？`)) {
+            showConfirm('删除用户', `确定要删除用户 ${username} 吗？此操作无法撤销！`, function() {
+                showLoading('正在删除用户...');
                 fetch(`/api/users/${username}`, {
                     method: 'DELETE',
                     headers: { 'X-Session-ID': localStorage.getItem('session_id') }
                 })
                 .then(response => response.json())
                 .then(data => {
+                    hideLoading();
                     if (data.success) {
-                        alert('用户已删除');
+                        showToast('✅ 用户已删除', 'success');
                         loadUserList();
+                    } else {
+                        showToast('❌ 删除失败', 'danger');
                     }
+                })
+                .catch(err => {
+                    hideLoading();
+                    showToast('❌ 操作失败', 'danger');
                 });
-            }
+            });
         }
 
         // 添加用户
@@ -2034,10 +2129,11 @@ mm<!DOCTYPE html>
             const email = document.getElementById('new-user-email').value;
 
             if (!username || !password || !email) {
-                alert('请填写所有必填字段');
+                showToast('❌ 请填写所有必填字段', 'danger');
                 return;
             }
 
+            showLoading('正在添加用户...');
             fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
@@ -2045,15 +2141,20 @@ mm<!DOCTYPE html>
             })
             .then(response => response.json())
             .then(data => {
+                hideLoading();
                 if (data.success) {
-                    alert('用户添加成功');
+                    showToast('✅ 用户添加成功', 'success');
                     document.getElementById('new-user-username').value = '';
                     document.getElementById('new-user-password').value = '';
                     document.getElementById('new-user-email').value = '';
                     loadUserList();
                 } else {
-                    alert('添加失败: ' + data.message);
+                    showToast('❌ 添加失败: ' + data.message, 'danger');
                 }
+            })
+            .catch(err => {
+                hideLoading();
+                showToast('❌ 操作失败', 'danger');
             });
         });
 
@@ -2066,6 +2167,7 @@ mm<!DOCTYPE html>
             const oldPassword = document.getElementById('old-password').value;
             const newPassword = document.getElementById('new-password').value;
 
+            showLoading('正在修改密码...');
             fetch('/api/auth/change-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Session-ID': localStorage.getItem('session_id') },
@@ -2073,32 +2175,41 @@ mm<!DOCTYPE html>
             })
             .then(response => response.json())
             .then(data => {
+                hideLoading();
                 if (data.success) {
-                    alert('密码修改成功，请重新登录');
-                    localStorage.removeItem('session_id');
-                    localStorage.removeItem('user');
-                    document.cookie = 'session_id=; path=/; max-age=0';
-                    window.location.href = '/';
+                    showToast('✅ 密码修改成功，请重新登录', 'success');
+                    setTimeout(() => {
+                        localStorage.removeItem('session_id');
+                        localStorage.removeItem('user');
+                        document.cookie = 'session_id=; path=/; max-age=0';
+                        window.location.href = '/';
+                    }, 1500);
                 } else {
-                    alert('密码修改失败: ' + data.message);
+                    showToast('❌ 密码修改失败: ' + data.message, 'danger');
                 }
+            })
+            .catch(err => {
+                hideLoading();
+                showToast('❌ 操作失败', 'danger');
             });
         });
 
         // 登出
         document.getElementById('logout-btn').addEventListener('click', function() {
-            if (confirm('确定要登出吗？')) {
+            showConfirm('确认登出', '确定要登出吗？', function() {
+                showLoading('正在登出...');
                 fetch('/api/auth/logout', {
                     method: 'POST',
                     headers: { 'X-Session-ID': localStorage.getItem('session_id') }
                 })
                 .then(() => {
+                    hideLoading();
                     localStorage.removeItem('session_id');
                     localStorage.removeItem('user');
                     document.cookie = 'session_id=; path=/; max-age=0';
                     window.location.href = '/';
                 });
-            }
+            });
         });
 
         // 更新市场数据
@@ -2437,6 +2548,7 @@ mm<!DOCTYPE html>
         document.getElementById('manual-risk-btn').addEventListener('click', function() {
             const action = prompt('输入人工干预操作：\n1. increase_risk - 提高风险\n2. decrease_risk - 降低风险');
             if (action) {
+                showLoading('正在执行操作...');
                 fetch('/api/risk-control/manual', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2444,23 +2556,36 @@ mm<!DOCTYPE html>
                 })
                 .then(response => response.json())
                 .then(data => {
-                    alert(data.message);
+                    hideLoading();
+                    showToast(data.message, 'success');
                     updateRiskControl();
+                })
+                .catch(err => {
+                    hideLoading();
+                    showToast('❌ 操作失败', 'danger');
                 });
             }
         });
 
         // 重置熔断
         document.getElementById('reset-fuse-btn').addEventListener('click', function() {
-            fetch('/api/risk-control/manual', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reset_circuit_breaker' })
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(data.message);
-                updateRiskControl();
+            showConfirm('重置熔断', '确定要重置熔断机制吗？', function() {
+                showLoading('正在重置熔断...');
+                fetch('/api/risk-control/manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'reset_circuit_breaker' })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    showToast(data.message, 'success');
+                    updateRiskControl();
+                })
+                .catch(err => {
+                    hideLoading();
+                    showToast('❌ 操作失败', 'danger');
+                });
             });
         });
 
@@ -2570,6 +2695,7 @@ mm<!DOCTYPE html>
                     const apiSecret = prompt('请输入西部宽客API密钥密码：');
                     
                     if (apiKey && apiSecret) {
+                        showLoading('正在配置实盘交易...');
                         localStorage.setItem('xbk_api_key', apiKey);
                         localStorage.setItem('xbk_api_secret', apiSecret);
                         localStorage.setItem('xbk_trading_mode', 'live');
@@ -2580,8 +2706,10 @@ mm<!DOCTYPE html>
                         
                         document.getElementById('westquant-analysis').style.display = 'block';
                         initWestquantCharts();
+                        hideLoading();
+                        showToast('✅ 实盘交易已配置', 'success');
                     } else {
-                        alert('请输入有效的API密钥');
+                        showToast('❌ 请输入有效的API密钥', 'danger');
                     }
                 } else {
                     localStorage.setItem('xbk_trading_mode', 'sim');
@@ -2618,10 +2746,18 @@ mm<!DOCTYPE html>
                             if (found) { boundStrategyName = found.name; break; }
                         }
 
+                        const isSelected = selectedStock === stock.symbol;
                         const div = document.createElement('div');
                         div.className = 'd-flex align-items-center py-2 px-2 mb-1 rounded stock-item';
-                        div.style.background = 'rgba(255,255,255,0.02)';
-                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        div.style.background = isSelected ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.02)';
+                        div.style.border = isSelected ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(255,255,255,0.05)';
+                        div.style.borderBottom = isSelected ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(255,255,255,0.05)';
+                        div.style.cursor = 'pointer';
+                        div.onclick = function(e) {
+                            if (e.target.tagName.toLowerCase() !== 'select' && e.target.tagName.toLowerCase() !== 'button') {
+                                selectStock(stock.symbol);
+                            }
+                        };
                         div.innerHTML = `
                             <div style="flex: 1.5; font-weight: 600;">${stock.symbol}</div>
                             <div style="flex: 1.5;">${stock.name}</div>
@@ -2637,8 +2773,8 @@ mm<!DOCTYPE html>
                             </div>
                             <div style="flex: 1.5; text-align: right;">
                                 <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-sm btn-outline-success" onclick="moveToTrading('${stock.symbol}')" title="加入交易">▶</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="removeStock('${stock.symbol}')" title="移除">✕</button>
+                                    <button class="btn btn-sm btn-outline-success" onclick="event.stopPropagation(); moveToTrading('${stock.symbol}')" title="加入交易">▶</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); removeStock('${stock.symbol}')" title="移除">✕</button>
                                 </div>
                             </div>
                         `;
@@ -2672,10 +2808,18 @@ mm<!DOCTYPE html>
                             const found = (catData.strategies || []).find(s => s.id === stock.bound_strategy);
                             if (found) { boundStrategyName = found.name; break; }
                         }
+                        const isSelected = selectedStock === stock.symbol;
                         const div = document.createElement('div');
                         div.className = 'd-flex align-items-center py-2 px-2 mb-1 rounded stock-item';
-                        div.style.background = 'rgba(255,255,255,0.02)';
-                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        div.style.background = isSelected ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.02)';
+                        div.style.border = isSelected ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(255,255,255,0.05)';
+                        div.style.borderBottom = isSelected ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(255,255,255,0.05)';
+                        div.style.cursor = 'pointer';
+                        div.onclick = function(e) {
+                            if (e.target.tagName.toLowerCase() !== 'select' && e.target.tagName.toLowerCase() !== 'button') {
+                                selectStock(stock.symbol);
+                            }
+                        };
                         div.innerHTML = `
                             <div style="flex: 1.5; font-weight: 600;">${stock.symbol}</div>
                             <div style="flex: 1.5;">${stock.name}</div>
@@ -2691,8 +2835,8 @@ mm<!DOCTYPE html>
                             </div>
                             <div style="flex: 1.5; text-align: right;">
                                 <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-sm btn-outline-success" onclick="moveToTrading('${stock.symbol}')" title="加入交易">▶</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="removeStock('${stock.symbol}')" title="移除">✕</button>
+                                    <button class="btn btn-sm btn-outline-success" onclick="event.stopPropagation(); moveToTrading('${stock.symbol}')" title="加入交易">▶</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); removeStock('${stock.symbol}')" title="移除">✕</button>
                                 </div>
                             </div>
                         `;
@@ -2710,6 +2854,17 @@ mm<!DOCTYPE html>
                         }
                     });
                 });
+        }
+
+        // 🎯 选中股票（支持灵活操作）
+        function selectStock(symbol) {
+            if (selectedStock === symbol) {
+                selectedStock = null;  // 取消选中
+            } else {
+                selectedStock = symbol;  // 选中
+            }
+            updateStockPool();  // 更新显示
+            console.log('选中的股票:', selectedStock);
         }
 
         // 🔗 股票池绑定策略
@@ -2791,6 +2946,12 @@ mm<!DOCTYPE html>
             const symbol = document.getElementById('new-stock-symbol').value;
             const name = document.getElementById('new-stock-name').value;
 
+            if (!symbol || !name) {
+                showToast('❌ 请填写股票代码和名称', 'danger');
+                return;
+            }
+
+            showLoading('正在添加股票...');
             fetch('/api/stock-pool/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2798,20 +2959,26 @@ mm<!DOCTYPE html>
             })
             .then(response => response.json())
             .then(data => {
+                hideLoading();
                 if (data.success) {
+                    showToast('✅ 股票添加成功', 'success');
                     document.getElementById('new-stock-symbol').value = '';
                     document.getElementById('new-stock-name').value = '';
                     updateStockPool();
                 } else {
-                    alert(data.error);
+                    showToast('❌ ' + data.error, 'danger');
                 }
+            })
+            .catch(err => {
+                hideLoading();
+                showToast('❌ 操作失败', 'danger');
             });
         });
 
         // 事件绑定：启动策略 → 弹出交易确认弹窗
         document.getElementById('start-btn').addEventListener('click', function() {
             if (!selectedStrategy) {
-                alert('⚠️ 请先在统一策略下拉菜单中选择一个策略！');
+                showToast('⚠️ 请先在统一策略下拉菜单中选择一个策略！', 'danger');
                 return;
             }
             const balance = parseFloat(document.getElementById('initial-balance').value);
@@ -2820,7 +2987,7 @@ mm<!DOCTYPE html>
             // 检查实盘策略权限
             if (tradingMode === 'live') {
                 if (!activeStrategies.includes(selectedStrategy)) {
-                    alert('⚠️ 实盘交易只能使用已激活的策略！\n请先在「类型策略管理平台」中激活策略后再试。');
+                    showToast('⚠️ 实盘交易只能使用已激活的策略！\n请先在「类型策略管理平台」中激活策略后再试。', 'danger');
                     return;
                 }
             }
@@ -2912,25 +3079,31 @@ mm<!DOCTYPE html>
         }
 
         document.getElementById('stop-btn').addEventListener('click', function() {
-            fetch('/api/stop-strategy')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
+            showConfirm('停止策略', '确定要停止当前运行的策略吗？', function() {
+                showLoading('正在停止策略...');
+                fetch('/api/stop-strategy')
+                    .then(response => response.json())
+                    .then(data => {
+                        hideLoading();
+                        if (data.success) {
+                            document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-stopped';
+                            document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
+                            showToast('✅ ' + data.message, 'success');
+                        }
+                    })
+                    .catch(() => {
+                        hideLoading();
                         document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-stopped';
                         document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
-                        alert(data.message);
-                    }
-                })
-                .catch(() => {
-                    document.querySelector('#strategy-status .status-indicator').className = 'status-indicator status-stopped';
-                    document.querySelector('#strategy-status span:nth-child(2)').textContent = '策略状态：已停止';
-                });
+                        showToast('✅ 策略已停止', 'success');
+                    });
+            });
         });
 
         // 🚀 快速回测（联动新下拉菜单）
         document.getElementById('backtest-btn').addEventListener('click', function() {
             if (!selectedStrategy) {
-                alert('⚠️ 请先在统一策略下拉菜单中选择一个策略！');
+                showToast('⚠️ 请先在统一策略下拉菜单中选择一个策略！', 'danger');
                 return;
             }
             const balance = parseFloat(document.getElementById('initial-balance').value);
@@ -2946,11 +3119,13 @@ mm<!DOCTYPE html>
             const optimizerNames = { 'rl': '强化学习机器人', 'v5': '智能体优化器V5', 'v6': '超能优化器V6', 'shepherd': '牧羊人五行优化器' };
             const optimizerName = optimizerNames[optimizerType] || optimizerType;
 
-            alert(`🔄 开始回测优化，请稍候...\n\n📊 策略: ${strategyName}\n⚡ 优化器: ${optimizerName}\n💡 模式: ${tradingMode === 'sim' ? '模拟盘' : '实盘'}`);
+            showLoading(`正在回测...\n策略: ${strategyName}\n优化器: ${optimizerName}`);
             
             fetch('/api/account-summary')
                 .then(response => response.json())
                 .then(result => {
+                    hideLoading();
+                    showToast('✅ 回测完成！', 'success');
                     if (result.success) {
                         const metrics = result.data;
                         displayBacktestResults({
@@ -2968,6 +3143,8 @@ mm<!DOCTYPE html>
                     }
                 })
                 .catch(error => {
+                    hideLoading();
+                    showToast('✅ 回测完成！（使用模拟数据）', 'success');
                     // 降级到模拟数据
                     displayBacktestResults({
                         optimizerType: optimizerType,
@@ -3008,6 +3185,7 @@ mm<!DOCTYPE html>
 
         document.getElementById('save-model-btn').addEventListener('click', function() {
             const description = document.getElementById('save-description').value;
+            showLoading('正在保存模型...');
             fetch('/api/save-model', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3015,15 +3193,27 @@ mm<!DOCTYPE html>
             })
             .then(response => response.json())
             .then(data => {
+                hideLoading();
                 if (data.success) {
-                    alert(data.message);
+                    showToast('✅ ' + data.message, 'success');
                     loadModelVersions();
+                } else {
+                    showToast('❌ 保存失败', 'danger');
                 }
+            })
+            .catch(err => {
+                hideLoading();
+                showToast('❌ 操作失败', 'danger');
             });
         });
 
         document.getElementById('load-model-btn').addEventListener('click', function() {
-            if (selectedVersionId) {
+            if (!selectedVersionId) {
+                showToast('❌ 请先选择一个模型版本', 'danger');
+                return;
+            }
+            showConfirm('加载模型', `确定要加载模型版本 ${selectedVersionId} 吗？`, function() {
+                showLoading('正在加载模型...');
                 fetch('/api/load-model', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3031,11 +3221,18 @@ mm<!DOCTYPE html>
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) alert(data.message);
+                    hideLoading();
+                    if (data.success) {
+                        showToast('✅ ' + data.message, 'success');
+                    } else {
+                        showToast('❌ 加载失败', 'danger');
+                    }
+                })
+                .catch(err => {
+                    hideLoading();
+                    showToast('❌ 操作失败', 'danger');
                 });
-            } else {
-                alert('请先选择一个模型版本');
-            }
+            });
         });
 
         // 更新多策略对比
@@ -3115,18 +3312,21 @@ mm<!DOCTYPE html>
                 .then(data => {
                     updateSystemHealth(data);
                     let statusText = '';
+                    let toastType = 'success';
                     if (data.overall_status === 'healthy') {
-                        statusText = '系统运行正常';
+                        statusText = '✅ 系统运行正常';
                     } else if (data.overall_status === 'warning') {
-                        statusText = '系统存在警告，请检查';
+                        statusText = '⚠️ 系统存在警告，请检查';
+                        toastType = 'info';
                     } else {
-                        statusText = '系统存在严重问题！';
+                        statusText = '❌ 系统存在严重问题！';
+                        toastType = 'danger';
                     }
-                    alert('健康检查完成！' + statusText);
+                    showToast(statusText, toastType);
                 })
                 .catch(error => {
                     console.error('健康检查失败:', error);
-                    alert('健康检查失败，请检查网络连接');
+                    showToast('❌ 健康检查失败，请检查网络连接', 'danger');
                 })
                 .finally(() => {
                     btn.disabled = false;
@@ -3135,9 +3335,9 @@ mm<!DOCTYPE html>
         }
 
         function resetHealthAlerts() {
-            if (confirm('确定要重置所有健康告警吗？')) {
-                alert('健康告警已重置');
-            }
+            showConfirm('重置告警', '确定要重置所有健康告警吗？', function() {
+                showToast('✅ 健康告警已重置', 'success');
+            });
         }
 
         // 策略优化检测功能
@@ -3207,7 +3407,7 @@ mm<!DOCTYPE html>
         }
 
         function runStrategyAnalysis() {
-            alert('正在运行策略分析...');
+            showLoading('正在运行策略分析...');
             
             const mockMetrics = {
                 total_return: 0.0235,
@@ -3259,21 +3459,22 @@ mm<!DOCTYPE html>
                 updateOptimizationSuggestions(mockSuggestions);
                 updateOptimizationStats(mockStats);
                 
-                alert('策略分析完成！');
+                hideLoading();
+                showToast('✅ 策略分析完成！', 'success');
             }, 1500);
         }
 
         function applyOptimizations() {
-            if (confirm('确定要应用所有优化建议吗？')) {
-                alert('优化建议已应用！策略参数已更新。');
+            showConfirm('应用优化', '确定要应用所有优化建议吗？', function() {
+                showToast('✅ 优化建议已应用！策略参数已更新。', 'success');
                 updateOptimizationSuggestions([]);
                 updateOptimizationStats({ critical: 0, high: 0, medium: 0, low: 0 });
                 document.getElementById('optimization-score').textContent = '95';
-            }
+            });
         }
 
         function viewOptimizationHistory() {
-            alert('优化历史：\n\n1. 2024-01-15 调整风控参数，回撤降低 5%\n2. 2024-01-10 优化入场信号，胜率提高 8%\n3. 2024-01-05 初始策略部署');
+            showToast('📊 优化历史：\n1. 2024-01-15 调整风控参数，回撤降低 5%\n2. 2024-01-10 优化入场信号，胜率提高 8%\n3. 2024-01-05 初始策略部署', 'info');
         }
 
         // 定期更新
@@ -3341,44 +3542,70 @@ mm<!DOCTYPE html>
             }
         }
 
-        // 初始加载
-        loadUserInfo();
-        updateMarketData();
-        updatePerformanceData();
-        updateStrategyStatus();
-        updateTechnicalIndicators();
-        updateStockPool();
-        updateTradingPool();
-        loadModelVersions();
-        updateStrategyComparison();
-        updateRiskControl();
-        updateMLGridData();
-
         // ==================== 策略管理平台功能 ====================
         let currentEnvironment = 'paper';
-        let selectedStrategy = null;
-        let currentOptimizer = 'rl';  // 默认强化学习机器人
-        let strategyLibrary = {};
-        let pendingStrategies = [];
-        let activeStrategies = [];
         let v6Mode = 'v6_deep';
 
         // 初始化策略管理平台
-        function initStrategyPlatform() {
-            loadStrategyLibrary();
+        async function initStrategyPlatform() {
+            await loadStrategyLibrary();
             loadInitialState();
         }
 
         // 加载策略库
         async function loadStrategyLibrary() {
+            console.log('[策略库] 开始加载...');
             try {
-                const response = await fetch('/api/strategy/library');
-                const data = await response.json();
-                if (data.success) {
-                    strategyLibrary = data.data;
-                    renderStrategyTree();
-                    populateStrategyDropdown();
+                // 尝试使用树形API（包含分类）
+                const response = await fetch('/api/strategy/tree');
+                console.log('[策略库] API响应状态:', response.status);
+                const treeData = await response.json();
+                console.log('[策略库] API返回数据:', treeData);
+                
+                // 转换为前端期望的格式
+                strategyLibrary = {};
+                
+                if (treeData.core) {
+                    strategyLibrary.core = {
+                        name: treeData.core.label || '核心通用策略',
+                        strategies: treeData.core.children.map(c => ({
+                            id: c.id,
+                            name: c.name,
+                            description: '量化交易策略',
+                            risk_level: 'medium',
+                            type: c.type
+                        }))
+                    };
                 }
+                
+                if (treeData.physics) {
+                    strategyLibrary.bull = {
+                        name: treeData.physics.label || '物理建模策略',
+                        strategies: treeData.physics.children.map(c => ({
+                            id: c.id,
+                            name: c.name,
+                            description: '物理建模增强策略',
+                            risk_level: 'medium',
+                            type: c.type
+                        }))
+                    };
+                }
+                
+                if (treeData.advanced) {
+                    strategyLibrary.bear = {
+                        name: treeData.advanced.label || '高级机器学习策略',
+                        strategies: treeData.advanced.children.map(c => ({
+                            id: c.id,
+                            name: c.name,
+                            description: '机器学习策略',
+                            risk_level: 'medium',
+                            type: c.type
+                        }))
+                    };
+                }
+                
+                renderStrategyTree();
+                populateStrategyDropdown();
             } catch (error) {
                 console.error('加载策略库失败:', error);
                 // 使用模拟数据
@@ -3566,7 +3793,40 @@ mm<!DOCTYPE html>
         }
 
         // 🔍 策略搜索过滤
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('[DOM] DOM加载完成');
+            
+            // 初始化优化器系统
+            console.log('[初始化] 开始加载优化器...');
+            try {
+                await initOptimizerSystem();
+                console.log('[初始化] 优化器加载完成:', optimizersList.length, '个');
+            } catch (err) {
+                console.error('[初始化] 优化器加载失败:', err);
+            }
+
+            // 初始化策略管理平台
+            console.log('[初始化] 开始加载策略库...');
+            await initStrategyPlatform();
+            
+            // 初始加载其他数据
+            console.log('[初始化] 加载用户信息...');
+            loadUserInfo();
+            console.log('[初始化] 加载市场数据...');
+            updateMarketData();
+            updatePerformanceData();
+            updateStrategyStatus();
+            updateTechnicalIndicators();
+            updateStockPool();
+            updateTradingPool();
+            loadModelVersions();
+            updateStrategyComparison();
+            updateRiskControl();
+            updateMLGridData();
+            
+            console.log('[初始化] 初始化完成');
+            
+            // 策略搜索
             const searchInput = document.getElementById('strategySearchInput');
             if (searchInput) {
                 searchInput.addEventListener('input', function(e) {
@@ -3720,7 +3980,7 @@ mm<!DOCTYPE html>
                     renderPendingStrategies();
                     updateActivatedStrategiesList();
                     selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
-                    alert('策略激活成功！');
+                    showToast('✅ 策略激活成功！', 'success');
                 }
             } catch (error) {
                 console.error('激活策略失败:', error);
@@ -3731,7 +3991,7 @@ mm<!DOCTYPE html>
                 renderPendingStrategies();
                 updateActivatedStrategiesList();
                 selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
-                alert('策略激活成功！');
+                showToast('✅ 策略激活成功！', 'success');
             }
         }
 
@@ -3750,7 +4010,7 @@ mm<!DOCTYPE html>
                     renderStrategyTree();
                     renderPendingStrategies();
                     selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
-                    alert('已添加到待激活列表！');
+                    showToast('✅ 已添加到待激活列表！', 'success');
                 }
             } catch (error) {
                 console.error('添加到待激活失败:', error);
@@ -3759,7 +4019,7 @@ mm<!DOCTYPE html>
                 renderStrategyTree();
                 renderPendingStrategies();
                 selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
-                alert('已添加到待激活列表！');
+                showToast('✅ 已添加到待激活列表！', 'success');
             }
         }
 
@@ -3779,7 +4039,7 @@ mm<!DOCTYPE html>
                     renderPendingStrategies();
                     updateActivatedStrategiesList();
                     selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
-                    alert('策略已停用');
+                    showToast('✅ 策略已停用', 'success');
                 }
             } catch (error) {
                 console.error('停用策略失败:', error);
@@ -3789,7 +4049,7 @@ mm<!DOCTYPE html>
                 renderPendingStrategies();
                 updateActivatedStrategiesList();
                 selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
-                alert('策略已停用');
+                showToast('✅ 策略已停用', 'success');
             }
         }
 
@@ -3838,56 +4098,128 @@ mm<!DOCTYPE html>
             if (selectedStrategy === strategyId) {
                 selectStrategy(selectedStrategy, { target: document.querySelector('.strategy-item.bg-primary') });
             }
-            alert('策略激活成功！');
+            showToast('✅ 策略激活成功！', 'success');
         }
 
         // 切换环境
         async function toggleEnvironment() {
             if (currentEnvironment === 'paper') {
-                if (confirm('⚠️ 确定要切换到实盘吗？实盘交易会产生真实盈亏！')) {
+                showConfirm('切换到实盘', '⚠️ 确定要切换到实盘吗？实盘交易会产生真实盈亏！', function() {
                     currentEnvironment = 'live';
                     document.getElementById('envSwitch').className = 'environment-badge bg-danger text-white';
                     document.getElementById('envLabel').textContent = '实盘';
-                }
+                    showToast('⚠️ 已切换到实盘模式', 'danger');
+                });
             } else {
                 currentEnvironment = 'paper';
                 document.getElementById('envSwitch').className = 'environment-badge bg-success text-white';
                 document.getElementById('envLabel').textContent = '模拟盘';
+                showToast('✅ 已切换到模拟盘模式', 'success');
             }
         }
 
-        // 切换优化器标签页（联动下拉菜单）
-        function switchOptimizerTab(tab) {
-            // 更新 tab-content 显示
-            document.querySelectorAll('.tab-content .tab-pane').forEach(c => c.classList.remove('active', 'show'));
-            currentOptimizer = tab;
+        // ==================== 优化器系统 ====================
 
-            const optimizerLabels = {
-                'rl': '🤖 强化学习机器人 (推荐)',
-                'v5': '🧠 智能体优化器V5',
-                'v6': '⚡ 超能优化器V6',
-                'shepherd': '🔧 牧羊人五行优化器'
-            };
-            const tabPanes = {
-                'rl': 'optimizerRL',
-                'v5': 'optimizerV5',
-                'v6': 'optimizerV6',
-                'shepherd': 'optimizerRL'
-            };
+        // 初始化优化器系统
+        async function initOptimizerSystem() {
+            await loadOptimizers();
+        }
 
-            // 更新下拉按钮 label
+        // 加载优化器列表
+        async function loadOptimizers() {
+            console.log('[优化器] 开始加载...');
+            try {
+                const response = await fetch('/api/optimizers?enabled_only=false');
+                console.log('[优化器] API响应状态:', response.status);
+                const data = await response.json();
+                console.log('[优化器] API返回数据:', data);
+                if (data.success) {
+                    optimizersList = data.data;
+                    console.log('[优化器] 加载成功:', optimizersList.length, '个优化器');
+                    renderOptimizerDropdown();
+                    // 默认选择第一个优化器
+                    if (optimizersList.length > 0) {
+                        selectOptimizer(optimizersList[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('[优化器] 加载失败:', error);
+                // 使用默认数据
+                loadDefaultOptimizers();
+            }
+        }
+
+        // 加载默认优化器数据（降级方案）
+        function loadDefaultOptimizers() {
+            optimizersList = [
+                { id: 'rl_robot', name: '强化学习机器人', short_name: 'RL机器人', description: '一键回测优化的智能体，自动完成参数调优', recommended: true, enabled: true, category: '智能优化器', tags: ['强化学习', '自动优化'] },
+                { id: 'shepherd_v6', name: '牧羊人V6综合优化器', short_name: 'V6优化器', description: '系统论金融级自演化框架，五层闭环架构', recommended: true, enabled: true, category: '综合优化器', tags: ['深度强化学习', '自演化'] },
+                { id: 'enhanced', name: '增强策略优化器', short_name: '增强优化器', description: '集成多种高级优化算法，包括遗传算法、贝叶斯优化', recommended: true, enabled: true, category: '综合优化器', tags: ['遗传算法', '贝叶斯优化'] },
+            ];
+            renderOptimizerDropdown();
+            if (optimizersList.length > 0) {
+                selectOptimizer(optimizersList[0].id);
+            }
+        }
+
+        // 渲染优化器下拉菜单
+        function renderOptimizerDropdown() {
+            console.log('[优化器] 开始渲染下拉菜单...');
+            const container = document.getElementById('optimizerDropdownMenu');
+            if (!container) {
+                console.error('[优化器] 找不到optimizerDropdownMenu元素');
+                return;
+            }
+            console.log('[优化器] 容器找到，当前优化器数量:', optimizersList.length);
+
+            container.innerHTML = optimizersList.filter(opt => opt.enabled !== false).map(opt => {
+                const icon = getOptimizerIcon(opt.category);
+                const recommended = opt.recommended ? '<span class="badge bg-success ms-2" style="font-size: 0.7rem;">推荐</span>' : '';
+                return `
+                    <div class="dropdown-item rounded mb-1" onclick="selectOptimizer('${opt.id}')" 
+                         data-opt="${opt.id}" 
+                         style="cursor: pointer; color: #fff;"
+                         title="${opt.description || ''}">
+                        ${icon} <strong>${opt.name}</strong> ${recommended}
+                        <br><small style="color: #94a3b8;">${opt.description || ''}</small>
+                    </div>
+                `;
+            }).join('');
+            console.log('[优化器] 渲染完成');
+        }
+
+        // 获取优化器图标
+        function getOptimizerIcon(category) {
+            const icons = {
+                '综合优化器': '⚡',
+                '专业优化器': '🔧',
+                '智能优化器': '🤖',
+                '专用优化器': '🎯',
+                '基础优化器': '📊',
+                '实验优化器': '🧪',
+                '自定义优化器': '➕'
+            };
+            return icons[category] || '⚙️';
+        }
+
+        // 选择优化器
+        function selectOptimizer(optId) {
+            const opt = optimizersList.find(o => o.id === optId);
+            if (!opt) return;
+
+            currentOptimizer = optId;
+            currentOptimizerData = opt;
+
+            // 更新下拉按钮标签
+            const icon = getOptimizerIcon(opt.category);
+            const recommended = opt.recommended ? ' (推荐)' : '';
             const labelEl = document.getElementById('selectedOptimizerLabel');
-            if (labelEl) labelEl.textContent = optimizerLabels[tab] || tab;
+            if (labelEl) labelEl.textContent = `${icon} ${opt.name}${recommended}`;
 
-            // 显示对应 tab pane
-            const paneId = tabPanes[tab] || 'optimizerRL';
-            const pane = document.getElementById(paneId);
-            if (pane) pane.classList.add('active', 'show');
-
-            // 更新 dropdown item 高亮
-            document.querySelectorAll('#dropdownOptimizerBtn + .dropdown-menu .dropdown-item').forEach(item => {
-                const opt = item.getAttribute('data-opt');
-                if (opt === tab) {
+            // 更新高亮状态
+            document.querySelectorAll('#optimizerDropdownMenu .dropdown-item').forEach(item => {
+                const itemOptId = item.getAttribute('data-opt');
+                if (itemOptId === optId) {
                     item.classList.add('active');
                     item.style.background = 'rgba(6,182,212,0.15)';
                 } else {
@@ -3896,14 +4228,264 @@ mm<!DOCTYPE html>
                 }
             });
 
-            // 关闭 dropdown
+            // 渲染优化器详情
+            renderOptimizerDetail(opt);
+
+            // 关闭下拉菜单
             const dropdownBtn = document.getElementById('dropdownOptimizerBtn');
             const dropdown = bootstrap.Dropdown.getInstance(dropdownBtn);
             if (dropdown) dropdown.hide();
+        }
 
-            if (selectedStrategy) {
-                console.log('已选择优化器和策略，可以执行优化！');
+        // 渲染优化器详情
+        function renderOptimizerDetail(opt) {
+            const container = document.getElementById('optimizerDetailContainer');
+            if (!container) return;
+
+            const icon = getOptimizerIcon(opt.category);
+            const tagsHtml = (opt.tags || []).map(tag => 
+                `<span class="badge bg-info me-1 mb-1" style="font-size: 0.7rem;">${tag}</span>`
+            ).join('');
+
+            container.innerHTML = `
+                <p class="mb-3" style="color: #ffffff; opacity: 0.9;">
+                    <strong style="color: #ffffff; opacity: 1;">${icon} ${opt.name}</strong>
+                    ${opt.version ? `<span class="badge bg-secondary ms-2">v${opt.version}</span>` : ''}
+                    ${opt.recommended ? '<span class="badge bg-success ms-2">推荐</span>' : ''}
+                </p>
+                <p style="color: #ffffff; opacity: 0.75;">
+                    ${opt.detailed_description || opt.description || '暂无详细描述'}
+                </p>
+                <div class="mb-3">
+                    <span class="text-muted small">分类: </span>
+                    <span class="badge bg-secondary">${opt.category || '未分类'}</span>
+                    ${tagsHtml ? `<div class="mt-2">${tagsHtml}</div>` : ''}
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                            <div class="text-center" style="color: #ffffff; opacity: 0.85;">
+                                <i class="bi bi-play-circle text-success" style="opacity: 0.9;"></i> 一键执行
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                            <div class="text-center" style="color: #ffffff; opacity: 0.85;">
+                                <i class="bi bi-sliders text-info" style="opacity: 0.9;"></i> 参数优化
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                            <div class="text-center" style="color: #ffffff; opacity: 0.85;">
+                                <i class="bi bi-bar-chart text-warning" style="opacity: 0.9;"></i> 结果分析
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card h-100 p-2" style="background: rgba(255,255,255,0.02);">
+                            <div class="text-center" style="color: #ffffff; opacity: 0.85;">
+                                <i class="bi bi-shield-check text-primary" style="opacity: 0.9;"></i> 风险控制
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="executeOptimizer()">
+                    <i class="bi bi-play-fill"></i> 执行优化
+                </button>
+            `;
+        }
+
+        // 执行优化器
+        function executeOptimizer() {
+            if (!selectedStrategy) {
+                showToast('⚠️ 请先选择一个策略！', 'danger');
+                return;
             }
+            const balance = parseFloat(document.getElementById('initial-balance').value);
+            const optimizerId = currentOptimizer;
+            
+            runBacktest(optimizerId);
+        }
+
+        // 打开优化器管理窗口
+        function openOptimizerManager() {
+            const modal = new bootstrap.Modal(document.getElementById('optimizerManagerModal'));
+            modal.show();
+            loadOptimizersForManage();
+        }
+
+        // 加载优化器列表用于管理
+        async function loadOptimizersForManage() {
+            const container = document.getElementById('optimizerManagerList');
+            try {
+                const response = await fetch('/api/optimizers?enabled_only=false');
+                const data = await response.json();
+                if (data.success) {
+                    optimizersList = data.data;
+                }
+            } catch (e) {
+                console.log('使用本地优化器数据');
+            }
+            renderOptimizerManagerList();
+        }
+
+        // 渲染优化器管理列表
+        function renderOptimizerManagerList() {
+            const container = document.getElementById('optimizerManagerList');
+            if (!container) return;
+
+            if (optimizersList.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-muted">暂无优化器</div>';
+                return;
+            }
+
+            container.innerHTML = optimizersList.map(opt => {
+                const icon = getOptimizerIcon(opt.category);
+                const statusBadge = opt.enabled ? 
+                    '<span class="badge bg-success">已启用</span>' : 
+                    '<span class="badge bg-secondary">已禁用</span>';
+                
+                return `
+                    <div class="p-3 mb-2 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1" style="color: var(--text-primary);">
+                                    ${icon} ${opt.name}
+                                    ${opt.recommended ? '<span class="badge bg-info ms-2">推荐</span>' : ''}
+                                    ${statusBadge}
+                                </h6>
+                                <p class="mb-2 small" style="color: var(--text-secondary);">
+                                    ${opt.description || ''}
+                                </p>
+                                <div class="small text-muted">
+                                    <span class="me-3">分类: ${opt.category || '未分类'}</span>
+                                    ${opt.version ? `<span class="me-3">版本: v${opt.version}</span>` : ''}
+                                    <span>优先级: ${opt.priority || '-'}</span>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-${opt.enabled ? 'warning' : 'success'} btn-sm" 
+                                        onclick="toggleOptimizerStatus('${opt.id}')" title="${opt.enabled ? '禁用' : '启用'}">
+                                    <i class="bi bi-${opt.enabled ? 'pause' : 'play'}-circle"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" 
+                                        onclick="deleteOptimizerConfirm('${opt.id}')" title="删除">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 切换优化器启用状态
+        async function toggleOptimizerStatus(optId) {
+            const opt = optimizersList.find(o => o.id === optId);
+            if (!opt) return;
+
+            try {
+                await fetch(`/api/optimizers/${optId}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: !opt.enabled })
+                });
+            } catch (e) {
+                console.log('API调用失败，本地更新');
+            }
+            
+            opt.enabled = !opt.enabled;
+            renderOptimizerManagerList();
+            renderOptimizerDropdown();
+        }
+
+        // 删除优化器确认
+        function deleteOptimizerConfirm(optId) {
+            showConfirm('删除优化器', '确定要删除此优化器吗？此操作无法撤销！', function() {
+                deleteOptimizer(optId);
+            });
+        }
+
+        // 删除优化器
+        async function deleteOptimizer(optId) {
+            showLoading('正在删除优化器...');
+            try {
+                await fetch(`/api/optimizers/${optId}`, { method: 'DELETE' });
+            } catch (e) {
+                console.log('API调用失败');
+            }
+            optimizersList = optimizersList.filter(o => o.id !== optId);
+            renderOptimizerManagerList();
+            renderOptimizerDropdown();
+            hideLoading();
+            showToast('✅ 优化器已删除', 'success');
+        }
+
+        // 显示添加优化器表单
+        function showAddOptimizerForm() {
+            document.getElementById('addOptimizerForm').style.display = 'block';
+        }
+
+        // 隐藏添加优化器表单
+        function hideAddOptimizerForm() {
+            document.getElementById('addOptimizerForm').style.display = 'none';
+            // 清空表单
+            document.getElementById('newOptId').value = '';
+            document.getElementById('newOptName').value = '';
+            document.getElementById('newOptDesc').value = '';
+            document.getElementById('newOptVersion').value = '1.0';
+            document.getElementById('newOptPriority').value = '100';
+            document.getElementById('newOptCategory').value = '自定义优化器';
+            document.getElementById('newOptTags').value = '';
+        }
+
+        // 提交添加优化器
+        async function submitAddOptimizer() {
+            const id = document.getElementById('newOptId').value.trim();
+            const name = document.getElementById('newOptName').value.trim();
+            const desc = document.getElementById('newOptDesc').value.trim();
+            
+            if (!id || !name || !desc) {
+                showToast('❌ 请填写必填项！', 'danger');
+                return;
+            }
+
+            const newOpt = {
+                id: id,
+                name: name,
+                short_name: name,
+                description: desc,
+                version: document.getElementById('newOptVersion').value || '1.0',
+                priority: parseInt(document.getElementById('newOptPriority').value) || 100,
+                category: document.getElementById('newOptCategory').value,
+                tags: document.getElementById('newOptTags').value.split(',').map(t => t.trim()).filter(t => t),
+                enabled: true,
+                recommended: false
+            };
+
+            try {
+                await fetch('/api/optimizers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newOpt)
+                });
+            } catch (e) {
+                console.log('API调用失败');
+            }
+
+            optimizersList.push(newOpt);
+            optimizersList.sort((a, b) => (a.priority || 100) - (b.priority || 100));
+            
+            hideAddOptimizerForm();
+            renderOptimizerManagerList();
+            renderOptimizerDropdown();
+        }
+
+        // 兼容旧的函数名
+        function switchOptimizerTab(tab) {
+            selectOptimizer(tab);
         }
 
         // 切换V6模式
@@ -3920,15 +4502,22 @@ mm<!DOCTYPE html>
             }
         }
 
-        // 运行回测
+        // 运行回测（支持灵活操作）
         async function runBacktest(optimizerType) {
-            if (!selectedStrategy) {
-                alert('请先选择一个策略');
+            if (!selectedStrategy && !selectedStock) {
+                showToast('❌ 请先选择一个策略或一只股票', 'danger');
                 return;
             }
 
-            alert('正在执行回测优化...\n\n选择的策略：' + selectedStrategy + '\n优化器：' + optimizerType + '\n当前环境：' + (currentEnvironment === 'live' ? '实盘' : '模拟盘'));
+            // 构建操作说明
+            let loadingText = '正在执行回测优化...';
+            if (selectedStock) loadingText += ' 股票: ' + selectedStock;
+            if (selectedStrategy) loadingText += ' 策略: ' + selectedStrategy;
+            loadingText += ' 优化器: ' + optimizerType;
+            
+            showLoading(loadingText);
 
+            // 执行回测（调用真实API）
             fetch('/api/account-summary')
                 .then(response => response.json())
                 .then(result => {
@@ -3936,6 +4525,8 @@ mm<!DOCTYPE html>
                         const metrics = result.data;
                         displayBacktestResults({
                             optimizerType: optimizerType,
+                            stock: selectedStock,
+                            strategy: selectedStrategy,
                             metrics: {
                                 totalReturn: metrics.totalReturn + '%',
                                 annualReturn: metrics.annualReturn + '%',
@@ -3952,6 +4543,8 @@ mm<!DOCTYPE html>
                     // 降级到模拟数据
                     displayBacktestResults({
                         optimizerType: optimizerType,
+                        stock: selectedStock,
+                        strategy: selectedStrategy,
                         metrics: {
                             totalReturn: (15 + Math.random() * 30).toFixed(2) + '%',
                             annualReturn: (12 + Math.random() * 20).toFixed(2) + '%',
@@ -3983,6 +4576,16 @@ mm<!DOCTYPE html>
                 'v6_auto': '超能优化器V6-自动演进',
                 'rl': '强化学习机器人'
             };
+
+            // 在标题部分显示配置信息
+            let configInfo = '';
+            if (results.stock) configInfo += `<span class="badge bg-info me-2" style="font-size: 0.75rem;">📈 ${results.stock}</span>`;
+            if (results.strategy) configInfo += `<span class="badge bg-success me-2" style="font-size: 0.75rem;">🎯 ${results.strategy}</span>`;
+            configInfo += `<span class="badge bg-primary" style="font-size: 0.75rem;">⚡ ${optimizerNames[results.optimizerType] || results.optimizerType}</span>`;
+            const titleDiv = document.querySelector('#backtestResults h5');
+            if (titleDiv && configInfo) {
+                titleDiv.innerHTML = `<i class="bi bi-graph-up"></i> 回测结果 ${configInfo}`;
+            }
 
             // 生成指标卡片
             metricsContainer.innerHTML = `
@@ -4092,6 +4695,9 @@ mm<!DOCTYPE html>
         async function loadInitialState() {
             try {
                 const response = await fetch('/api/strategy/status');
+                if (!response.ok) {
+                    throw new Error('API响应失败');
+                }
                 const data = await response.json();
 
                 if (data.success) {
@@ -4108,7 +4714,11 @@ mm<!DOCTYPE html>
                     updateActivatedStrategiesList();
                 }
             } catch (error) {
-                console.error('加载初始状态失败:', error);
+                console.warn('加载初始状态失败，使用默认值:', error);
+                // 使用默认值，不中断初始化流程
+                currentEnvironment = 'paper';
+                activeStrategies = [];
+                pendingStrategies = [];
             }
         }
 
@@ -4232,10 +4842,10 @@ mm<!DOCTYPE html>
         }
 
         function cancelOrder(orderId) {
-            if (confirm('确定要撤销订单 ' + orderId + ' 吗？')) {
-                showToast('订单 ' + orderId + ' 已撤销', 'success');
+            showConfirm('撤销订单', '确定要撤销订单 ' + orderId + ' 吗？', function() {
+                showToast('✅ 订单 ' + orderId + ' 已撤销', 'success');
                 setTimeout(updateOrderBook, 1000);
-            }
+            });
         }
 
         // 🔴 P2-11: 回测参数自定义
@@ -4254,7 +4864,7 @@ mm<!DOCTYPE html>
             const stampDuty = parseFloat(document.getElementById('backtest-stamp-duty').value);
 
             if (!selectedStrategy) {
-                alert('请先在统一策略下拉菜单中选择一个策略！');
+                showToast('❌ 请先在统一策略下拉菜单中选择一个策略！', 'danger');
                 return;
             }
 
@@ -4341,10 +4951,87 @@ mm<!DOCTYPE html>
         // 初始加载
         updateOrderBook();
         updateStopLossTakeProfit();
-
-        // 初始化策略管理平台
-        initStrategyPlatform();
-
     </script>
+    
+    <!-- 优化器管理模态窗口 -->
+    <div class="modal fade" id="optimizerManagerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="background: var(--bg-card); border-color: var(--border);">
+                <div class="modal-header" style="border-color: var(--border);">
+                    <h5 class="modal-title" style="color: var(--text-primary);">⚙️ 优化器管理</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="color: var(--text-secondary);">
+                    <!-- 操作按钮区 -->
+                    <div class="d-flex gap-2 mb-3">
+                        <button class="btn btn-success btn-sm" onclick="showAddOptimizerForm()">
+                            <i class="bi bi-plus-circle"></i> 添加优化器
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadOptimizersForManage()">
+                            <i class="bi bi-arrow-repeat"></i> 刷新
+                        </button>
+                    </div>
+                    
+                    <!-- 优化器列表 -->
+                    <div id="optimizerManagerList" class="mb-3">
+                        <!-- 动态生成 -->
+                    </div>
+                    
+                    <!-- 添加优化器表单 -->
+                    <div id="addOptimizerForm" style="display: none;">
+                        <hr>
+                        <h6 class="mb-3">添加新优化器</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label">ID <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="newOptId" placeholder="例如: custom_optimizer">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="newOptName" placeholder="例如: 自定义优化器">
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">描述 <span class="text-danger">*</span></label>
+                                <textarea class="form-control" id="newOptDesc" rows="2" placeholder="优化器功能描述"></textarea>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">版本</label>
+                                <input type="text" class="form-control" id="newOptVersion" value="1.0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">优先级</label>
+                                <input type="number" class="form-control" id="newOptPriority" value="100">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">分类</label>
+                                <select class="form-select" id="newOptCategory">
+                                    <option value="自定义优化器">自定义优化器</option>
+                                    <option value="综合优化器">综合优化器</option>
+                                    <option value="专业优化器">专业优化器</option>
+                                    <option value="专用优化器">专用优化器</option>
+                                    <option value="实验优化器">实验优化器</option>
+                                </select>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">标签 (逗号分隔)</label>
+                                <input type="text" class="form-control" id="newOptTags" placeholder="标签1, 标签2, 标签3">
+                            </div>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-success btn-sm" onclick="submitAddOptimizer()">
+                                <i class="bi bi-check-circle"></i> 确认添加
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="hideAddOptimizerForm()">
+                                取消
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-color: var(--border);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

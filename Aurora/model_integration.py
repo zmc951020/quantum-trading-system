@@ -40,6 +40,7 @@ def init_router(
     deepseek_client=None,
     qwen_client=None,
     ollama_client=None,
+    echobird_client=None,
     enable_cache: bool = True,
     cache_ttl: int = 300,
 ):
@@ -50,6 +51,7 @@ def init_router(
         deepseek_client: DeepSeek客户端
         qwen_client: Qwen客户端
         ollama_client: Ollama客户端
+        echobird_client: EchoBird客户端（统一模型代理）
         enable_cache: 启用缓存
         cache_ttl: 缓存TTL（秒）
     """
@@ -61,6 +63,7 @@ def init_router(
             deepseek_client=deepseek_client,
             qwen_client=qwen_client,
             ollama_client=ollama_client,
+            echobird_client=echobird_client,
             enable_cache=enable_cache,
             cache_ttl=cache_ttl,
         )

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模型切换 - Aurora量化交易系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #00d4ff;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --danger-color: #ff4757;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --text-primary: #e6edf3;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+        }
+        body {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        .navbar-custom {
+            background: linear-gradient(90deg, rgba(22,27,34,0.95), rgba(13,17,23,0.95));
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+        }
+        .nav-link-custom {
+            color: var(--text-muted);
+            border-radius: 8px;
+            padding: 8px 16px;
+            margin-right: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .nav-link-custom:hover { color: var(--primary-color); background-color: rgba(0, 212, 255, 0.1); }
+        .nav-link-custom.active { color: var(--primary-color); background-color: rgba(0, 212, 255, 0.1); }
+        .card {
+            background: linear-gradient(135deg, var(--bg-card) 0%, #1c2128 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        .card-header-custom {
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.08), transparent);
+            border-bottom: 1px solid var(--border-color);
+            padding: 14px 20px;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        /* 模型卡片 */
+        .model-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 2px solid transparent;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .model-card:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 212, 255, 0.1);
+        }
+        .model-card.active {
+            border-color: var(--primary-color);
+            background: rgba(0, 212, 255, 0.08);
+        }
+        .model-card.active::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 20px;
+            height: 20px;
+            background: var(--success-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            content: '✓';
+            color: #0d1117;
+            font-weight: bold;
+        }
+        .model-provider {
+            display: inline-block;
+            background: rgba(0, 212, 255, 0.15);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 3px 10px;
+            font-size: 11px;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        .model-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .model-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+        .model-metrics {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .metric {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .metric-value { color: var(--primary-color); }
+        /* 切换模式 */
+        .mode-switch {
+            display: flex;
+            gap: 10px;
+        }
+        .mode-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-btn.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+        .mode-btn:hover:not(.active) { border-color: var(--primary-color); }
+        /* 状态指示器 */
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success-color);
+            box-shadow: 0 0 10px var(--success-color);
+        }
+        .status-dot.offline {
+            background: var(--danger-color);
+            box-shadow: 0 0 10px var(--danger-color);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-custom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">⚡ Aurora <small>v3.2</small></a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link-custom" href="/">📊 智能可视化</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/dashboard">📈 监控仪表盘</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/deepseek">🤖 机器人助手</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/cline-agent">🤝 Cline智能体</a></li>
+                    <li class="nav-item"><a class="nav-link-custom active" href="/model-switch">🔄 模型切换</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/security-monitor">🛡️ 安全监控</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/security-config">⚙️ 安全配置</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/maintenance">🔧 系统维护</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/qbot">🤖 QS Robot</a></li>
+                </ul>
+                <div class="user-info-bar d-flex align-items-center gap-3">
+                    <span class="text-muted" style="font-size:14px;">👤 <span id="user-username">admin</span></span>
+                    <button class="btn btn-outline-primary btn-sm" id="change-password-btn">修改密码</button>
+                    <button class="btn btn-outline-danger btn-sm" id="logout-btn">登出</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header-custom d-flex justify-content-between align-items-center">
+                <div>
+                    <h3>🔄 EchoBird 模型切换面板</h3>
+                    <p class="text-muted small mt-1">通过 EchoBird 管理多个大模型，支持自动切换和人工切换</p>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="status-dot"></span>
+                    <span class="small text-success">EchoBird 服务在线</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- 切换模式 -->
+                <div class="mb-6">
+                    <h5 class="mb-3">切换模式</h5>
+                    <div class="mode-switch">
+                        <button class="mode-btn active" id="auto-mode">⚡ 自动切换</button>
+                        <button class="mode-btn" id="manual-mode">🎯 人工切换</button>
+                    </div>
+                    <p class="text-muted small mt-2">
+                        <span id="mode-desc">自动模式：系统根据任务复杂度自动选择最优模型</span>
+                    </p>
+                </div>
+
+                <!-- 模型列表 -->
+                <h5 class="mb-4">可用模型</h5>
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="model-card active" data-model="gpt-4o">
+                            <div class="model-provider">EchoBird</div>
+                            <div class="model-name">GPT-4o</div>
+                            <div class="model-desc">高性能模型，适合复杂推理和量化分析</div>
+                            <div class="model-metrics">
+                                <div class="metric">📦 <span class="metric-value">128K</span> 上下文</div>
+                                <div class="metric">⚡ <span class="metric-value">高</span> 性能</div>
+                                <div class="metric">💰 <span class="metric-value">中</span> 成本</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="model-card" data-model="claude-3-sonnet">
+                            <div class="model-provider">EchoBird</div>
+                            <div class="model-name">Claude 3 Sonnet</div>
+                            <div class="model-desc">平衡性能与成本，适合中等复杂度任务</div>
+                            <div class="model-metrics">
+                                <div class="metric">📦 <span class="metric-value">200K</span> 上下文</div>
+                                <div class="metric">⚡ <span class="metric-value">高</span> 性能</div>
+                                <div class="metric">💰 <span class="metric-value">中</span> 成本</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="model-card" data-model="gemini-1.5-pro">
+                            <div class="model-provider">EchoBird</div>
+                            <div class="model-name">Gemini 1.5 Pro</div>
+                            <div class="model-desc">多模态能力强，超长上下文支持</div>
+                            <div class="model-metrics">
+                                <div class="metric">📦 <span class="metric-value">1M</span> 上下文</div>
+                                <div class="metric">⚡ <span class="metric-value">极高</span> 性能</div>
+                                <div class="metric">💰 <span class="metric-value">高</span> 成本</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="model-card" data-model="gpt-3.5-turbo">
+                            <div class="model-provider">EchoBird</div>
+                            <div class="model-name">GPT-3.5 Turbo</div>
+                            <div class="model-desc">性价比之选，适合简单任务</div>
+                            <div class="model-metrics">
+                                <div class="metric">📦 <span class="metric-value">16K</span> 上下文</div>
+                                <div class="metric">⚡ <span class="metric-value">中</span> 性能</div>
+                                <div class="metric">💰 <span class="metric-value">低</span> 成本</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="model-card" data-model="deepseek-chat">
+                            <div class="model-provider">EchoBird</div>
+                            <div class="model-name">DeepSeek Chat</div>
+                            <div class="model-desc">开源模型，量化交易专用优化</div>
+                            <div class="model-metrics">
+                                <div class="metric">📦 <span class="metric-value">64K</span> 上下文</div>
+                                <div class="metric">⚡ <span class="metric-value">中</span> 性能</div>
+                                <div class="metric">💰 <span class="metric-value">免费</span> 成本</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="model-card" data-model="qwen-max">
+                            <div class="model-provider">EchoBird</div>
+                            <div class="model-name">通义千问 Max</div>
+                            <div class="model-desc">中文优化，适合中文任务</div>
+                            <div class="model-metrics">
+                                <div class="metric">📦 <span class="metric-value">128K</span> 上下文</div>
+                                <div class="metric">⚡ <span class="metric-value">高</span> 性能</div>
+                                <div class="metric">💰 <span class="metric-value">中</span> 成本</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 切换日志 -->
+                <div class="mt-6">
+                    <h5 class="mb-3">📜 切换日志</h5>
+                    <div class="bg-black/30 rounded-lg p-4" style="max-height: 200px; overflow-y: auto;">
+                        <div class="small text-muted">
+                            <p>[15:30:22] 系统启动，使用默认模型: GPT-4o</p>
+                            <p>[15:31:45] 自动切换: GPT-4o → Claude 3 Sonnet (任务复杂度降低)</p>
+                            <p>[15:33:12] 用户手动切换: Claude 3 Sonnet → GPT-4o</p>
+                            <p>[15:35:08] 自动切换: GPT-4o → DeepSeek Chat (简单查询)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 模型切换
+        document.querySelectorAll('.model-card').forEach(card => {
+            card.addEventListener('click', () => {
+                if (card.classList.contains('active')) return;
+                
+                document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                
+                const modelName = card.getAttribute('data-model');
+                alert(`已切换到 ${modelName} 模型（通过EchoBird）`);
+            });
+        });
+        
+        // 模式切换
+        document.getElementById('auto-mode').addEventListener('click', () => {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('auto-mode').classList.add('active');
+            document.getElementById('mode-desc').textContent = '自动模式：系统根据任务复杂度自动选择最优模型';
+            alert('已切换到自动模式，系统将根据任务自动选择模型');
+        });
+        
+        document.getElementById('manual-mode').addEventListener('click', () => {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('manual-mode').classList.add('active');
+            document.getElementById('mode-desc').textContent = '人工模式：用户手动选择模型';
+            alert('已切换到人工模式，请手动选择模型');
+        });
+        
+        // 登出
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            window.location.href = '/login';
+        });
+    </script>
+</body>
+</html>

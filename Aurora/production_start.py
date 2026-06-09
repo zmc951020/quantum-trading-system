@@ -255,5 +255,5 @@ if __name__ == '__main__':
     print(f"  [Ollama] 保活检查: 运行中 (每60秒检查)")
     print("=" * 60)
 
-    # 启动Aurora主服务器 (QBot已通过visualization.py集成到5000端口)
-    serve(app, host='0.0.0.0', port=5000, threads=8)
+    # 启动Aurora主服务器 (QBot已通过visualization.py集成到5002端口)
+    serve(app, host='0.0.0.0', port=5002, threads=8)

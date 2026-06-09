@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cline智能体 - Aurora量化交易系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #00d4ff;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --danger-color: #ff4757;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --text-primary: #e6edf3;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+        }
+        body {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        .navbar-custom {
+            background: linear-gradient(90deg, rgba(22,27,34,0.95), rgba(13,17,23,0.95));
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+        }
+        .nav-link-custom {
+            color: var(--text-muted);
+            border-radius: 8px;
+            padding: 8px 16px;
+            margin-right: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .nav-link-custom:hover { color: var(--primary-color); background-color: rgba(0, 212, 255, 0.1); }
+        .nav-link-custom.active { color: var(--primary-color); background-color: rgba(0, 212, 255, 0.1); }
+        .card {
+            background: linear-gradient(135deg, var(--bg-card) 0%, #1c2128 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        .card-header-custom {
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.08), transparent);
+            border-bottom: 1px solid var(--border-color);
+            padding: 14px 20px;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        /* 聊天区域 */
+        .chat-container {
+            height: 500px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+        }
+        .chat-message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .chat-message.bot { flex-direction: row-reverse; }
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .chat-avatar.user { background: linear-gradient(135deg, #00d4ff, #0099cc); }
+        .chat-avatar.bot { background: linear-gradient(135deg, #9b59b6, #6c3483); }
+        .chat-content {
+            max-width: 75%;
+            padding: 12px 16px;
+            border-radius: 15px;
+            line-height: 1.5;
+        }
+        .chat-content.user {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 212, 255, 0.1));
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 15px 15px 0 15px;
+        }
+        .chat-content.bot {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            border-radius: 15px 15px 15px 0;
+        }
+        .chat-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        /* 输入区域 */
+        .input-group-custom {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 5px;
+        }
+        .input-group-custom input {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            outline: none;
+        }
+        .input-group-custom input::placeholder { color: var(--text-muted); }
+        .btn-primary-custom {
+            background: linear-gradient(135deg, var(--primary-color), #0099cc);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 20px;
+            color: white;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary-custom:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+        }
+        /* 模型选择 */
+        .model-selector {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 8px;
+        }
+        .model-badge {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            margin-right: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .model-badge:hover, .model-badge.active {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: var(--primary-color);
+        }
+        .typing-indicator {
+            display: inline-flex;
+            gap: 3px;
+        }
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-custom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">⚡ Aurora <small>v3.2</small></a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link-custom" href="/">📊 智能可视化</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/dashboard">📈 监控仪表盘</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/deepseek">🤖 机器人助手</a></li>
+                    <li class="nav-item"><a class="nav-link-custom active" href="/cline-agent">🤝 Cline智能体</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/model-switch">🔄 模型切换</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/security-monitor">🛡️ 安全监控</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/security-config">⚙️ 安全配置</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/maintenance">🔧 系统维护</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/qbot">🤖 QS Robot</a></li>
+                </ul>
+                <div class="user-info-bar d-flex align-items-center gap-3">
+                    <span class="text-muted" style="font-size:14px;">👤 <span id="user-username">admin</span></span>
+                    <button class="btn btn-outline-primary btn-sm" id="change-password-btn">修改密码</button>
+                    <button class="btn btn-outline-danger btn-sm" id="logout-btn">登出</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header-custom">⚙️ 模型选择</div>
+                    <div class="card-body p-3">
+                        <div class="model-selector">
+                            <div class="model-badge active" data-model="gpt-4o">GPT-4o</div>
+                            <div class="model-badge" data-model="claude-3-sonnet">Claude 3 Sonnet</div>
+                            <div class="model-badge" data-model="gemini-1.5-pro">Gemini 1.5 Pro</div>
+                            <div class="model-badge" data-model="deepseek-chat">DeepSeek</div>
+                        </div>
+                        <hr class="my-3">
+                        <div class="small text-muted">
+                            <p>📡 通过 EchoBird 切换大模型</p>
+                            <p>⚡ 支持自动/人工切换</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="card mt-3">
+                    <div class="card-header-custom">📊 会话统计</div>
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between small">
+                            <span>对话数</span><span class="text-primary">12</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span>总消息</span><span class="text-primary">86</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span>平均响应</span><span class="text-primary">2.3s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div class="card">
+                    <div class="card-header-custom">🤝 Cline智能体聊天</div>
+                    <div class="card-body p-0">
+                        <div class="chat-container" id="chat-container">
+                            <div class="chat-message bot">
+                                <div class="chat-avatar bot">🤖</div>
+                                <div class="chat-content bot">
+                                    <div>您好！我是 Cline 智能体，通过 EchoBird 为您提供大模型服务。</div>
+                                    <div class="chat-time">刚刚</div>
+                                </div>
+                            </div>
+                            <div class="chat-message bot">
+                                <div class="chat-avatar bot">🤖</div>
+                                <div class="chat-content bot">
+                                    <div>我可以帮您：</div>
+                                    <div>• 分析量化交易策略</div>
+                                    <div>• 优化参数配置</div>
+                                    <div>• 提供市场分析</div>
+                                    <div>• 回答技术问题</div>
+                                    <div class="chat-time">刚刚</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 border-top border-color">
+                            <div class="input-group input-group-custom">
+                                <input type="text" id="chat-input" class="form-control" placeholder="输入您的问题..." onkeyup="if(event.keyCode==13) sendMessage()">
+                                <button class="btn btn-primary-custom" onclick="sendMessage()">发送</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            const chatContainer = document.getElementById('chat-container');
+            
+            // 用户消息
+            chatContainer.innerHTML += `
+                <div class="chat-message">
+                    <div class="chat-avatar user">👤</div>
+                    <div class="chat-content user">
+                        <div>${message}</div>
+                        <div class="chat-time">刚刚</div>
+                    </div>
+                </div>
+            `;
+            
+            input.value = '';
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            // 打字中
+            chatContainer.innerHTML += `
+                <div class="chat-message bot">
+                    <div class="chat-avatar bot">🤖</div>
+                    <div class="chat-content bot">
+                        <div class="typing-indicator">
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            // 调用后端API
+            fetch('/api/cline/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const typingElements = chatContainer.querySelectorAll('.typing-indicator');
+                if (typingElements.length > 0) {
+                    const parent = typingElements[typingElements.length - 1].parentElement.parentElement;
+                    const responseText = data.success ? data.response : `❌ 错误: ${data.error || '未知错误'}`;
+                    const modelInfo = data.provider ? `（${data.provider} - ${data.model || '未知模型'}）` : '';
+                    parent.innerHTML = `
+                        <div class="chat-avatar bot">🤖</div>
+                        <div class="chat-content bot">
+                            <div>${responseText}</div>
+                            <div class="chat-time">刚刚 ${modelInfo}</div>
+                        </div>
+                    `;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            })
+            .catch(error => {
+                const typingElements = chatContainer.querySelectorAll('.typing-indicator');
+                if (typingElements.length > 0) {
+                    const parent = typingElements[typingElements.length - 1].parentElement.parentElement;
+                    parent.innerHTML = `
+                        <div class="chat-avatar bot">🤖</div>
+                        <div class="chat-content bot">
+                            <div>❌ 请求失败: ${error.message}</div>
+                            <div class="chat-time">刚刚</div>
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        // 模型切换
+        document.querySelectorAll('.model-badge').forEach(badge => {
+            badge.addEventListener('click', () => {
+                document.querySelectorAll('.model-badge').forEach(b => b.classList.remove('active'));
+                badge.classList.add('active');
+                const modelName = badge.getAttribute('data-model');
+                alert(`已切换到 ${modelName} 模型（通过EchoBird）`);
+            });
+        });
+        
+        // 登出
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            window.location.href = '/login';
+        });
+    </script>
+</body>
+</html>

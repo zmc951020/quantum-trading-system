@@ -219,21 +219,25 @@ class StrategyRegistry:
             strategy_type = "grid"
         elif any(kw in name_lower for kw in ("ml", "machine", "adaptive_ml")):
             strategy_type = "ml"
-        elif any(kw in name_lower for kw in ("rl", "ppo", "reinforcement", "rl_optimized", "rl_adaptive")):
-            strategy_type = "rl"
         elif "fourier" in name_lower:
             strategy_type = "fourier"
-        elif "trend" in name_lower:
+        elif "trend" in name_lower or "downtrend" in name_lower or "down" in name_lower:
             strategy_type = "trend"
         elif any(kw in name_lower for kw in ("huijin", "value", "fundamental")):
             strategy_type = "value"
         elif any(kw in name_lower for kw in ("multi", "resonance", "combine")):
             strategy_type = "composite"
-        elif "downtrend" in name_lower or "down" in name_lower:
-            strategy_type = "trend"
-        elif any(kw in name_lower for kw in ("newton", "thermodynamic", "fractal", "fluid",
-                                                "physics", "entropy", "hurts", "momentum_enhanced",
-                                                "reynolds", "vortex", "laminar")):
+        elif any(kw in name_lower for kw in (
+            # 物理建模核心关键词
+            "newton", "thermodynamic", "fractal", "fluid", "physics", "entropy",
+            "hurts", "momentum_enhanced", "reynolds", "vortex", "laminar",
+            # 陀螺仪系列
+            "gyro", "gyroscope", "gyro_minute", "gyro_precession",
+            # 伯努利-康达
+            "bernoulli", "coanda",
+        )):
+            strategy_type = "physics"
+        elif any(kw in name_lower for kw in ("rl", "ppo", "reinforcement", "rl_optimized", "rl_adaptive")):
             strategy_type = "rl"
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

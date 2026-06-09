@@ -479,6 +479,155 @@ def optimize():
     system = AuroraSystem()
     system.optimize_strategies()
 
+# ============ 韬定律集群集成 ============
+
+@cli.command()
+@click.option('--strategy', '-s', default='all', 
+              help='策略名称 (all/单个策略名)')
+@click.option('--market-data', '-m', is_flag=True, default=False,
+              help='使用市场数据进行回测评估')
+def tau_optimize(strategy, market_data):
+    """🔬 韬定律集群优化 - 使用空间折叠技术深度优化策略参数"""
+    print("\n" + "=" * 80)
+    print("🔬 韬定律策略优化器集群")
+    print("=" * 80)
+    
+    if not STRATEGIES_AVAILABLE:
+        logger.error("策略模块不可用，请检查依赖安装")
+        return
+    
+    # 初始化系统
+    system = AuroraSystem()
+    
+    # 导入性能分析器
+    try:
+        from monitor.strategy_optimizer import StrategyPerformanceAnalyzer
+        analyzer = StrategyPerformanceAnalyzer()
+    except ImportError as e:
+        print(f"❌ 无法导入优化器: {e}")
+        return
+    
+    # 生成测试数据
+    data = system.generate_test_data(length=1000) if market_data else None
+    
+    if strategy == 'all':
+        # 批量优化所有策略
+        print(f"\n🎯 批量优化: 所有 {len(system.strategies)} 个策略")
+        result = analyzer.optimize_all_strategies(
+            strategy_manager=system.strategy_manager,
+            market_data=data
+        )
+        
+        if result.get('success'):
+            print(f"\n✅ 批量优化完成")
+            print(f"   总策略数: {result.get('total_strategies', 0)}")
+            print(f"   成功优化: {result.get('successful', 0)}")
+            print(f"   显著改善: {result.get('improved', 0)}")
+            
+            # 显示排名
+            ranking = result.get('ranking', [])
+            if ranking:
+                print(f"\n🏆 策略评分排名:")
+                for i, (name, score) in enumerate(ranking[:5], 1):
+                    print(f"   {i}. {name}: {score:.4f}")
+        else:
+            print(f"❌ 批量优化失败: {result.get('error', '未知错误')}")
+    else:
+        # 优化单个策略
+        if strategy not in system.strategies:
+            print(f"❌ 策略 '{strategy}' 不存在")
+            print(f"   可用策略: {', '.join(system.strategies.keys())}")
+            return
+        
+        print(f"\n🎯 目标策略: {strategy}")
+        result = analyzer.optimize_with_tau_cluster(
+            strategy_name=strategy,
+            strategy_instance=system.strategies[strategy],
+            market_data=data
+        )
+        
+        if result.get('success'):
+            print(f"\n✅ 优化完成")
+            print(f"   方法: {result.get('optimization_method', 'unknown')}")
+            print(f"   评分: {result.get('best_score', 0):.4f}")
+            print(f"   改进: {result.get('improvement', 0):+.4f}")
+            
+            # 应用优化结果
+            if click.confirm("\n是否应用优化后的参数到策略?", default=True):
+                applied = analyzer.apply_tau_optimization(strategy, system.strategies[strategy])
+                if applied:
+                    print(f"✅ 参数已应用到策略 '{strategy}'")
+                else:
+                    print(f"⚠️  参数应用失败")
+        else:
+            print(f"❌ 优化失败: {result.get('error', '未知错误')}")
+    
+    print("\n" + "=" * 80)
+
+@cli.command()
+def tau_status():
+    """ℹ️  检查韬定律集群状态"""
+    print("\n" + "=" * 80)
+    print("ℹ️  韬定律集群状态检查")
+    print("=" * 80)
+    
+    try:
+        from monitor.strategy_optimizer import check_tau_cluster_available
+        status = check_tau_cluster_available()
+        
+        if status['available']:
+            print(f"✅ 韬定律集群可用")
+            details = status.get('status', {})
+            print(f"   优化次数: {details.get('optimization_count', 0)}")
+            print(f"   总评估次数: {details.get('total_evaluations', 0)}")
+            print(f"   集群模块: {'可用' if details.get('tau_cluster_available', False) else '不可用 (降级为简化优化器)'}")
+            print(f"   参数存储: {'已连接' if details.get('param_store_available', False) else '未连接'}")
+            print(f"\n💡 使用方法:")
+            print(f"   python main.py tau-optimize --strategy all")
+            print(f"   python main.py tau-optimize --strategy fourier_rl")
+            print(f"   python main.py tau-optimize --strategy final_market_adaptive --market-data")
+        else:
+            print(f"⚠️  韬定律集群不可用")
+            print(f"   原因: {status.get('error', '未知')}")
+            print(f"   提示: 将韬定律集群目录添加到 Python 路径")
+    except Exception as e:
+        print(f"❌ 检查失败: {e}")
+    
+    print("=" * 80)
+
+@cli.command()
+@click.argument('strategy_name')
+def tau_apply(strategy_name):
+    """✅ 应用韬定律优化后的参数到策略"""
+    print(f"\n应用优化参数到策略: {strategy_name}")
+    
+    if not STRATEGIES_AVAILABLE:
+        logger.error("策略模块不可用")
+        return
+    
+    system = AuroraSystem()
+    
+    if strategy_name not in system.strategies:
+        print(f"❌ 策略 '{strategy_name}' 不存在")
+        return
+    
+    try:
+        from monitor.strategy_optimizer import StrategyPerformanceAnalyzer
+        analyzer = StrategyPerformanceAnalyzer()
+        
+        applied = analyzer.apply_tau_optimization(
+            strategy_name,
+            system.strategies[strategy_name]
+        )
+        
+        if applied:
+            print(f"✅ 成功应用参数到 '{strategy_name}'")
+        else:
+            print(f"⚠️  没有找到优化历史或应用失败")
+            print(f"   请先运行: python main.py tau-optimize --strategy {strategy_name}")
+    except Exception as e:
+        print(f"❌ 应用失败: {e}")
+
 @cli.command()
 def list_strategies():
     """列出所有可用策略"""

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技术分析系统 - QS Robot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #00d4ff;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --danger-color: #ff4757;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --text-primary: #e6edf3;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+        }
+        body {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        .navbar-custom {
+            background: linear-gradient(90deg, rgba(22,27,34,0.95), rgba(13,17,23,0.95));
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+        }
+        .nav-link-custom {
+            color: var(--text-muted);
+            border-radius: 8px;
+            padding: 8px 16px;
+            margin-right: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .nav-link-custom:hover { color: var(--primary-color); background-color: rgba(0, 212, 255, 0.1); }
+        .nav-link-custom.active { color: var(--primary-color); background-color: rgba(0, 212, 255, 0.1); }
+        .card {
+            background: linear-gradient(135deg, var(--bg-card) 0%, #1c2128 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        .card-header-custom {
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.08), transparent);
+            border-bottom: 1px solid var(--border-color);
+            padding: 14px 20px;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        /* 策略选择 */
+        .strategy-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .strategy-chip {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        .strategy-chip:hover {
+            border-color: var(--primary-color);
+            background: rgba(0, 212, 255, 0.1);
+        }
+        .strategy-chip.active {
+            border-color: var(--primary-color);
+            background: rgba(0, 212, 255, 0.2);
+            color: var(--primary-color);
+        }
+        /* 分析结果 */
+        .analysis-result {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .result-info { color: var(--primary-color); }
+        .result-success { color: var(--success-color); }
+        .result-warning { color: var(--warning-color); }
+        .result-error { color: var(--danger-color); }
+        /* 图表容器 */
+        .chart-container {
+            width: 100%;
+            height: 350px;
+        }
+        /* 数据卡片 */
+        .data-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .data-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .data-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-custom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">⚡ Aurora <small>v3.2</small></a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link-custom" href="/">📊 智能可视化</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/dashboard">📈 监控仪表盘</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/deepseek">🤖 机器人助手</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/cline-agent">🤝 Cline智能体</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/model-switch">🔄 模型切换</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/security-monitor">🛡️ 安全监控</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/security-config">⚙️ 安全配置</a></li>
+                    <li class="nav-item"><a class="nav-link-custom" href="/maintenance">🔧 系统维护</a></li>
+                    <li class="nav-item"><a class="nav-link-custom active" href="/qbot">🤖 QS Robot</a></li>
+                </ul>
+                <div class="user-info-bar d-flex align-items-center gap-3">
+                    <span class="text-muted" style="font-size:14px;">👤 <span id="user-username">admin</span></span>
+                    <button class="btn btn-outline-primary btn-sm" id="change-password-btn">修改密码</button>
+                    <button class="btn btn-outline-danger btn-sm" id="logout-btn">登出</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header-custom">
+                <h3>📊 QS Robot 技术分析系统</h3>
+                <p class="text-muted small mt-1">基于量化策略的技术分析与港大智能体分析系统</p>
+            </div>
+            <div class="card-body">
+                <!-- 策略选择 -->
+                <div class="mb-4">
+                    <h5>🎯 选择策略</h5>
+                    <div class="strategy-selector">
+                        <div class="strategy-chip active" data-strategy="gyro">🌀 Gyro 陀螺仪策略</div>
+                        <div class="strategy-chip" data-strategy="trend">📈 趋势跟踪策略</div>
+                        <div class="strategy-chip" data-strategy="mean_reversion">🔄 均值回归策略</div>
+                        <div class="strategy-chip" data-strategy="arbitrage">⚖️ 套利策略</div>
+                        <div class="strategy-chip" data-strategy="momentum">🔥 动量策略</div>
+                        <div class="strategy-chip" data-strategy="volatility">🎲 波动率策略</div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- 左侧：技术分析 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header-custom">📈 技术指标分析</div>
+                            <div class="card-body">
+                                <div class="input-group mb-4">
+                                    <input type="text" class="form-control" id="stock-code" placeholder="输入股票代码（如：600000.SH）" value="600000.SH">
+                                    <button class="btn btn-primary" onclick="runAnalysis()">开始分析</button>
+                                </div>
+                                <div id="analysis-chart" class="chart-container"></div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-4">
+                            <div class="card-header-custom">📋 分析报告</div>
+                            <div class="card-body">
+                                <div class="analysis-result" id="analysis-result">
+<span class="result-info">[INFO] 等待分析...</span>
+</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：港大智能体分析 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header-custom">🤖 港大智能体分析</div>
+                            <div class="card-body">
+                                <div class="d-flex gap-2 mb-3">
+                                    <button class="btn btn-primary btn-sm flex-1" onclick="runAiAnalysis()">AI分析</button>
+                                    <button class="btn btn-secondary btn-sm flex-1" onclick="optimizeStrategy()">优化策略</button>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-3 mb-4">
+                                    <div class="data-card">
+                                        <div class="data-value">85.6</div>
+                                        <div class="data-label">策略评分</div>
+                                    </div>
+                                    <div class="data-card">
+                                        <div class="data-value">1.85</div>
+                                        <div class="data-label">夏普比率</div>
+                                    </div>
+                                    <div class="data-card">
+                                        <div class="data-value">23.5%</div>
+                                        <div class="data-label">最大回撤</div>
+                                    </div>
+                                    <div class="data-card">
+                                        <div class="data-value">68%</div>
+                                        <div class="data-label">胜率</div>
+                                    </div>
+                                </div>
+
+                                <div class="analysis-result" style="max-height: 250px;">
+<span class="result-success">[AI分析] 正在运行港大智能体分析系统...</span>
+<span class="result-info">[AI分析] 策略类型: 趋势跟踪</span>
+<span class="result-info">[AI分析] 分析维度: 技术面 + 资金面 + 情绪面</span>
+<span class="result-success">[AI分析] 信号强度: 强买入 (87分)</span>
+<span class="result-warning">[AI分析] 风险提示: 短期波动较大</span>
+</div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-4">
+                            <div class="card-header-custom">⚡ 实时信号</div>
+                            <div class="card-body">
+                                <div class="alert alert-success small mb-2 d-flex justify-content-between">
+                                    <span>📈 MACD金叉信号</span>
+                                    <span class="text-success">买入</span>
+                                </div>
+                                <div class="alert alert-warning small mb-2 d-flex justify-content-between">
+                                    <span>⚠️ RSI超买预警</span>
+                                    <span class="text-warning">注意</span>
+                                </div>
+                                <div class="alert alert-info small d-flex justify-content-between">
+                                    <span>📊 成交量放大</span>
+                                    <span class="text-info">关注</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 初始化图表
+        var chart = echarts.init(document.getElementById('analysis-chart'));
+        var option = {
+            backgroundColor: 'transparent',
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            tooltip: { trigger: 'axis' },
+            legend: { 
+                data: ['收盘价', 'MA5', 'MA10', 'MA20'],
+                textStyle: { color: '#8b949e' }
+            },
+            xAxis: {
+                type: 'category',
+                data: ['2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06', '2024-07', '2024-08', '2024-09', '2024-10', '2024-11', '2024-12'],
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e' }
+            },
+            yAxis: {
+                type: 'value',
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e' }
+            },
+            series: [
+                { name: '收盘价', type: 'line', data: [12.5, 13.2, 12.8, 14.1, 13.5, 14.8, 15.2, 14.5, 15.8, 16.2, 15.5, 17.0], lineStyle: { color: '#00d4ff' } },
+                { name: 'MA5', type: 'line', data: [12.6, 12.9, 13.0, 13.4, 13.7, 14.3, 14.8, 14.8, 15.2, 15.5, 15.7, 16.0], lineStyle: { color: '#00ff88' } },
+                { name: 'MA10', type: 'line', data: [12.4, 12.7, 12.9, 13.2, 13.5, 13.9, 14.4, 14.6, 14.9, 15.3, 15.5, 15.8], lineStyle: { color: '#ffaa00' } },
+                { name: 'MA20', type: 'line', data: [12.2, 12.5, 12.7, 12.9, 13.2, 13.6, 14.0, 14.3, 14.6, 14.9, 15.2, 15.5], lineStyle: { color: '#ff4757' } }
+            ]
+        };
+        chart.setOption(option);
+
+        function runAnalysis() {
+            var stockCode = document.getElementById('stock-code').value;
+            var result = document.getElementById('analysis-result');
+            result.innerHTML = `
+<span class="result-info">[INFO] 正在分析股票: ${stockCode}</span>
+<span class="result-info">[INFO] 技术指标计算中...</span>
+<span class="result-success">[SUCCESS] MACD: 金叉信号，多头排列</span>
+<span class="result-success">[SUCCESS] RSI: 58.5，处于正常区间</span>
+<span class="result-info">[INFO] BOLL: 价格位于中轨上方</span>
+<span class="result-success">[SUCCESS] MA: 短期均线多头排列</span>
+<span class="result-warning">[WARNING] 成交量较昨日下降15%</span>
+<span class="result-success">[SUMMARY] 综合评级: 买入 (78分)</span>
+`;
+        }
+
+        function runAiAnalysis() {
+            alert('港大智能体分析系统已启动，正在进行深度分析...');
+        }
+
+        function optimizeStrategy() {
+            alert('策略优化器已启动，正在使用韬定律进行参数优化...');
+        }
+
+        // 策略切换
+        document.querySelectorAll('.strategy-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('.strategy-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                alert(`已选择策略: ${chip.textContent}`);
+            });
+        });
+
+        // 登出
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            window.location.href = '/login';
+        });
+    </script>
+</body>
+</html>

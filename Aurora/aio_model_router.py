@@ -52,6 +52,7 @@ class ModelBackend(str, Enum):
     QWEN3_CODER_FREE = "qwen3_coder_free" # Qwen3-Coder via OpenRouter（免费）
     MINIMAX_M21_FREE = "minimax_m21_free" # MiniMax-M2.1（免费）
     QWEN36_API = "qwen36_api"            # Qwen3.6-Plus API（强，中等成本）
+    ECHOBIRD = "echobird"                # EchoBird统一模型代理（支持多模型切换）
     OLLAMA_30B = "ollama_30b"            # Ollama qwen3-coder:30b（本地，免费）
     OLLAMA_7B = "ollama_7b"              # Ollama qwen2.5:7b（本地，免费）
     OLLAMA_3B = "ollama_3b"              # Ollama llama3.2:3b（本地，免费）
@@ -67,6 +68,7 @@ MODEL_COST_PER_1K = {
     ModelBackend.QWEN3_CODER_FREE: 0.0,     # Qwen3-Coder via OpenRouter（免费）
     ModelBackend.MINIMAX_M21_FREE: 0.0,     # MiniMax-M2.1（免费）
     ModelBackend.QWEN36_API: 0.008,          # Qwen3.6-Plus API 约0.008元/千token
+    ModelBackend.ECHOBIRD: 0.0,              # EchoBird代理（成本取决于实际使用的模型）
     ModelBackend.OLLAMA_30B: 0.0,            # Ollama qwen3-coder:30b（本地免费）
     ModelBackend.OLLAMA_7B: 0.0,             # 本地免费
     ModelBackend.OLLAMA_3B: 0.0,             # 本地免费
@@ -239,6 +241,7 @@ class AIOModelRouter:
         deepseek_client=None,      # DeepSeekClient 实例
         qwen_client=None,          # QwenClient 实例
         ollama_client=None,        # OllamaClient 实例
+        echobird_client=None,      # EchoBird客户端（统一模型代理）
         enable_cache: bool = True,
         cache_ttl: int = 300,      # 缓存有效期（秒）
         enable_cost_tracking: bool = True,
@@ -250,6 +253,7 @@ class AIOModelRouter:
             deepseek_client: DeepSeek客户端（支持Pro和Flash两个模型）
             qwen_client: Qwen3.6-Plus客户端
             ollama_client: Ollama本地客户端
+            echobird_client: EchoBird客户端（统一模型代理，支持多模型切换）
             enable_cache: 启用结果缓存
             cache_ttl: 缓存有效期（秒）
             enable_cost_tracking: 启用费用追踪
@@ -257,6 +261,7 @@ class AIOModelRouter:
         self.deepseek = deepseek_client
         self.qwen = qwen_client
         self.ollama = ollama_client
+        self.echobird = echobird_client
 
         # 后端熔断器
         self.circuits: Dict[ModelBackend, BackendCircuit] = {
@@ -465,6 +470,11 @@ class AIOModelRouter:
             return self.deepseek is not None
         elif backend == ModelBackend.QWEN36_API:
             return self.qwen is not None
+        # EchoBird后端（统一模型代理）
+        elif backend == ModelBackend.ECHOBIRD:
+            if self.echobird is None:
+                return False
+            return self.echobird.is_available()
         # 免费API后端（OpenRouter / MiniMax）— 始终可用，由具体客户端实现检查
         elif backend in [ModelBackend.QWEN3_CODER_FREE, ModelBackend.MINIMAX_M21_FREE]:
             return True  # 依赖 QwenClient 或独立 OpenRouter 调用
@@ -531,6 +541,17 @@ class AIOModelRouter:
                 messages=msgs,
                 temperature=temperature,
                 max_tokens=max_tokens,
+            )
+
+        # EchoBird 后端（统一模型代理）
+        elif backend == ModelBackend.ECHOBIRD:
+            if self.echobird is None:
+                raise RuntimeError("EchoBird客户端未配置")
+            return self.echobird.chat(
+                messages=msgs,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=False,
             )
 
         # OpenRouter 免费后端（Qwen3-Coder）
