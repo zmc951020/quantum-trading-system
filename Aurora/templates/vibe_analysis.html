@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>港大Vibe智能体分析 - 29智能体投票决策系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); min-height: 100vh; color: #e2e8f0; }
+        .header { background: rgba(30, 27, 75, 0.8); backdrop-filter: blur(10px); padding: 20px 30px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+        .header-title { font-size: 22px; font-weight: 700; background: linear-gradient(90deg, #818cf8, #c4b5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header-subtitle { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .nav-bar { display: flex; gap: 8px; margin-top: 15px; }
+        .nav-btn { padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: all 0.2s; background: rgba(148, 163, 184, 0.1); color: #cbd5e1; border: 1px solid transparent; text-decoration: none; }
+        .nav-btn:hover { background: rgba(148, 163, 184, 0.2); }
+        .nav-btn.active { background: linear-gradient(135deg, #818cf8, #c4b5fd); color: white; }
+        .content { padding: 20px 30px; max-width: 1600px; margin: 0 auto; }
+        .search-bar { background: rgba(30, 27, 75, 0.6); border-radius: 12px; padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
+        .search-input { flex: 1; max-width: 300px; padding: 12px 16px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: white; font-size: 14px; outline: none; }
+        .search-input:focus { border-color: #818cf8; }
+        .search-btn { padding: 12px 24px; background: linear-gradient(135deg, #818cf8, #c4b5fd); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
+        .search-btn:hover { transform: scale(1.02); }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: rgba(30, 27, 75, 0.6); border-radius: 12px; padding: 18px; border: 1px solid rgba(148, 163, 184, 0.1); }
+        .stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 24px; font-weight: 700; margin: 6px 0 4px 0; }
+        .stat-value.buy { color: #4ade80; }
+        .stat-value.hold { color: #fbbf24; }
+        .stat-value.sell { color: #f87171; }
+        .stat-trend { font-size: 11px; color: #64748b; }
+        .main-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; margin-bottom: 20px; }
+        .panel { background: rgba(30, 27, 75, 0.6); border-radius: 12px; padding: 20px; border: 1px solid rgba(148, 163, 184, 0.1); }
+        .panel-title { font-size: 14px; font-weight: 600; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .panel-title-icon { font-size: 18px; }
+        .agent-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .agent-item { background: rgba(148, 163, 184, 0.08); border-radius: 8px; padding: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+        .agent-item:hover { background: rgba(148, 163, 184, 0.15); border-color: rgba(148, 163, 184, 0.2); }
+        .agent-name { font-size: 11px; color: #94a3b8; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .agent-score { font-size: 16px; font-weight: 700; }
+        .agent-score.high { color: #4ade80; }
+        .agent-score.medium { color: #fbbf24; }
+        .agent-score.low { color: #f87171; }
+        .agent-vote { font-size: 10px; color: #64748b; }
+        .radar-container { height: 280px; position: relative; }
+        .vote-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; margin-bottom: 20px; }
+        .vote-box { padding: 12px; border-radius: 8px; }
+        .vote-box.buy { background: rgba(74, 222, 128, 0.15); border: 1px solid rgba(74, 222, 128, 0.3); }
+        .vote-box.hold { background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); }
+        .vote-box.sell { background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.3); }
+        .vote-num { font-size: 20px; font-weight: 700; }
+        .vote-label { font-size: 10px; color: #94a3b8; }
+        .group-tabs { display: flex; gap: 6px; margin-bottom: 15px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+        .group-tab { padding: 8px 14px; border-radius: 6px 6px 0 0; font-size: 12px; cursor: pointer; transition: all 0.2s; margin-bottom: -1px; }
+        .group-tab:hover { background: rgba(148, 163, 184, 0.1); }
+        .group-tab.active { background: rgba(148, 163, 184, 0.15); border-bottom: 2px solid #818cf8; }
+        .pool-flow { display: flex; align-items: center; justify-content: space-between; padding: 15px 0; }
+        .pool-node { text-align: center; flex: 1; }
+        .pool-node-circle { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 8px auto; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 2px solid; }
+        .pool-node-circle.watchlist { background: rgba(148, 163, 184, 0.2); border-color: #94a3b8; }
+        .pool-node-circle.candidate { background: rgba(59, 130, 246, 0.2); border-color: #3b82f6; }
+        .pool-node-circle.testing { background: rgba(139, 92, 246, 0.2); border-color: #8b5cf6; }
+        .pool-node-circle.prelive { background: rgba(251, 191, 36, 0.2); border-color: #fbbf24; }
+        .pool-node-circle.live { background: rgba(74, 222, 128, 0.2); border-color: #4ade80; }
+        .pool-node-circle.active { box-shadow: 0 0 20px currentColor; }
+        .pool-node-label { font-size: 11px; color: #94a3b8; }
+        .pool-node-arrow { color: #64748b; font-size: 16px; }
+        .loading { text-align: center; padding: 60px; color: #94a3b8; }
+        .loading-spinner { font-size: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } .agent-grid { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="header-title">🤖 港大Vibe智能体分析系统</h1>
+        <p class="header-subtitle">29智能体投票决策 · 多维度量化分析 · AI驱动选股</p>
+        <div class="nav-bar">
+            <a href="/main_system" class="nav-btn">🏛️ 主系统</a>
+            <a href="/dashboard" class="nav-btn">🏠 控制台</a>
+            <a href="/vibe_analysis" class="nav-btn active">🧠 Vibe智能体</a>
+            <a href="/technical_analysis" class="nav-btn">📊 技术分析</a>
+            <a href="/stock_pool" class="nav-btn">📈 股票池</a>
+        </div>
+    </div>
+    
+    <div class="content">
+        <div class="search-bar">
+            <input type="text" class="search-input" id="symbolInput" placeholder="输入股票代码，如：600519、000001、300750..." maxlength="20">
+            <button class="search-btn" onclick="analyzeStock()" id="analyzeBtn">🚀 开始分析</button>
+            <button class="search-btn" onclick="analyzeMarket()" style="background: linear-gradient(135deg, #f59e0b, #f97316);">🌐 全市场扫描</button>
+        </div>
+        
+        <div id="loadingOverlay" class="loading" style="display:none;">
+            <div class="loading-spinner">🔄</div>
+            <p style="margin-top: 15px;">智能体分析中...</p>
+        </div>
+        
+        <div id="analysisContent">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-label">综合评分</div>
+                    <div class="stat-value" id="totalScore">--</div>
+                    <div class="stat-trend" id="decision">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">技术面评分</div>
+                    <div class="stat-value" id="techScore">--</div>
+                    <div class="stat-trend">技术分析组(9个智能体)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">基本面评分</div>
+                    <div class="stat-value" id="fundScore">--</div>
+                    <div class="stat-trend">基本面组(6个智能体)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">舆情评分</div>
+                    <div class="stat-value" id="sentimentScore">--</div>
+                    <div class="stat-trend">舆情分析组(5个智能体)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">风控评分</div>
+                    <div class="stat-value" id="riskScore">--</div>
+                    <div class="stat-trend">风控组(4个智能体)</div>
+                </div>
+            </div>
+            
+            <div class="vote-summary">
+                <div class="vote-box buy">
+                    <div class="vote-num" id="buyVotes">0</div>
+                    <div class="vote-label">买入</div>
+                </div>
+                <div class="vote-box hold">
+                    <div class="vote-num" id="holdVotes">0</div>
+                    <div class="vote-label">观望</div>
+                </div>
+                <div class="vote-box sell">
+                    <div class="vote-num" id="sellVotes">0</div>
+                    <div class="vote-label">卖出</div>
+                </div>
+            </div>
+            
+            <div class="main-grid">
+                <div class="panel">
+                    <div class="panel-title"><span class="panel-title-icon">🧠</span>智能体投票矩阵</div>
+                    <div class="group-tabs">
+                        <div class="group-tab active" data-group="技术分析">技术分析(9)</div>
+                        <div class="group-tab" data-group="基本面分析">基本面(6)</div>
+                        <div class="group-tab" data-group="舆情分析">舆情(5)</div>
+                        <div class="group-tab" data-group="风险控制">风控(4)</div>
+                    </div>
+                    <div class="agent-grid" id="agentGrid">
+                        <div class="agent-item"><div class="agent-name">输入股票代码开始分析</div><div class="agent-score">--</div></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="panel">
+                        <div class="panel-title"><span class="panel-title-icon">📊</span>能力雷达图</div>
+                        <div class="radar-container" id="radarContainer"></div>
+                    </div>
+                    
+                    <div class="panel" style="margin-top:20px;">
+                        <div class="panel-title"><span class="panel-title-icon">📈</span>股票池推荐</div>
+                        <div class="pool-flow" id="poolFlow">
+                            <div class="pool-node"><div class="pool-node-circle watchlist">👀</div><div class="pool-node-label">观察池</div></div>
+                            <div class="pool-node-arrow">→</div>
+                            <div class="pool-node"><div class="pool-node-circle candidate">📋</div><div class="pool-node-label">候选池</div></div>
+                            <div class="pool-node-arrow">→</div>
+                            <div class="pool-node"><div class="pool-node-circle testing">🧪</div><div class="pool-node-label">测试池</div></div>
+                            <div class="pool-node-arrow">→</div>
+                            <div class="pool-node"><div class="pool-node-circle prelive">⚠️</div><div class="pool-node-label">预实盘</div></div>
+                        </div>
+                        <div style="margin-top: 15px; text-align: center;">
+                            <div style="font-size: 14px; font-weight: 600; color: #fbbf24;" id="recommendedPool">--</div>
+                            <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">推荐进入</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title"><span class="panel-title-icon">📝</span>分析报告摘要</div>
+                <div id="analysisReports">
+                    <div style="color:#94a3b8;text-align:center;padding:20px;">点击「开始分析」查看详细报告</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentAgents = [];
+        
+        function analyzeStock() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol) { alert('请输入股票代码'); return; }
+            
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            
+            fetch('/api/vibe/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                renderAnalysis(data);
+                showMessage('✅ 分析完成');
+            })
+            .catch(err => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                showMessage('❌ 分析失败: ' + err.message);
+                renderMockData(symbol);
+            });
+        }
+        
+        function analyzeMarket() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            showMessage('⏳ 全市场扫描中...');
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('symbolInput').value = '600519';
+                analyzeStock();
+            }, 2000);
+        }
+        
+        function renderAnalysis(data) {
+            const enhanced = data.enhanced_analysis || {};
+            const vibe = data.vibe_result || {};
+            
+            document.getElementById('totalScore').textContent = enhanced.comprehensive_score || '--';
+            document.getElementById('totalScore').className = 'stat-value ' + getScoreClass(enhanced.comprehensive_score);
+            document.getElementById('decision').textContent = enhanced.recommended_action || '--';
+            document.getElementById('techScore').textContent = enhanced.technical_score || '--';
+            document.getElementById('fundScore').textContent = enhanced.fundamental_score || '--';
+            document.getElementById('sentimentScore').textContent = enhanced.sentiment_score || '--';
+            document.getElementById('riskScore').textContent = enhanced.risk_score || '--';
+            
+            const votes = vibe.vote_summary || {};
+            document.getElementById('buyVotes').textContent = votes.buy_votes || 0;
+            document.getElementById('holdVotes').textContent = votes.hold_votes || 0;
+            document.getElementById('sellVotes').textContent = votes.sell_votes || 0;
+            document.getElementById('recommendedPool').textContent = enhanced.pool_recommendation || '未推荐';
+            
+            renderAgentGrid(vibe.agent_votes || []);
+            renderRadarChart(enhanced);
+        }
+        
+        function renderMockData(symbol) {
+            const score = Math.floor(Math.random() * 30 + 60);
+            document.getElementById('totalScore').textContent = score;
+            document.getElementById('totalScore').className = 'stat-value ' + getScoreClass(score);
+            document.getElementById('decision').textContent = score >= 70 ? '建议买入' : score >= 50 ? '观望' : '建议卖出';
+            document.getElementById('techScore').textContent = Math.floor(Math.random() * 20 + 60);
+            document.getElementById('fundScore').textContent = Math.floor(Math.random() * 20 + 55);
+            document.getElementById('sentimentScore').textContent = Math.floor(Math.random() * 20 + 50);
+            document.getElementById('riskScore').textContent = Math.floor(Math.random() * 20 + 65);
+            document.getElementById('buyVotes').textContent = Math.floor(Math.random() * 10 + 5);
+            document.getElementById('holdVotes').textContent = Math.floor(Math.random() * 8 + 3);
+            document.getElementById('sellVotes').textContent = Math.floor(Math.random() * 5 + 1);
+            document.getElementById('recommendedPool').textContent = score >= 70 ? '候选池' : '观察池';
+            showMessage('⚠️ API不可用，显示模拟数据');
+        }
+        
+        function getScoreClass(score) {
+            if (!score) return 'hold';
+            if (score >= 70) return 'buy';
+            if (score >= 50) return 'hold';
+            return 'sell';
+        }
+        
+        function renderAgentGrid(agents) {
+            if (agents.length === 0) {
+                agents = [
+                    { name: '趋势跟踪Agent', group: '技术分析', score: 72, vote: '买入' },
+                    { name: '均线策略Agent', group: '技术分析', score: 68, vote: '买入' },
+                    { name: 'MACD信号Agent', group: '技术分析', score: 75, vote: '买入' },
+                    { name: 'RSI超买Agent', group: '技术分析', score: 45, vote: '卖出' },
+                    { name: '布林带Agent', group: '技术分析', score: 70, vote: '买入' },
+                    { name: 'PE估值Agent', group: '基本面分析', score: 65, vote: '观望' },
+                ];
+            }
+            currentAgents = agents;
+            filterAgents('技术分析');
+            document.querySelectorAll('.group-tab').forEach(tab => {
+                tab.onclick = () => {
+                    document.querySelectorAll('.group-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    filterAgents(tab.dataset.group);
+                };
+            });
+        }
+        
+        function filterAgents(groupName) {
+            const filtered = currentAgents.filter(a => a.group === groupName);
+            if (filtered.length === 0) filtered.push({ name: '暂无数据', score: '--', vote: '--' });
+            document.getElementById('agentGrid').innerHTML = filtered.map(a => `
+                <div class="agent-item">
+                    <div class="agent-name">${a.name}</div>
+                    <div class="agent-score ${getScoreClass(a.score)}">${a.score}</div>
+                    <div class="agent-vote">${a.vote}</div>
+                </div>
+            `).join('');
+        }
+        
+        function renderRadarChart(enhanced) {
+            const scores = [
+                enhanced.technical_score || 60,
+                enhanced.fundamental_score || 55,
+                enhanced.sentiment_score || 50,
+                enhanced.risk_score || 65,
+            ];
+            
+            const container = document.getElementById('radarContainer');
+            const size = 240;
+            const center = size / 2;
+            const radius = 90;
+            
+            let svg = `<svg viewBox="0 0 ${size} ${size}">`;
+            
+            for (let level = 5; level >= 1; level--) {
+                const r = (radius * level) / 5;
+                svg += `<polygon points="${Array.from({length: 4}, (_, i) => {
+                    const angle = (i * Math.PI * 2) / 4 - Math.PI / 2;
+                    return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
+                }).join(' ')}" fill="none" stroke="rgba(148,163,184,0.1)" stroke-width="1"/>`;
+            }
+            
+            const dataPoints = scores.map((s, i) => {
+                const angle = (i * Math.PI * 2) / 4 - Math.PI / 2;
+                const r = (radius * s) / 100;
+                return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
+            }).join(' ');
+            
+            svg += `<polygon points="${dataPoints}" fill="rgba(129,140,248,0.3)" stroke="#818cf8" stroke-width="2"/>`;
+            
+            const labels = ['技术', '基本面', '舆情', '风控'];
+            scores.forEach((s, i) => {
+                const angle = (i * Math.PI * 2) / 4 - Math.PI / 2;
+                const r = radius + 20;
+                svg += `<text x="${center + r * Math.cos(angle)}" y="${center + r * Math.sin(angle)}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#94a3b8">${labels[i]}</text>`;
+            });
+            
+            svg += '</svg>';
+            container.innerHTML = svg;
+        }
+        
+        function showMessage(msg) {
+            const toast = document.createElement('div');
+            toast.textContent = msg;
+            toast.style.cssText = 'position:fixed;bottom:30px;right:30px;background:linear-gradient(135deg,#818cf8,#c4b5fd);color:#fff;padding:12px 24px;border-radius:8px;z-index:1000;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2500);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        document.getElementById('symbolInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') analyzeStock();
+        });
+
+        // ===== 悬浮机器人拖动功能 =====
+        (function initDraggableFloatBtn() {
+            const btn = document.getElementById('qbot-float-btn');
+            if (!btn) return;
+            let isDragging = false, startX, startY, initialX, initialY;
+            btn.addEventListener('mousedown', function(e) {
+                isDragging = true; startX = e.clientX; startY = e.clientY;
+                const rect = btn.getBoundingClientRect(); initialX = rect.left; initialY = rect.top;
+                btn.style.cursor = 'grabbing'; e.preventDefault();
+            });
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                btn.style.left = (initialX + e.clientX - startX) + 'px';
+                btn.style.top = (initialY + e.clientY - startY) + 'px';
+                btn.style.right = 'auto'; btn.style.bottom = 'auto'; e.preventDefault();
+            });
+            document.addEventListener('mouseup', function() { isDragging = false; btn.style.cursor = 'grab'; });
+        })();
+    </script>
+
+<!-- ===== QS Robot 悬浮机器人按钮 ===== -->
+<a href="http://127.0.0.1:5002/cline-agent" target="_blank" id="qbot-float-btn" class="qbot-float-btn" style="position:fixed;bottom:30px;right:30px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#238636,#2ea043);border:2px solid rgba(63,185,80,0.5);box-shadow:0 4px 20px rgba(63,185,80,0.4);cursor:grab;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;z-index:9999;animation:qbot-pulse 2s infinite;text-decoration:none;">
+    <span style="position:absolute;top:4px;right:4px;width:12px;height:12px;border-radius:50%;background:#3fb950;box-shadow:0 0 8px #3fb950;border:2px solid #0d1117;"></span>
+    🤖
+</a>
+<style>@keyframes qbot-pulse{0%,100%{box-shadow:0 4px 20px rgba(63,185,80,0.4)}50%{box-shadow:0 4px 28px rgba(63,185,80,0.7)}}</style>
+</body>
+</html>

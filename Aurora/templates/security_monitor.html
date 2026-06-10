@@ -995,5 +995,13 @@
             } catch (e) {}
         })();
     </script>
+
+<!-- ===== QS Robot 悬浮机器人按钮 ===== -->
+<a href="http://127.0.0.1:5002/cline-agent" target="_blank" id="qbot-float-btn" style="position:fixed;bottom:30px;right:30px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#238636,#2ea043);border:2px solid rgba(63,185,80,0.5);box-shadow:0 4px 20px rgba(63,185,80,0.4);cursor:grab;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;z-index:9999;animation:qbot-pulse 2s infinite;text-decoration:none;">
+    <span style="position:absolute;top:4px;right:4px;width:12px;height:12px;border-radius:50%;background:#3fb950;box-shadow:0 0 8px #3fb950;border:2px solid #0d1117;"></span>
+    🤖
+</a>
+<style>@keyframes qbot-pulse{0%,100%{box-shadow:0 4px 20px rgba(63,185,80,0.4)}50%{box-shadow:0 4px 28px rgba(63,185,80,0.7)}}</style>
+<script>!function(){var btn=document.getElementById('qbot-float-btn');if(!btn)return;var isDragging=false,startX,startY,initialX,initialY;btn.addEventListener('mousedown',function(e){isDragging=true;startX=e.clientX;startY=e.clientY;var rect=btn.getBoundingClientRect();initialX=rect.left;initialY=rect.top;btn.style.cursor='grabbing';e.preventDefault()});document.addEventListener('mousemove',function(e){if(!isDragging)return;btn.style.left=(initialX+e.clientX-startX)+'px';btn.style.top=(initialY+e.clientY-startY)+'px';btn.style.right='auto';btn.style.bottom='auto';e.preventDefault()});document.addEventListener('mouseup',function(){isDragging=false;btn.style.cursor='grab'})}();</script>
 </body>
 </html>

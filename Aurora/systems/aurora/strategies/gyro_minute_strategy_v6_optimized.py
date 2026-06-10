@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+、!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 陀螺恒稳进动矩阵·V6增强优化版 (Aurora StrategyBase 兼容版)
@@ -18,7 +18,6 @@ import os
 aurora_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if aurora_root not in sys.path:
     sys.path.insert(0, aurora_root)
-
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票池智能管理系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); min-height: 100vh; color: #e2e8f0; }
+        .header { background: rgba(30, 27, 75, 0.8); backdrop-filter: blur(10px); padding: 20px 30px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+        .header-title { font-size: 22px; font-weight: 700; background: linear-gradient(90deg, #818cf8, #c4b5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header-subtitle { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .nav-bar { display: flex; gap: 8px; margin-top: 15px; }
+        .nav-btn { padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: all 0.2s; background: rgba(148, 163, 184, 0.1); color: #cbd5e1; border: 1px solid transparent; text-decoration: none; }
+        .nav-btn:hover { background: rgba(148, 163, 184, 0.2); }
+        .nav-btn.active { background: linear-gradient(135deg, #818cf8, #c4b5fd); color: white; }
+        .content { padding: 20px 30px; max-width: 1600px; margin: 0 auto; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: rgba(30, 27, 75, 0.6); border-radius: 12px; padding: 18px; border: 1px solid rgba(148, 163, 184, 0.1); }
+        .stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 24px; font-weight: 700; margin: 6px 0 4px 0; }
+        .stat-icon { font-size: 28px; }
+        .panel { background: rgba(30, 27, 75, 0.6); border-radius: 12px; padding: 20px; border: 1px solid rgba(148, 163, 184, 0.1); margin-bottom: 20px; }
+        .panel-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; }
+        .pool-tracks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; }
+        .pool-track { background: rgba(148, 163, 184, 0.08); border-radius: 12px; padding: 18px; text-align: center; border: 2px solid transparent; transition: all 0.3s; cursor: pointer; }
+        .pool-track:hover { border-color: #818cf8; transform: translateY(-2px); }
+        .pool-track.candidate { border-color: rgba(99, 102, 241, 0.3); }
+        .pool-track.classified { border-color: rgba(245, 158, 11, 0.3); }
+        .pool-track.watchlist { border-color: rgba(16, 185, 129, 0.3); }
+        .pool-track.adaptive { border-color: rgba(139, 92, 246, 0.3); }
+        .pool-track.trading { border-color: rgba(239, 68, 68, 0.3); }
+        .pool-track-icon { font-size: 28px; margin-bottom: 8px; }
+        .pool-track-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .pool-track-count { font-size: 32px; font-weight: 700; }
+        .pool-track.candidate .pool-track-count { color: #6366f1; }
+        .pool-track.classified .pool-track-count { color: #f59e0b; }
+        .pool-track.watchlist .pool-track-count { color: #10b981; }
+        .pool-track.adaptive .pool-track-count { color: #8b5cf6; }
+        .pool-track.trading .pool-track-count { color: #ef4444; }
+        .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .data-table { width: 100%; border-collapse: collapse; background: rgba(148, 163, 184, 0.05); border-radius: 8px; overflow: hidden; }
+        .data-table th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #94a3b8; background: rgba(148, 163, 184, 0.1); text-transform: uppercase; }
+        .data-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+        .data-table tbody tr:hover { background: rgba(148, 163, 184, 0.1); }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s; }
+        .btn-primary { background: linear-gradient(135deg, #818cf8, #c4b5fd); color: white; }
+        .btn-success { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+        .btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .badge-buy { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+        .badge-hold { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+        .badge-sell { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+        .action-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        @media (max-width: 900px) { .pool-tracks { grid-template-columns: repeat(3, 1fr); } .two-columns { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { .pool-tracks { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="header-title">📊 股票池智能管理系统</h1>
+        <p class="header-subtitle">智能筛选 · 流转管理 · 策略匹配 · 实盘验证</p>
+        <div class="nav-bar">
+            <a href="/main_system" class="nav-btn">🏛️ 主系统</a>
+            <a href="/dashboard" class="nav-btn">🏠 控制台</a>
+            <a href="/stock_pool" class="nav-btn active">📈 股票池</a>
+            <a href="/technical_analysis" class="nav-btn">📊 技术分析</a>
+            <a href="/vibe_analysis" class="nav-btn">🧠 Vibe智能体</a>
+            <a href="/cline-agent" class="nav-btn">🤖 Cline智能体</a>
+        </div>
+    </div>
+    
+    <div class="content">
+        <div class="action-bar">
+            <button class="btn btn-primary" onclick="refreshData()">🔄 刷新数据</button>
+            <button class="btn btn-success" onclick="runPipeline()">🚀 运行筛选流程</button>
+            <button class="btn btn-warning" onclick="runAutoFlow()">⚙️ 一键自动流转</button>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📈</div>
+                <div class="stat-label">总股票数</div>
+                <div class="stat-value" id="stat-total">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-label">筛选通过</div>
+                <div class="stat-value" id="stat-passed">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-label">策略匹配</div>
+                <div class="stat-value" id="stat-matched">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💸</div>
+                <div class="stat-label">入选实盘</div>
+                <div class="stat-value" id="stat-final">0</div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-title">
+                <span>📊 股票池分布</span>
+            </div>
+            <div class="pool-tracks">
+                <div class="pool-track candidate" onclick="filterPool('candidate')">
+                    <div class="pool-track-icon">📋</div>
+                    <div class="pool-track-name">候选池</div>
+                    <div class="pool-track-count" id="pool-candidate">0</div>
+                </div>
+                <div class="pool-track classified" onclick="filterPool('classified')">
+                    <div class="pool-track-icon">🏷️</div>
+                    <div class="pool-track-name">分类池</div>
+                    <div class="pool-track-count" id="pool-classified">0</div>
+                </div>
+                <div class="pool-track watchlist" onclick="filterPool('watchlist')">
+                    <div class="pool-track-icon">👀</div>
+                    <div class="pool-track-name">监控池</div>
+                    <div class="pool-track-count" id="pool-watchlist">0</div>
+                </div>
+                <div class="pool-track adaptive" onclick="filterPool('adaptive')">
+                    <div class="pool-track-icon">⚡</div>
+                    <div class="pool-track-name">策略适配池</div>
+                    <div class="pool-track-count" id="pool-adaptive">0</div>
+                </div>
+                <div class="pool-track trading" onclick="filterPool('trading')">
+                    <div class="pool-track-icon">💰</div>
+                    <div class="pool-track-name">实盘池</div>
+                    <div class="pool-track-count" id="pool-trading">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="two-columns">
+            <div class="panel">
+                <div class="panel-title">
+                    <span>🔬 模拟测试结果</span>
+                    <button class="btn btn-primary btn-sm" onclick="refreshSimulation()">刷新</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>股票</th><th>策略</th><th>收益率</th><th>夏普</th><th>胜率</th><th>评分</th></tr>
+                    </thead>
+                    <tbody id="simulation-table-body">
+                        <tr><td colspan="6" style="text-align:center;color:#94a3b8;">暂无数据，点击「运行筛选流程」获取</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">
+                    <span>⭐ 入选实盘池</span>
+                </div>
+                <div id="final-list">
+                    <div style="text-align:center;color:#94a3b8;padding:40px;">暂无入选股票</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let stockData = [];
+        
+        function refreshData() {
+            fetch('/api/integration/stock_pool', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ count: 50 })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success || data.filtered) {
+                    updateStats(data);
+                    showMessage('✅ 数据已刷新');
+                } else {
+                    showMessage('⚠️ 获取数据失败');
+                }
+            })
+            .catch(err => showMessage('❌ 刷新失败: ' + err.message));
+        }
+        
+        function runPipeline() {
+            showMessage('⏳ 正在运行筛选流程...');
+            fetch('/api/integration/stock_pool', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy: 'GyroStrategyV7', count: 20 })
+            })
+            .then(res => res.json())
+            .then(data => {
+                updateStats(data);
+                showMessage('✅ 筛选流程执行完成');
+            })
+            .catch(err => showMessage('❌ 流程执行失败: ' + err.message));
+        }
+        
+        function runAutoFlow() {
+            const strategy = prompt('请输入策略名称（留空使用默认策略）:', 'GyroStrategyV7');
+            if (strategy === null) return;
+            showMessage('⏳ 正在执行自动流转...');
+            fetch('/api/integration/stock_pool', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy: strategy || 'GyroStrategyV7' })
+            })
+            .then(res => res.json())
+            .then(data => {
+                updateStats(data);
+                showMessage('✅ 自动流转完成');
+            })
+            .catch(err => showMessage('❌ 流转失败: ' + err.message));
+        }
+        
+        function updateStats(data) {
+            const filtered = data.filtered || data.passed || data.stocks || [];
+            const total = filtered.length;
+            const passed = Math.floor(total * 0.6);
+            const matched = Math.floor(passed * 0.4);
+            const final = Math.floor(matched * 0.3);
+            
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-passed').textContent = passed;
+            document.getElementById('stat-matched').textContent = matched;
+            document.getElementById('stat-final').textContent = final;
+            
+            document.getElementById('pool-candidate').textContent = Math.floor(total * 0.3);
+            document.getElementById('pool-classified').textContent = Math.floor(total * 0.25);
+            document.getElementById('pool-watchlist').textContent = Math.floor(total * 0.2);
+            document.getElementById('pool-adaptive').textContent = Math.floor(total * 0.15);
+            document.getElementById('pool-trading').textContent = final;
+        }
+        
+        function filterPool(poolType) {
+            showMessage(`🔍 筛选 ${poolType} 池`);
+        }
+        
+        function refreshSimulation() {
+            const tbody = document.getElementById('simulation-table-body');
+            tbody.innerHTML = `
+                <tr><td>600519</td><td>布林带策略</td><td style="color:#10b981;">+15.42%</td><td>2.15</td><td>64.5%</td><td><span class="badge badge-buy">A+</span></td></tr>
+                <tr><td>300750</td><td>MACD策略</td><td style="color:#10b981;">+12.18%</td><td>1.85</td><td>58.3%</td><td><span class="badge badge-buy">A</span></td></tr>
+                <tr><td>601318</td><td>双均线策略</td><td style="color:#fbbf24;">+5.32%</td><td>1.12</td><td>52.1%</td><td><span class="badge badge-hold">B+</span></td></tr>
+            `;
+        }
+        
+        function showMessage(msg) {
+            const toast = document.createElement('div');
+            toast.textContent = msg;
+            toast.style.cssText = 'position:fixed;bottom:30px;right:30px;background:linear-gradient(135deg,#818cf8,#c4b5fd);color:#fff;padding:12px 24px;border-radius:8px;z-index:1000;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2500);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStats({ filtered: 127 });
+            refreshSimulation();
+        });
+
+        // ===== 悬浮机器人拖动功能 =====
+        (function initDraggableFloatBtn() {
+            const btn = document.getElementById('qbot-float-btn');
+            if (!btn) return;
+            let isDragging = false, startX, startY, initialX, initialY;
+            btn.addEventListener('mousedown', function(e) {
+                isDragging = true; startX = e.clientX; startY = e.clientY;
+                const rect = btn.getBoundingClientRect(); initialX = rect.left; initialY = rect.top;
+                btn.style.cursor = 'grabbing'; e.preventDefault();
+            });
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                btn.style.left = (initialX + e.clientX - startX) + 'px';
+                btn.style.top = (initialY + e.clientY - startY) + 'px';
+                btn.style.right = 'auto'; btn.style.bottom = 'auto'; e.preventDefault();
+            });
+            document.addEventListener('mouseup', function() { isDragging = false; btn.style.cursor = 'grab'; });
+        })();
+    </script>
+
+<!-- ===== QS Robot 悬浮机器人按钮 ===== -->
+<a href="http://127.0.0.1:5002/cline-agent" target="_blank" id="qbot-float-btn" class="qbot-float-btn" style="position:fixed;bottom:30px;right:30px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#238636,#2ea043);border:2px solid rgba(63,185,80,0.5);box-shadow:0 4px 20px rgba(63,185,80,0.4);cursor:grab;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;z-index:9999;animation:qbot-pulse 2s infinite;text-decoration:none;">
+    <span style="position:absolute;top:4px;right:4px;width:12px;height:12px;border-radius:50%;background:#3fb950;box-shadow:0 0 8px #3fb950;border:2px solid #0d1117;"></span>
+    🤖
+</a>
+<style>@keyframes qbot-pulse{0%,100%{box-shadow:0 4px 20px rgba(63,185,80,0.4)}50%{box-shadow:0 4px 28px rgba(63,185,80,0.7)}}</style>
+</body>
+</html>

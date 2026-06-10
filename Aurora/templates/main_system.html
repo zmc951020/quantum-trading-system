@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QS Robot V2.0 - 量化策略管理平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+            background: #0a0e1a;
+            color: #e8e8e8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+        .top-status-bar {
+            background: linear-gradient(135deg, #16213e 0%, #0a0e1a 100%);
+            padding: 12px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+            box-shadow: 0 2px 15px rgba(15, 52, 96, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .status-left { display: flex; align-items: center; gap: 18px; }
+        .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; color: #6ba5f7; }
+        .brand-icon { font-size: 28px; }
+        .brand-subtitle { font-size: 12px; color: #8ba3c7; font-weight: 400; margin-left: 8px; }
+        .status-right { display: flex; align-items: center; gap: 20px; font-size: 13px; }
+        .status-item { display: flex; align-items: center; gap: 6px; color: #b5c4d8; padding: 6px 12px; background: rgba(107, 165, 247, 0.08); border-radius: 20px; border: 1px solid rgba(107, 165, 247, 0.2); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
+        .status-dot.warning { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+        .status-dot.error { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .tabs-nav { background: #16213e; padding: 0 30px; display: flex; gap: 4px; border-bottom: 2px solid #0f3460; overflow-x: auto; scrollbar-width: thin; }
+        .tabs-nav::-webkit-scrollbar { height: 4px; }
+        .tabs-nav::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+        .tab-btn { padding: 14px 22px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #8ba3c7; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s; display: flex; align-items: center; gap: 8px; white-space: nowrap; position: relative; }
+        .tab-btn:hover { color: #fff; background: rgba(107, 165, 247, 0.08); }
+        .tab-btn.active { color: #6ba5f7; border-bottom: 3px solid #667eea; background: rgba(102, 126, 234, 0.1); }
+        .tab-icon { font-size: 18px; }
+        .main-container { flex: 1; padding: 25px 30px; max-width: 1800px; margin: 0 auto; width: 100%; overflow-y: auto; }
+        .tab-panel { display: none; animation: fadeIn 0.4s ease; }
+        .tab-panel.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .panel { background: #16213e; border-radius: 12px; padding: 22px; margin-bottom: 20px; border: 1px solid #0f3460; transition: border-color 0.3s; }
+        .panel:hover { border-color: #2a3f5f; }
+        .panel-title { font-size: 17px; font-weight: 600; color: #6ba5f7; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid #0f3460; }
+        .panel-title-left { display: flex; align-items: center; gap: 10px; }
+        .panel-title::before { content: ''; width: 4px; height: 18px; background: linear-gradient(180deg, #667eea 0%, #764ba2 100%); border-radius: 2px; }
+        .panel-subtitle { font-size: 12px; color: #8ba3c7; font-weight: 400; }
+        .form-row { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
+        .form-group { flex: 1; min-width: 200px; }
+        .form-label { display: block; font-size: 13px; color: #8ba3c7; margin-bottom: 6px; font-weight: 500; }
+        .form-input, .form-select { width: 100%; padding: 10px 14px; background: #0a0e1a; border: 1px solid #0f3460; border-radius: 8px; color: #e8e8e8; font-size: 14px; transition: all 0.3s; outline: none; }
+        .form-input:focus, .form-select:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
+        .form-select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba3c7' d='M6 8L0 0h12z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+        .btn-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; }
+        .btn-warning { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; }
+        .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #fff; }
+        .btn-info { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #fff; }
+        .btn-secondary { background: #0f3460; color: #b5c4d8; border: 1px solid #2a3f5f; }
+        .btn-secondary:hover { background: #1a3a66; color: #fff; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 25px; }
+        .stat-card { background: linear-gradient(135deg, #16213e 0%, #0f3460 100%); border-radius: 14px; padding: 22px; border: 1px solid #0f3460; position: relative; overflow: hidden; transition: all 0.3s; }
+        .stat-card:hover { transform: translateY(-4px); border-color: #667eea; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2); }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); }
+        .stat-card.success::before { background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
+        .stat-card.warning::before { background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); }
+        .stat-card.danger::before { background: linear-gradient(90deg, #ef4444 0%, #f87171 100%); }
+        .stat-card.info::before { background: linear-gradient(90deg, #06b6d4 0%, #22d3ee 100%); }
+        .stat-icon { font-size: 32px; margin-bottom: 10px; }
+        .stat-label { font-size: 13px; color: #8ba3c7; margin-bottom: 6px; }
+        .stat-value { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+        .stat-value .unit { font-size: 16px; color: #8ba3c7; font-weight: 500; margin-left: 2px; }
+        .stat-change { font-size: 12px; color: #10b981; }
+        .stat-change.down { color: #ef4444; }
+        .progress-bar-container { background: #0a0e1a; border-radius: 8px; height: 8px; overflow: hidden; margin-top: 8px; }
+        .progress-bar { height: 100%; border-radius: 8px; transition: width 0.5s ease; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); }
+        .progress-bar.success { background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
+        .progress-bar.warning { background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); }
+        .progress-bar.danger { background: linear-gradient(90deg, #ef4444 0%, #f87171 100%); }
+        .data-table { width: 100%; border-collapse: collapse; background: #0a0e1a; border-radius: 10px; overflow: hidden; }
+        .data-table thead { background: #0f3460; }
+        .data-table th { padding: 14px 16px; text-align: left; font-size: 13px; font-weight: 600; color: #b5c4d8; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #2a3f5f; }
+        .data-table td { padding: 14px 16px; font-size: 14px; color: #e8e8e8; border-bottom: 1px solid #0f3460; }
+        .data-table tbody tr { transition: background 0.2s; }
+        .data-table tbody tr:hover { background: rgba(107, 165, 247, 0.05); }
+        .data-table tbody tr:last-child td { border-bottom: none; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-running { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-stopped { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .badge-paused { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-info { background: rgba(107, 165, 247, 0.15); color: #6ba5f7; border: 1px solid rgba(107, 165, 247, 0.3); }
+        .badge-watch { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge-candidate { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+        .badge-testing { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-prelive { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .result-card { background: #0a0e1a; border-radius: 10px; padding: 18px; text-align: center; border: 1px solid #0f3460; }
+        .result-card-label { font-size: 12px; color: #8ba3c7; margin-bottom: 8px; }
+        .result-card-value { font-size: 24px; font-weight: 700; color: #6ba5f7; }
+        .result-card-value.positive { color: #10b981; }
+        .result-card-value.negative { color: #ef4444; }
+        .params-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .param-item { background: #0a0e1a; padding: 14px; border-radius: 8px; border-left: 3px solid #667eea; }
+        .param-key { font-size: 12px; color: #8ba3c7; display: block; margin-bottom: 4px; }
+        .param-value { font-size: 16px; font-weight: 600; color: #fff; }
+        .pool-tracks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .pool-track { background: #0a0e1a; border-radius: 12px; padding: 18px; border: 2px solid #0f3460; transition: all 0.3s; }
+        .pool-track:hover { border-color: #667eea; transform: translateY(-2px); }
+        .pool-track-icon { font-size: 28px; margin-bottom: 8px; }
+        .pool-track-name { font-size: 14px; font-weight: 600; color: #e8e8e8; margin-bottom: 4px; }
+        .pool-track-count { font-size: 28px; font-weight: 700; color: #6ba5f7; }
+        .pool-track-desc { font-size: 11px; color: #8ba3c7; margin-top: 6px; }
+        .modules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        .module-card { background: #0a0e1a; border-radius: 12px; padding: 18px; border: 1px solid #0f3460; display: flex; align-items: center; gap: 14px; }
+        .module-card-icon { width: 50px; height: 50px; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+        .module-card-info { flex: 1; }
+        .module-card-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+        .module-card-status { font-size: 12px; color: #10b981; }
+        .module-card-status.warning { color: #f59e0b; }
+        .module-card-status.error { color: #ef4444; }
+        .chat-container { background: #0a0e1a; border-radius: 12px; height: 550px; display: flex; flex-direction: column; border: 1px solid #0f3460; overflow: hidden; }
+        .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
+        .message { display: flex; gap: 12px; max-width: 80%; animation: msgSlide 0.3s ease; }
+        @keyframes msgSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        .message-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .message.assistant .message-avatar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .message.user .message-avatar { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .message-content { background: #16213e; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; color: #e8e8e8; border: 1px solid #0f3460; }
+        .message.user .message-content { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-color: transparent; }
+        .message-time { font-size: 11px; color: #8ba3c7; margin-top: 4px; }
+        .chat-input-area { padding: 15px; background: #16213e; border-top: 1px solid #0f3460; display: flex; gap: 10px; }
+        .chat-input { flex: 1; padding: 12px 16px; background: #0a0e1a; border: 1px solid #0f3460; border-radius: 8px; color: #e8e8e8; font-size: 14px; font-family: inherit; outline: none; resize: none; }
+        .chat-input:focus { border-color: #667eea; }
+        .quick-replies { padding: 10px 15px; background: #16213e; display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid #0f3460; }
+        .quick-reply { padding: 6px 14px; background: #0f3460; border: 1px solid #2a3f5f; border-radius: 20px; color: #b5c4d8; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+        .quick-reply:hover { background: #667eea; color: #fff; border-color: #667eea; }
+        .bottom-bar { background: linear-gradient(135deg, #16213e 0%, #0a0e1a 100%); padding: 14px 30px; display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #0f3460; font-size: 12px; color: #8ba3c7; }
+        .bottom-bar-left { display: flex; gap: 20px; align-items: center; }
+        .bottom-bar-right { display: flex; gap: 12px; }
+        .info-bar { background: rgba(107, 165, 247, 0.08); border: 1px solid rgba(107, 165, 247, 0.2); border-radius: 8px; padding: 12px 18px; margin-bottom: 20px; font-size: 13px; color: #b5c4d8; display: flex; align-items: center; gap: 10px; }
+        .info-bar.success { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #10b981; }
+        .info-bar.warning { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3); color: #f59e0b; }
+        .info-bar.error { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; }
+        .indicator-section { margin-top: 20px; }
+        .indicator-row { display: grid; grid-template-columns: 120px 1fr 120px; gap: 15px; align-items: center; padding: 12px 14px; background: #0a0e1a; border-radius: 8px; margin-bottom: 8px; }
+        .indicator-name { font-size: 14px; font-weight: 600; color: #6ba5f7; }
+        .indicator-bar { height: 8px; background: #0f3460; border-radius: 4px; position: relative; overflow: hidden; }
+        .indicator-bar-fill { position: absolute; top: 0; left: 0; height: 100%; background: linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #10b981 100%); }
+        .indicator-marker { position: absolute; top: -4px; width: 4px; height: 16px; background: #fff; border-radius: 2px; box-shadow: 0 0 6px #fff; }
+        .indicator-value { font-size: 14px; text-align: right; font-weight: 600; color: #fff; }
+        .signal-banner { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.15) 100%); border: 2px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 20px; margin-top: 20px; text-align: center; }
+        .signal-banner.sell { background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.15) 100%); border-color: rgba(239, 68, 68, 0.4); }
+        .signal-banner.hold { background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.15) 100%); border-color: rgba(245, 158, 11, 0.4); }
+        .signal-icon { font-size: 48px; margin-bottom: 10px; }
+        .signal-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+        .signal-desc { font-size: 13px; color: #b5c4d8; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #0a0e1a; }
+        ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2a3f5f; }
+        @media (max-width: 900px) { .dashboard-grid { grid-template-columns: repeat(2, 1fr); } .pool-tracks { grid-template-columns: repeat(2, 1fr); } .top-status-bar { flex-direction: column; gap: 10px; align-items: flex-start; } }
+        @media (max-width: 600px) { .dashboard-grid { grid-template-columns: 1fr; } .pool-tracks { grid-template-columns: 1fr; } .main-container { padding: 15px; } }
+
+        /* ===== QS Robot 浮动机器人按钮 ===== */
+        .qbot-float-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #238636, #2ea043);
+            border: 2px solid rgba(63, 185, 80, 0.5);
+            box-shadow: 0 4px 20px rgba(63, 185, 80, 0.4), 0 0 30px rgba(0, 212, 255, 0.15);
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: #fff;
+            z-index: 9999;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            animation: qbot-pulse 2s infinite;
+            user-select: none;
+        }
+        .qbot-float-btn:active { cursor: grabbing; }
+        .qbot-float-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 30px rgba(63, 185, 80, 0.6), 0 0 40px rgba(0, 212, 255, 0.3);
+            background: linear-gradient(135deg, #2ea043, #3fb950);
+        }
+        .qbot-float-btn .tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            right: 70px;
+            background: #16213e;
+            color: #c9d1d9;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            white-space: nowrap;
+            border: 1px solid #0f3460;
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+        .qbot-float-btn:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        .qbot-float-btn .status-dot-float {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #0d1117;
+        }
+        .qbot-float-btn .status-dot-float.online {
+            background: #3fb950;
+            box-shadow: 0 0 8px #3fb950;
+        }
+        .qbot-float-btn .status-dot-float.offline {
+            background: #f85149;
+            box-shadow: 0 0 8px #f85149;
+        }
+        @keyframes qbot-pulse {
+            0%, 100% { box-shadow: 0 4px 20px rgba(63, 185, 80, 0.4), 0 0 30px rgba(0, 212, 255, 0.15); }
+            50% { box-shadow: 0 4px 28px rgba(63, 185, 80, 0.7), 0 0 45px rgba(0, 212, 255, 0.35); }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-status-bar">
+        <div class="status-left">
+            <div class="brand" style="cursor: pointer;">
+                <span class="brand-icon">🚀</span>
+                <span style="font-size: 20px; font-weight: 700; background: linear-gradient(90deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AURORA 量化系统</span>
+                <span class="brand-subtitle">QS-Robot 技术分析外壳</span>
+            </div>
+        </div>
+        <div class="status-right">
+            <div class="status-item"><span class="status-dot"></span><span>Aurora: 已连接</span></div>
+            <div class="status-item"><span class="status-dot"></span><span id="sysMode">双核联动</span></div>
+            <div class="status-item"><span>📅 <span id="currentDate"></span></span></div>
+            <div class="status-item"><span>⏰ <span id="currentTime"></span></span></div>
+            <button class="btn btn-secondary btn-sm" onclick="refreshSystem()">🔄 刷新</button>
+        </div>
+    </div>
+    <div style="background: #0f2847; padding: 10px 30px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #0f3460;">
+        <span style="color: #8ba3c7; font-size: 13px; margin-right: 4px;">🚀 系统导航:</span>
+        <a href="http://127.0.0.1:5002/" target="_blank" style="color: #fff; text-decoration: none; padding: 6px 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 6px; font-size: 13px; font-weight: 600; border: 2px solid #818cf8; box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);">🚀 AURORA 量化引擎</a>
+        <a href="/dashboard" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🏠 控制台</a>
+        <a href="/main_system" style="color: #fff; text-decoration: none; padding: 6px 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 6px; font-size: 13px; font-weight: 500;">🏛️ 主系统</a>
+        <a href="/stock_pool" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">📈 股票池</a>
+        <a href="/technical_analysis" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">📊 技术分析</a>
+        <a href="/vibe_analysis" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🧠 Vibe智能体</a>
+        <a href="/cline-agent" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🤖 Cline智能体</a>
+        <a href="/model-switch" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🔄 模型切换</a>
+        <a href="/chat" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">💬 智能助手</a>
+    </div>
+    <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="dashboard"><span class="tab-icon">📊</span><span>仪表盘</span></button>
+        <button class="tab-btn" data-tab="strategy"><span class="tab-icon">📈</span><span>策略管理</span></button>
+        <button class="tab-btn" data-tab="backtest"><span class="tab-icon">📊</span><span>回测中心</span></button>
+        <button class="tab-btn" data-tab="optimizer"><span class="tab-icon">⚡</span><span>韬定律优化器</span></button>
+        <button class="tab-btn" data-tab="analysis"><span class="tab-icon">📈</span><span>技术分析</span></button>
+        <button class="tab-btn" data-tab="stockpool"><span class="tab-icon">📊</span><span>股票池</span></button>
+        <button class="tab-btn" data-tab="monitor"><span class="tab-icon">🖥️</span><span>系统监控</span></button>
+        <button class="tab-btn" data-tab="risk"><span class="tab-icon">🛡️</span><span>五层防钓鱼风控</span></button>
+        <button class="tab-btn" data-tab="chat"><span class="tab-icon">🤖</span><span>Cline智能体</span></button>
+        <button class="tab-btn" data-tab="aurora" onclick="window.open('http://127.0.0.1:5002/', '_blank')" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-bottom: 3px solid #818cf8;"><span class="tab-icon">🚀</span><span>Aurora引擎</span></button>
+    </div>
+    <div class="main-container">
+        <div class="tab-panel active" id="panel-dashboard">
+            <div class="info-bar success"><span>✅</span><span>系统运行正常 · Aurora引擎已连接 · 策略引擎活跃 · 最近检查: <span id="lastCheck"></span></span></div>
+            <div class="panel" style="border: 2px solid #667eea; background: linear-gradient(135deg, #16213e 0%, #1a1040 100%);">
+                <div class="panel-title"><div class="panel-title-left">🚀 AURORA 量化引擎 - 策略优化核心系统</div><span class="panel-subtitle">双核联动 · 牧羊人V6 · 完整工作流</span></div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 15px;">
+                    <a href="http://127.0.0.1:5002/" target="_blank" style="text-decoration: none;">
+                        <div class="stat-card" style="cursor: pointer; border: 2px solid #667eea; background: linear-gradient(135deg, #1a1040 0%, #0f1a30 100%);">
+                            <div class="stat-icon" style="font-size: 40px;">🎯</div>
+                            <div class="stat-label">Aurora 主页</div>
+                            <div class="stat-value" style="font-size: 18px;">统一入口</div>
+                            <div class="stat-change">策略 · 优化器 · 风控</div>
+                        </div>
+                    </a>
+                    <a href="http://127.0.0.1:5002/api/optimizer/list" target="_blank" style="text-decoration: none;">
+                        <div class="stat-card" style="cursor: pointer; border: 2px solid #10b981; background: linear-gradient(135deg, #0a2a1a 0%, #0f1a30 100%);">
+                            <div class="stat-icon" style="font-size: 40px;">🐑</div>
+                            <div class="stat-label">牧羊人优化器</div>
+                            <div class="stat-value" style="font-size: 18px;">V5 / V6</div>
+                            <div class="stat-change">策略自演进 · 基因进化</div>
+                        </div>
+                    </a>
+                    <a href="http://127.0.0.1:5002/api/integration/full_workflow" target="_blank" style="text-decoration: none;">
+                        <div class="stat-card" style="cursor: pointer; border: 2px solid #f59e0b; background: linear-gradient(135deg, #2a1a0a 0%, #0f1a30 100%);">
+                            <div class="stat-icon" style="font-size: 40px;">⚡</div>
+                            <div class="stat-label">完整工作流</div>
+                            <div class="stat-value" style="font-size: 18px;">一键自动化</div>
+                            <div class="stat-change">优化→股票池→配置→风控</div>
+                        </div>
+                    </a>
+                    <a href="http://127.0.0.1:5002/api/integration/batch_optimize" target="_blank" style="text-decoration: none;">
+                        <div class="stat-card" style="cursor: pointer; border: 2px solid #06b6d4; background: linear-gradient(135deg, #0a1a2a 0%, #0f1a30 100%);">
+                            <div class="stat-icon" style="font-size: 40px;">📊</div>
+                            <div class="stat-label">批量优化</div>
+                            <div class="stat-value" style="font-size: 18px;">多策略并行</div>
+                            <div class="stat-change">韬定律参数空间搜索</div>
+                        </div>
+                    </a>
+                    <a href="http://127.0.0.1:5002/api/walk_forward" target="_blank" style="text-decoration: none;">
+                        <div class="stat-card" style="cursor: pointer; border: 2px solid #8b5cf6; background: linear-gradient(135deg, #1a0a2a 0%, #0f1a30 100%);">
+                            <div class="stat-icon" style="font-size: 40px;">🔬</div>
+                            <div class="stat-label">Walk-Forward</div>
+                            <div class="stat-value" style="font-size: 18px;">防过拟合</div>
+                            <div class="stat-change">跨周期验证策略稳定性</div>
+                        </div>
+                    </a>
+                    <a href="http://127.0.0.1:5002/api/config" target="_blank" style="text-decoration: none;">
+                        <div class="stat-card" style="cursor: pointer; border: 2px solid #ec4899; background: linear-gradient(135deg, #2a0a1a 0%, #0f1a30 100%);">
+                            <div class="stat-icon" style="font-size: 40px;">⚙️</div>
+                            <div class="stat-label">系统配置</div>
+                            <div class="stat-value" style="font-size: 18px;">参数管理</div>
+                            <div class="stat-change">风控 · 交易 · 优化器</div>
+                        </div>
+                    </a>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="http://127.0.0.1:5002/" target="_blank" class="btn btn-primary" style="font-size: 16px; padding: 12px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: 2px solid #818cf8; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">🚀 进入 AURORA 量化引擎</a>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">📊 系统总览</div><span class="panel-subtitle">实时数据</span></div>
+                <div class="dashboard-grid">
+                    <div class="stat-card info"><div class="stat-icon">📋</div><div class="stat-label">策略总数</div><div class="stat-value" id="totalStrategies">8</div><div class="stat-change">+2 本月新增</div></div>
+                    <div class="stat-card success"><div class="stat-icon">🚀</div><div class="stat-label">活跃策略</div><div class="stat-value" id="activeStrategies">5</div><div class="stat-change">运行中</div></div>
+                    <div class="stat-card warning"><div class="stat-icon">🔬</div><div class="stat-label">回测次数</div><div class="stat-value" id="totalBacktests">1,247</div><div class="stat-change">+23 今日</div></div>
+                    <div class="stat-card info"><div class="stat-icon">💻</div><div class="stat-label">CPU 使用率</div><div class="stat-value" id="cpuUsage">32<span class="unit">%</span></div><div class="progress-bar-container"><div class="progress-bar success" id="cpuBar" style="width:32%"></div></div></div>
+                    <div class="stat-card info"><div class="stat-icon">🧠</div><div class="stat-label">内存使用</div><div class="stat-value" id="memUsage">5.2<span class="unit">GB</span></div><div class="progress-bar-container"><div class="progress-bar success" id="memBar" style="width:42%"></div></div></div>
+                    <div class="stat-card info"><div class="stat-icon">💾</div><div class="stat-label">磁盘使用</div><div class="stat-value" id="diskUsage">128<span class="unit">GB</span></div><div class="progress-bar-container"><div class="progress-bar warning" id="diskBar" style="width:64%"></div></div></div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">🎯 今日收益概览</div><span class="panel-subtitle">各策略 PnL</span></div>
+                <div class="result-grid">
+                    <div class="result-card"><div class="result-card-label">总收益率</div><div class="result-card-value positive">+12.47%</div></div>
+                    <div class="result-card"><div class="result-card-label">今日盈亏</div><div class="result-card-value positive">+¥3,285</div></div>
+                    <div class="result-card"><div class="result-card-label">夏普比率</div><div class="result-card-value">1.85</div></div>
+                    <div class="result-card"><div class="result-card-label">最大回撤</div><div class="result-card-value negative">-3.24%</div></div>
+                    <div class="result-card"><div class="result-card-label">胜率</div><div class="result-card-value">58.3%</div></div>
+                    <div class="result-card"><div class="result-card-label">交易次数</div><div class="result-card-value">47</div></div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">⚡ 最近操作日志</div><span class="panel-subtitle">最近5条</span></div>
+                <table class="data-table">
+                    <thead><tr><th>时间</th><th>类型</th><th>策略</th><th>详情</th><th>状态</th></tr></thead>
+                    <tbody>
+                        <tr><td>14:32:18</td><td>回测</td><td>双均线策略</td><td>参数优化完成 (fast=12, slow=26)</td><td><span class="badge badge-running">完成</span></td></tr>
+                        <tr><td>14:28:05</td><td>交易</td><td>MACD策略</td><td>买入 100股 贵州茅台 @¥1680.50</td><td><span class="badge badge-running">已执行</span></td></tr>
+                        <tr><td>14:15:42</td><td>策略</td><td>布林带策略</td><td>策略启动成功</td><td><span class="badge badge-running">运行中</span></td></tr>
+                        <tr><td>13:58:20</td><td>优化</td><td>动量策略</td><td>韬定律优化完成，最佳评分 0.8432</td><td><span class="badge badge-running">完成</span></td></tr>
+                        <tr><td>13:42:11</td><td>风控</td><td>系统</td><td>检测到异常波动，暂停 RS2策略</td><td><span class="badge badge-paused">警告</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-strategy">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">📈 策略管理中心</div></div>
+                <table class="data-table" id="strategyTable">
+                    <thead><tr><th>#</th><th>策略名称</th><th>分类</th><th>状态</th><th>评分</th><th>收益率</th><th>胜率</th><th>夏普</th><th>最后运行</th><th>操作</th></tr></thead>
+                    <tbody id="strategyTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-backtest">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">📊 回测参数配置</div></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">策略选择</label><select class="form-select" id="btStrategy"><option value="双均线策略">双均线策略</option><option value="MACD策略">MACD策略</option><option value="RSI策略">RSI策略</option><option value="布林带策略">布林带策略</option><option value="动量策略">动量策略</option></select></div>
+                    <div class="form-group"><label class="form-label">股票代码</label><input type="text" class="form-input" id="btStock" placeholder="如: 600519" value="600519"></div>
+                    <div class="form-group"><label class="form-label">初始资金 (¥)</label><input type="number" class="form-input" id="btCapital" value="100000"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">开始日期</label><input type="date" class="form-input" id="btStartDate" value="2023-01-01"></div>
+                    <div class="form-group"><label class="form-label">结束日期</label><input type="date" class="form-input" id="btEndDate" value="2024-12-31"></div>
+                </div>
+                <button class="btn btn-primary" onclick="runBacktest()" id="btRunBtn">🚀 开始回测</button>
+            </div>
+            <div class="panel" id="backtestResultPanel" style="display:none;">
+                <div class="panel-title"><div class="panel-title-left">📈 回测结果</div></div>
+                <div class="result-grid" id="backtestResultGrid"></div>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-optimizer">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">⚡ 韬定律集群优化器</div></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">策略选择</label><select class="form-select" id="optStrategy"><option value="双均线策略">双均线策略</option><option value="MACD策略">MACD策略</option><option value="RSI策略">RSI策略</option></select></div>
+                    <div class="form-group"><label class="form-label">评估次数</label><input type="number" class="form-input" id="optEvals" value="500" min="50"></div>
+                </div>
+                <button class="btn btn-primary" onclick="runOptimize()" id="optRunBtn">⚡ 启动韬定律优化</button>
+            </div>
+            <div class="panel" id="optimizerResult" style="display:none;">
+                <div class="panel-title"><div class="panel-title-left">🏆 优化结果</div></div>
+                <div class="params-grid" id="optimizerParamsGrid"></div>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-analysis">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">📈 技术分析中心</div></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">股票代码</label><input type="text" class="form-input" id="taStock" placeholder="如: 600519" value="600519"></div>
+                </div>
+                <button class="btn btn-primary" onclick="runAnalysis()" id="taRunBtn">🔍 开始技术分析</button>
+            </div>
+            <div class="panel" id="analysisResultPanel" style="display:none;">
+                <div class="panel-title"><div class="panel-title-left">📊 技术指标分析</div></div>
+                <div class="result-grid" id="analysisResultGrid"></div>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-stockpool">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">📊 股票池管理</div></div>
+                <div class="pool-tracks">
+                    <div class="pool-track"><div class="pool-track-icon">👀</div><div class="pool-track-name">观察池</div><div class="pool-track-count" id="poolWatch">127</div></div>
+                    <div class="pool-track"><div class="pool-track-icon">🎯</div><div class="pool-track-name">候选池</div><div class="pool-track-count" id="poolCandidate">48</div></div>
+                    <div class="pool-track"><div class="pool-track-icon">🧪</div><div class="pool-track-name">测试池</div><div class="pool-track-count" id="poolTesting">23</div></div>
+                    <div class="pool-track"><div class="pool-track-icon">🚀</div><div class="pool-track-name">预实盘</div><div class="pool-track-count" id="poolPrelive">11</div></div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-monitor">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">🖥️ 系统资源监控</div></div>
+                <div class="dashboard-grid">
+                    <div class="stat-card info"><div class="stat-icon">💻</div><div class="stat-label">CPU 使用率</div><div class="stat-value" id="monCpu">--<span class="unit">%</span></div></div>
+                    <div class="stat-card info"><div class="stat-icon">🧠</div><div class="stat-label">内存使用率</div><div class="stat-value" id="monMem">--<span class="unit">%</span></div></div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">🔗 Aurora 引擎连接状态</div></div>
+                <div class="modules-grid">
+                    <div class="module-card"><div class="module-card-icon">🤖</div><div class="module-card-info"><div class="module-card-name">Aurora DeepSeek 引擎</div><div class="module-card-status">● 已连接</div></div></div>
+                    <div class="module-card"><div class="module-card-icon">📡</div><div class="module-card-info"><div class="module-card-name">行情数据源</div><div class="module-card-status">● 实时推送</div></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-risk">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">🛡️ 五层防钓鱼风控系统</div></div>
+                <div class="dashboard-grid">
+                    <div class="stat-card success"><div class="stat-icon">🔒</div><div class="stat-label">第1层：身份验证</div><div class="stat-value">95<span class="unit">/ 100</span></div></div>
+                    <div class="stat-card info"><div class="stat-icon">⚖️</div><div class="stat-label">第2层：仓位控制</div><div class="stat-value">82<span class="unit">/ 100</span></div></div>
+                    <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-label">第3层：止损止盈</div><div class="stat-value">88<span class="unit">/ 100</span></div></div>
+                    <div class="stat-card"><div class="stat-icon">📊</div><div class="stat-label">第4层：策略互锁</div><div class="stat-value">90<span class="unit">/ 100</span></div></div>
+                    <div class="stat-card warning"><div class="stat-icon">🌊</div><div class="stat-label">第5层：市场波动熔断</div><div class="stat-value">75<span class="unit">/ 100</span></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-panel" id="panel-chat">
+            <div class="panel">
+                <div class="panel-title"><div class="panel-title-left">🤖 Cline 量化智能助手</div></div>
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message assistant">
+                            <div class="message-avatar">🤖</div>
+                            <div><div class="message-content">你好！我是 <b>QS Robot Cline 智能助手</b> 🤖<br>请输入你的问题，或点击下方快捷问题开始对话！</div></div>
+                        </div>
+                    </div>
+                    <div class="quick-replies">
+                        <div class="quick-reply" onclick="sendQuickReply('系统状态如何？')">📊 系统状态</div>
+                        <div class="quick-reply" onclick="sendQuickReply('推荐优化哪个策略？')">⚡ 优化建议</div>
+                        <div class="quick-reply" onclick="sendQuickReply('今日收益情况')">💰 今日收益</div>
+                    </div>
+                    <div class="chat-input-area">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="💬 输入你的问题，回车发送..." onkeydown="if(event.key==='Enter')sendChat()">
+                        <button class="btn btn-primary" onclick="sendChat()">🚀 发送</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bottom-bar">
+        <div class="bottom-bar-left">
+            <span>✅ 系统健康度: <b style="color:#10b981;">98.5%</b></span>
+            <span>📌 版本: QS Robot v2.0.0</span>
+        </div>
+        <div class="bottom-bar-right">
+            <button class="btn btn-success btn-sm" onclick="showMessage('✔ 保存成功')">💾 保存</button>
+        </div>
+    </div>
+    <script>
+        const STRATEGIES = [
+            { id: 1, name: '双均线策略', category: '趋势', status: 'running', score: 85, return: 15.42, winrate: 58.3, sharpe: 1.85, lastRun: '2分钟前' },
+            { id: 2, name: 'MACD 策略', category: '趋势', status: 'running', score: 78, return: 12.18, winrate: 55.1, sharpe: 1.52, lastRun: '5分钟前' },
+            { id: 3, name: 'RSI 反转策略', category: '震荡', status: 'running', score: 82, return: 9.85, winrate: 61.2, sharpe: 1.34, lastRun: '1分钟前' },
+            { id: 4, name: '布林带策略', category: '震荡', status: 'running', score: 91, return: 21.34, winrate: 64.5, sharpe: 2.15, lastRun: '刚运行' },
+            { id: 5, name: '动量策略', category: '趋势', status: 'running', score: 76, return: 8.56, winrate: 52.1, sharpe: 1.28, lastRun: '10分钟前' },
+        ];
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+            tabBtns.forEach(btn => { btn.addEventListener('click', () => { const target = btn.getAttribute('data-tab'); tabBtns.forEach(b => b.classList.remove('active')); tabPanels.forEach(p => p.classList.remove('active')); btn.classList.add('active'); document.getElementById('panel-' + target).classList.add('active'); }); });
+            refreshTime(); setInterval(refreshTime, 1000);
+            renderStrategyList(STRATEGIES);
+            updateMonitorData(); setInterval(updateMonitorData, 5000);
+        });
+        function refreshTime() { const now = new Date(); const h = String(now.getHours()).padStart(2,'0'), mi = String(now.getMinutes()).padStart(2,'0'), s = String(now.getSeconds()).padStart(2,'0'); document.getElementById('currentDate').textContent = now.toLocaleDateString('zh-CN'); document.getElementById('currentTime').textContent = `${h}:${mi}:${s}`; }
+        function refreshSystem() { showMessage('🔄 系统数据已刷新'); refreshTime(); updateMonitorData(); }
+        function showMessage(msg) { const toast = document.createElement('div'); toast.textContent = msg; toast.style.cssText = 'position:fixed;top:80px;right:30px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:12px 24px;border-radius:8px;z-index:1000;font-size:14px;animation:slideIn 0.3s ease;'; document.body.appendChild(toast); setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2000); setTimeout(() => toast.remove(), 2400); }
+        function renderStrategyList(list) { const tbody = document.getElementById('strategyTableBody'); if (!tbody) return; const badgeMap = { running: ['badge-running', '运行中'], stopped: ['badge-stopped', '已停止'], paused: ['badge-paused', '已暂停'] }; tbody.innerHTML = list.map((s, i) => `<tr><td>${i + 1}</td><td><b>${s.name}</b></td><td>${s.category}</td><td><span class="badge ${badgeMap[s.status][0]}">${badgeMap[s.status][1]}</span></td><td>${s.score}</td><td style="color:${s.return >= 0 ? '#10b981' : '#ef4444'};">${s.return >= 0 ? '+' : ''}${s.return}%</td><td>${s.winrate}%</td><td>${s.sharpe.toFixed(2)}</td><td>${s.lastRun}</td><td><button class="btn btn-danger btn-sm">⏹ 停止</button></td></tr>`).join(''); }
+        function updateMonitorData() { document.getElementById('monCpu').innerHTML = Math.floor(Math.random() * 40 + 20) + '<span class="unit">%</span>'; document.getElementById('monMem').innerHTML = Math.floor(Math.random() * 30 + 40) + '<span class="unit">%</span>'; }
+        function runBacktest() { const btn = document.getElementById('btRunBtn'); btn.disabled = true; btn.textContent = '⏳ 回测进行中...'; const stock = document.getElementById('btStock').value; fetch('/api/tau/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ strategy: document.getElementById('btStrategy').value, symbol: stock, params: { capital: document.getElementById('btCapital').value } }) }).then(res => res.json()).then(data => { if (!data.success) { showMessage('⚠️ 回测失败：' + (data.error || '未知错误')); } else { const result = data.result || {}; document.getElementById('backtestResultGrid').innerHTML = `<div class="result-card"><div class="result-card-label">收益率</div><div class="result-card-value">${result.total_return ?? '--'}%</div></div><div class="result-card"><div class="result-card-label">夏普比率</div><div class="result-card-value">${result.sharpe ?? '--'}</div></div>`; document.getElementById('backtestResultPanel').style.display = 'block'; showMessage('✅ 回测完成'); } btn.disabled = false; btn.textContent = '🚀 开始回测'; }).catch(err => { showMessage('❌ 回测失败：' + err.message); btn.disabled = false; btn.textContent = '🚀 开始回测'; }); }
+        function runOptimize() { const btn = document.getElementById('optRunBtn'); btn.disabled = true; btn.textContent = '⏳ 优化中...'; fetch('/api/integration/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ strategy: document.getElementById('optStrategy').value, coarse_points: 20, refined_points: parseInt(document.getElementById('optEvals').value) || 50 }) }).then(res => res.json()).then(data => { if (!data.success) { showMessage('⚠️ 优化失败'); } else { const result = data.result || {}; const params = result.best_parameters || {}; document.getElementById('optimizerParamsGrid').innerHTML = Object.entries(params).map(([k,v]) => `<div class="param-item"><span class="param-key">${k}</span><span class="param-value">${typeof v === 'number' ? v.toFixed(4) : v}</span></div>`).join('') || '<div class="param-item"><span class="param-key">无参数</span></div>'; document.getElementById('optimizerResult').style.display = 'block'; showMessage('✅ 优化完成'); } btn.disabled = false; btn.textContent = '⚡ 启动韬定律优化'; }).catch(err => { showMessage('❌ 优化失败：' + err.message); btn.disabled = false; btn.textContent = '⚡ 启动韬定律优化'; }); }
+        function runAnalysis() { const btn = document.getElementById('taRunBtn'); btn.disabled = true; btn.textContent = '⏳ 分析中...'; fetch('/api/technical/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol: document.getElementById('taStock').value, days: 100 }) }).then(res => res.json()).then(data => { document.getElementById('analysisResultPanel').style.display = 'block'; showMessage('✅ 分析完成'); btn.disabled = false; btn.textContent = '🔍 开始技术分析'; }).catch(err => { showMessage('❌ 分析失败：' + err.message); btn.disabled = false; btn.textContent = '🔍 开始技术分析'; }); }
+        function sendChat() { const input = document.getElementById('chatInput'); const msg = input.value.trim(); if (!msg) return; input.value = ''; appendMessage('user', msg); setTimeout(() => replyBot(msg), 700); }
+        function sendQuickReply(msg) { appendMessage('user', msg); setTimeout(() => replyBot(msg), 700); }
+        function appendMessage(role, content) { const container = document.getElementById('chatMessages'); const avatar = role === 'user' ? '👤' : '🤖'; container.insertAdjacentHTML('beforeend', `<div class="message ${role}"><div class="message-avatar">${avatar}</div><div><div class="message-content">${content}</div></div></div>`); container.scrollTop = container.scrollHeight; }
+        function replyBot(userMsg) { const m = userMsg.toLowerCase(); let reply = '感谢你的提问！我可以帮你查询系统状态、策略运行情况、技术分析、风控监控等。'; if (m.includes('系统') || m.includes('状态')) reply = '📊 <b>系统状态报告</b><br>• Aurora 引擎: ✅ 已连接<br>• 策略引擎: 🟢 运行中 (5个策略活跃)<br>• 整体健康度 <b style="color:#10b981;">98.5%</b>'; appendMessage('assistant', reply); }
+
+        // ===== 悬浮机器人拖动功能 =====
+        (function initDraggableFloatBtn() {
+            const btn = document.getElementById('qbot-float-btn');
+            if (!btn) return;
+            let isDragging = false;
+            let startX, startY, initialX, initialY;
+
+            btn.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                const rect = btn.getBoundingClientRect();
+                initialX = rect.left;
+                initialY = rect.top;
+                btn.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                btn.style.left = (initialX + deltaX) + 'px';
+                btn.style.top = (initialY + deltaY) + 'px';
+                btn.style.right = 'auto';
+                btn.style.bottom = 'auto';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (isDragging) {
+                    isDragging = false;
+                    btn.style.cursor = 'grab';
+                }
+            });
+
+            // 触摸设备支持
+            btn.addEventListener('touchstart', function(e) {
+                isDragging = true;
+                const touch = e.touches[0];
+                startX = touch.clientX;
+                startY = touch.clientY;
+                const rect = btn.getBoundingClientRect();
+                initialX = rect.left;
+                initialY = rect.top;
+                e.preventDefault();
+            });
+
+            document.addEventListener('touchmove', function(e) {
+                if (!isDragging) return;
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - startX;
+                const deltaY = touch.clientY - startY;
+                btn.style.left = (initialX + deltaX) + 'px';
+                btn.style.top = (initialY + deltaY) + 'px';
+                btn.style.right = 'auto';
+                btn.style.bottom = 'auto';
+                e.preventDefault();
+            });
+
+            document.addEventListener('touchend', function() {
+                isDragging = false;
+            });
+        })();
+    </script>
+
+<!-- ===== QS Robot 悬浮机器人按钮 ===== -->
+<a href="http://127.0.0.1:5002/cline-agent" target="_blank" id="qbot-float-btn" class="qbot-float-btn" title="QS Robot 智能助手">
+    <span class="tooltip-text">🤖 QS Robot 智能助手</span>
+    <span class="status-dot-float online"></span>
+    🤖
+</a>
+</body>
+</html>
