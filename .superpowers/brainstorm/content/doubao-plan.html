@@ -1,0 +1,105 @@
+<h2>豆包融合方案回顾：它就是「方案A — 纯代理模式」</h2>
+<p class="subtitle">豆包方案的核心设计，与当前执行状态</p>
+
+<div class="section">
+  <h3>豆包方案架构</h3>
+  <div style="background: #1a1a2e; border-radius: 10px; padding: 20px; text-align: center;">
+    <div style="display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap;">
+      <div style="background: #16213e; border: 2px solid #9b59b6; border-radius: 8px; padding: 15px; min-width: 140px;">
+        <div style="color: #9b59b6; font-weight: bold;">用户浏览器</div>
+        <div style="color: #aaa; font-size: 12px; margin-top: 5px;">统一入口</div>
+      </div>
+      <div style="color: #9b59b6; font-size: 24px;">→</div>
+      <div style="background: #16213e; border: 2px solid #3498db; border-radius: 8px; padding: 15px; min-width: 180px;">
+        <div style="color: #3498db; font-weight: bold;">5003 QS_Robot</div>
+        <div style="color: #aaa; font-size: 12px; margin-top: 5px;">UI外壳 + API网关</div>
+        <div style="color: #27ae60; font-size: 11px; margin-top: 3px;">✅ 导航栏 + 智能体</div>
+        <div style="color: #27ae60; font-size: 11px;">✅ 韬定律优化器</div>
+        <div style="color: #27ae60; font-size: 11px;">✅ 集成总线</div>
+      </div>
+      <div style="color: #3498db; font-size: 24px;">→</div>
+      <div style="background: #16213e; border: 2px solid #e74c3c; border-radius: 8px; padding: 15px; min-width: 180px;">
+        <div style="color: #e74c3c; font-weight: bold;">5002 Aurora</div>
+        <div style="color: #aaa; font-size: 12px; margin-top: 5px;">量化核心引擎</div>
+        <div style="color: #27ae60; font-size: 11px; margin-top: 3px;">✅ 38策略 + 回测</div>
+        <div style="color: #27ae60; font-size: 11px;">✅ 风控 + 券商</div>
+        <div style="color: #27ae60; font-size: 11px;">✅ 交易安全</div>
+        <div style="color: #e74c3c; font-size: 11px;">⚠️ 部分功能未代理</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>豆包方案四阶段实施</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <tr style="background: #16213e;">
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">阶段</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">内容</th>
+      <th style="padding: 8px; text-align: center; border-bottom: 1px solid #333;">状态</th>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">阶段0</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">基础设施：路径配置、目录结构</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 完成</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">阶段1</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">API网关：gateway.py + aurora_adapter + response_formatter</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 完成</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">阶段2</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">功能整合：策略/回测/风控/券商路由代理</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 完成</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">阶段3</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">智能体增强：Vibe/Cline/机器人对话</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 完成</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">阶段4</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">端口收敛：灰度切流 10%→30%→50%→100% → 关停5002</td>
+      <td style="padding: 8px; text-align: center; color: #f39c12; border-bottom: 1px solid #222;">⚠️ 双端口并行中</td>
+    </tr>
+    <tr style="background: #1a1a2e;">
+      <td style="padding: 8px; color: #3498db; font-weight: bold;">阶段5（新）</td>
+      <td style="padding: 8px; color: #3498db;">补充缺失功能代理 + 可视化页面</td>
+      <td style="padding: 8px; text-align: center; color: #3498db;">🔜 待执行</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>豆包方案可行性评估</h3>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>优点</h4>
+      <ul>
+        <li>架构清晰：UI/网关/内核三层分离</li>
+        <li>改动最小：5002代码零修改</li>
+        <li>已验证：22/22 API测试通过</li>
+        <li>渐进式：灰度上线，风险可控</li>
+        <li>扩展性强：新增代理路由只需一行配置</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>当前不足</h4>
+      <ul>
+        <li>缺失7个功能模块的代理路由</li>
+        <li>5003缺少对应前端页面</li>
+        <li>5002必须运行（否则代理失效）</li>
+        <li>导航栏未包含新功能入口</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div style="background: #16213e; border-left: 3px solid #3498db; padding: 15px; border-radius: 5px; margin-top: 15px;">
+  <strong style="color: #3498db;">结论：豆包方案完全可行，且已跑通核心链路。</strong>
+  <p style="margin: 8px 0 0 0; color: #ccc; font-size: 13px;">
+    只需补充 <strong>7个缺失功能模块的代理路由 + 前端页面</strong>，5003即可成为真正的完整统一入口。
+    5002作为纯后端引擎保留，5003负责所有用户交互和可视化。
+  </p>
+</div>

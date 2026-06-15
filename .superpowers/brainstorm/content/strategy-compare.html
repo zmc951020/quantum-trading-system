@@ -1,0 +1,119 @@
+<h2>5002 vs 5003：策略与优化器内容对比</h2>
+<p class="subtitle">用户发现的问题完全正确——两个页面展示的内容确实不同，需要择优融合</p>
+
+<div class="section">
+  <h3>一、策略列表对比</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
+    <tr style="background: #16213e;">
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">位置</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">策略数量</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">数据来源</th>
+      <th style="padding: 8px; text-align: center; border-bottom: 1px solid #333;">评级</th>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5002 Aurora API</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">38个</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">动态加载（真实数据）</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 最优</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5002 Aurora页面</td>
+      <td style="padding: 8px; color: #f39c12; border-bottom: 1px solid #222;">8个</td>
+      <td style="padding: 8px; color: #e74c3c; border-bottom: 1px solid #222;">硬编码（双均线/MACD/RSI...）</td>
+      <td style="padding: 8px; text-align: center; color: #e74c3c; border-bottom: 1px solid #222;">❌ 过期</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5003 aurora_main</td>
+      <td style="padding: 8px; color: #f39c12; border-bottom: 1px solid #222;">4个</td>
+      <td style="padding: 8px; color: #e74c3c; border-bottom: 1px solid #222;">硬编码（陀螺仪/傅里叶/伯努利/牧羊人）</td>
+      <td style="padding: 8px; text-align: center; color: #e74c3c; border-bottom: 1px solid #222;">❌ 过期</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5003 main_system</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">38个</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">动态加载（代理API）</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 正确</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>二、优化器对比</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
+    <tr style="background: #16213e;">
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">位置</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">优化器列表</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">真实性</th>
+      <th style="padding: 8px; text-align: center; border-bottom: 1px solid #333;">评级</th>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5003 Tau API</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5个：fourier_rl, bernoulli_coanda, shepherd_rotation, gyro, generic</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">真实运行</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 最优</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5003 aurora_main</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">6个：韬定律/遗传/贝叶斯/网格/RL/超能V6</td>
+      <td style="padding: 8px; color: #e74c3c; border-bottom: 1px solid #222;">5个是假的（硬编码装饰）</td>
+      <td style="padding: 8px; text-align: center; color: #e74c3c; border-bottom: 1px solid #222;">❌ 虚假</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5002 Aurora页面</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">韬定律集群优化器</td>
+      <td style="padding: 8px; color: #f39c12; border-bottom: 1px solid #222;">真实但简陋</td>
+      <td style="padding: 8px; text-align: center; color: #f39c12; border-bottom: 1px solid #222;">⚠️ 基础</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">5003 main_system</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">韬定律优化器（动态加载）</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">真实运行</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">✅ 正确</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>三、自进化/自适应功能对比</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">5002 Aurora</div>
+      <div class="mockup-body">
+        <div style="padding: 12px; font-size: 13px;">
+          <div style="color: #27ae60;">✅ 策略自演进 · 基因进化</div>
+          <div style="color: #27ae60;">✅ 牧羊人优化器</div>
+          <div style="color: #27ae60;">✅ 批量优化</div>
+          <div style="color: #27ae60;">✅ 跨周期验证</div>
+          <div style="color: #e74c3c;">❌ 无时间缩微/空间折叠</div>
+          <div style="color: #e74c3c;">❌ 无策略感知模块</div>
+          <div style="color: #e74c3c;">❌ 无模式分析报告</div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">5003 QS_Robot</div>
+      <div class="mockup-body">
+        <div style="padding: 12px; font-size: 13px;">
+          <div style="color: #27ae60;">✅ 时间缩微 + 空间折叠</div>
+          <div style="color: #27ae60;">✅ 参数空间折叠（粗筛→精搜→验证）</div>
+          <div style="color: #27ae60;">✅ 相似参数复用缓存</div>
+          <div style="color: #27ae60;">✅ 增量回测引擎</div>
+          <div style="color: #27ae60;">✅ 5个策略感知模块</div>
+          <div style="color: #27ae60;">✅ 模式分析报告（PatternAnalyzer）</div>
+          <div style="color: #27ae60;">✅ 集成总线自动化流程</div>
+          <div style="color: #27ae60;">✅ hybrid_power混合动力</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background: #16213e; border-left: 3px solid #27ae60; padding: 15px; border-radius: 5px; margin-top: 15px;">
+  <strong style="color: #27ae60;">择优方案：</strong>
+  <ul style="margin: 10px 0 0 20px; color: #ccc; font-size: 13px; line-height: 1.8;">
+    <li><strong>策略列表</strong>：使用5003 main_system的动态加载方式（API代理到5002的38个真实策略）</li>
+    <li><strong>优化器</strong>：使用5003 Tau API的5个真实模块 + 5002的"基因进化"概念</li>
+    <li><strong>自进化</strong>：5003的tau_optimizer_cluster远超5002，保留5003方案</li>
+    <li><strong>aurora_main.html</strong>：需要重写，去掉硬编码假数据，改为动态加载</li>
+  </ul>
+</div>

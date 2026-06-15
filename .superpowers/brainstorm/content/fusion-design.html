@@ -1,0 +1,142 @@
+<h2>5003 QS_Robot 完整融合方案</h2>
+<p class="subtitle">方案B（集中式系统维护）+ 策略/优化器择优融合 + 缺失功能代理</p>
+
+<div class="section">
+  <h3>一、新增页面：「系统维护」</h3>
+  <p style="color: #8ba3c7; font-size: 13px;">集中管理4个Tab，减少导航栏条目</p>
+  
+  <div style="background: #0a0e1a; border-radius: 10px; padding: 15px; margin-top: 10px;">
+    <div style="display: flex; gap: 8px; border-bottom: 1px solid #16213e; padding-bottom: 10px; margin-bottom: 10px;">
+      <span style="background: #6ba5f7; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold;">🛡️ 安全配置</span>
+      <span style="background: transparent; color: #8ba3c7; padding: 6px 14px; border-radius: 6px; font-size: 12px;">👥 用户管理</span>
+      <span style="background: transparent; color: #8ba3c7; padding: 6px 14px; border-radius: 6px; font-size: 12px;">🔔 告警系统</span>
+      <span style="background: transparent; color: #8ba3c7; padding: 6px 14px; border-radius: 6px; font-size: 12px;">📊 系统监控</span>
+    </div>
+    <div style="color: #ccc; font-size: 13px; line-height: 1.8;">
+      <strong>Tab1 - 安全配置：</strong>IP白名单 · 登录安全 · 交易安全 · 五层防钓鱼 · 异常检测<br>
+      <strong>Tab2 - 用户管理：</strong>用户列表 · 创建/禁用/删除 · 角色管理 · 登录日志<br>
+      <strong>Tab3 - 告警系统：</strong>告警列表 · 发送告警 · 已读/未读 · 告警规则<br>
+      <strong>Tab4 - 系统监控：</strong>健康检查 · 数据库统计 · 资源监控 · 服务状态
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>二、现有页面修复</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
+    <tr style="background: #16213e;">
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">页面</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">问题</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">修复</th>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">aurora_main.html</td>
+      <td style="padding: 8px; color: #e74c3c; border-bottom: 1px solid #222;">硬编码4个假策略 + 6个假优化器</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">改为动态加载38个真实策略 + 5个Tau模块</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">main_system.html</td>
+      <td style="padding: 8px; color: #f39c12; border-bottom: 1px solid #222;">策略管理Tab数据源正确但需增强</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">添加自进化状态列 + 基因进化入口</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">dashboard.html</td>
+      <td style="padding: 8px; color: #f39c12; border-bottom: 1px solid #222;">缺少系统维护入口</td>
+      <td style="padding: 8px; color: #27ae60; border-bottom: 1px solid #222;">添加系统维护模块卡片</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>三、新增代理路由</h3>
+  <p style="color: #8ba3c7; font-size: 13px;">在 gateway.py 中补充7个缺失功能模块的代理路由</p>
+  <div style="background: #0a0e1a; border-radius: 8px; padding: 15px; margin-top: 10px; font-family: monospace; font-size: 12px; color: #6ba5f7;">
+    # 交易安全 (代理到5002)<br>
+    /api/security/* &nbsp;&nbsp;→ 5002 /api/security/*<br>
+    /api/trade/* &nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/trade/*<br>
+    /api/fund/* &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/fund/*<br><br>
+    # 用户管理 (代理到5002)<br>
+    /api/users/* &nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/users/*<br><br>
+    # 告警系统 (代理到5002)<br>
+    /api/alerts/* &nbsp;&nbsp;&nbsp;→ 5002 /api/alerts/*<br><br>
+    # 系统监控 (代理到5002)<br>
+    /api/monitor/* &nbsp;&nbsp;→ 5002 /api/monitor/*<br>
+    /api/health/full → 5002 /api/health/full<br><br>
+    # ML网格 (代理到5002)<br>
+    /api/ml-grid/* &nbsp;&nbsp;→ 5002 /api/ml-grid/*<br><br>
+    # DeepSeek AI (代理到5002)<br>
+    /api/deepseek/* &nbsp;→ 5002 /api/deepseek/*
+  </div>
+</div>
+
+<div class="section">
+  <h3>四、导航栏更新</h3>
+  <div style="background: #0a0e1a; border-radius: 8px; padding: 15px; margin-top: 10px; font-size: 13px;">
+    <span style="color: #6ba5f7;">🏠 控制台</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">🚀 Aurora主系统</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">⚙️ QS-Robot外壳</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">📈 股票池</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">📊 技术分析</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">🧠 Vibe智能体</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">🤖 Cline智能体</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">🔄 模型切换</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="color: #6ba5f7;">💬 智能助手</span>
+    <span style="color: #8ba3c7; margin: 0 8px;">|</span>
+    <span style="background: #e74c3c; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px;">NEW</span>
+    <span style="color: #e74c3c;">🔧 系统维护</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>五、实施步骤</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <tr style="background: #16213e;">
+      <th style="padding: 8px; text-align: center; border-bottom: 1px solid #333;">步骤</th>
+      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #333;">内容</th>
+      <th style="padding: 8px; text-align: center; border-bottom: 1px solid #333;">影响</th>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">1</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">gateway.py 补充7个代理路由组</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">低风险</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">2</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">新建 maintenance.html（系统维护页面）</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">新增</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">3</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">修复 aurora_main.html（动态数据替换硬编码）</td>
+      <td style="padding: 8px; text-align: center; color: #f39c12; border-bottom: 1px solid #222;">中等风险</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">4</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">增强 main_system.html（自进化状态+基因进化）</td>
+      <td style="padding: 8px; text-align: center; color: #f39c12; border-bottom: 1px solid #222;">中等风险</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">5</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">更新所有页面导航栏（+系统维护）</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">批量修改</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">6</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">server.py 注册新路由</td>
+      <td style="padding: 8px; text-align: center; color: #27ae60; border-bottom: 1px solid #222;">低风险</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #222;">7</td>
+      <td style="padding: 8px; border-bottom: 1px solid #222;">重启服务 + 全面验证</td>
+      <td style="padding: 8px; text-align: center; color: #f39c12; border-bottom: 1px solid #222;">验证</td>
+    </tr>
+  </table>
+</div>

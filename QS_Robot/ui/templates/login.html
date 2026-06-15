@@ -373,7 +373,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         username: selectedUsername,
-                        password: 'password',
+                        password: document.getElementById('loginPassword')?.value || '',
                         city: '烟台',
                         remember_device: true
                     })

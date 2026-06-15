@@ -57,6 +57,10 @@ AURORA_COLORS = {
 CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.qs_robot_config.json')
 
 
+# 端口分配方案（"外壳+内核"架构）
+# - 5000: Aurora内核（原系统，策略/算法核心）
+# - 5001: QS-Robot外壳（UI/交互层）
+
 def load_config():
     """加载配置文件"""
     default_config = {
@@ -65,7 +69,8 @@ def load_config():
         'window_geometry': {'x': 100, 'y': 100, 'width': 400, 'height': 600},
         'fullscreen': False,
         'remote_host': '127.0.0.1',
-        'remote_port': 5000,
+        'remote_port': 5001,  # QS-Robot外壳端口
+        'aurora_port': 5000,  # Aurora内核端口
         'remember_login': False,
         'saved_credentials': {'username': '', 'password': ''}
     }
@@ -310,8 +315,14 @@ class AuroraAPIClient:
         """设置服务器地址"""
         self.base_url = f'http://{host}:{port}'
     
-    def login(self, username='admin', password='admin123'):
+    def login(self, username=None, password=None):
         """登录 Aurora 系统"""
+        if username is None:
+            username = os.environ.get('QS_ROBOT_USER', '')
+        if password is None:
+            password = os.environ.get('QS_ROBOT_PASSWORD', '')
+        if not username or not password:
+            raise ValueError("用户名和密码不能为空，请设置环境变量 QS_ROBOT_USER 和 QS_ROBOT_PASSWORD")
         try:
             response = requests.post(
                 f'{self.base_url}/api/auth/login',
@@ -1144,7 +1155,7 @@ class QSApplication:
         """登录成功"""
         # 测试连接
         server_host = self.config.get('remote_host', '127.0.0.1')
-        server_port = self.config.get('remote_port', 5000)
+        server_port = self.config.get('remote_port', 5001)  # 默认连接QS-Robot外壳(5001)
         
         # 设置API客户端
         self.main_window.api_client.set_server(server_host, server_port)

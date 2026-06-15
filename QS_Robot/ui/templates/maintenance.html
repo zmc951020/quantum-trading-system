@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统维护 - Aurora量化交易系统</title>
+    <style>
+        :root {
+            --bg-deep: #0a0d14;
+            --bg-card: #111620;
+            --bg-panel: #162033;
+            --accent-cyan: #00d4c8;
+            --accent-blue: #4a7dff;
+            --accent-purple: #7c5cfc;
+            --accent-gold: #c9a84c;
+            --text-primary: #e8ecf1;
+            --text-secondary: #8895a9;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --danger: #e74c5c;
+            --success: #00c853;
+            --warning: #f39c12;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-deep);
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+            min-height: 100vh;
+            color: var(--text-primary);
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #1a2744 0%, #0d1526 100%);
+            padding: 12px 30px;
+            border-bottom: 2px solid #2a3f5f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            font-size: 18px;
+            font-weight: 600;
+            color: #6ba5f7;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links { display: flex; gap: 20px; flex-wrap: wrap; }
+
+        .nav-links a {
+            color: #8ba3c7;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 15px;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: #fff; background: #1a2744; }
+
+        .main-container { padding: 30px; max-width: 1400px; margin: 0 auto; }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .page-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .page-header p { color: var(--text-secondary); margin-top: 8px; font-size: 14px; }
+
+        /* Tab导航 */
+        .tab-nav {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border-subtle);
+            margin-bottom: 25px;
+            overflow-x: auto;
+        }
+        .tab-btn {
+            padding: 12px 28px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .tab-btn:hover { color: var(--text-primary); }
+        .tab-btn.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 卡片 */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card-title .icon { font-size: 1.3rem; }
+
+        /* 配置项 */
+        .config-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .config-row:last-child { border-bottom: none; }
+        .config-label { font-size: 14px; }
+        .config-desc { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+        .config-value { font-size: 13px; color: var(--text-secondary); }
+        .config-value.status-on { color: var(--success); }
+        .config-value.status-off { color: var(--danger); }
+
+        /* 按钮 */
+        .btn {
+            padding: 8px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        .btn-primary { background: var(--accent-blue); color: #fff; }
+        .btn-primary:hover { background: #3a6dff; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-warning { background: var(--warning); color: #fff; }
+        .btn-sm { padding: 5px 14px; font-size: 12px; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+        }
+        .btn-outline:hover { background: var(--bg-panel); }
+
+        /* 状态指示器 */
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.online { background: var(--success); }
+        .status-dot.offline { background: var(--danger); }
+        .status-dot.warning { background: var(--warning); }
+
+        /* 表格 */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 2px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .data-table tr:hover { background: rgba(255,255,255,0.02); }
+
+        /* 输入框 */
+        .input-field {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 8px 14px;
+            color: var(--text-primary);
+            font-size: 13px;
+            width: 100%;
+        }
+        .input-field:focus { outline: none; border-color: var(--accent-blue); }
+
+        /* 网格 */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+
+        /* 统计卡片 */
+        .stat-card {
+            background: var(--bg-panel);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border-subtle);
+        }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--accent-blue); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 5px; }
+
+        /* 五层金字塔 */
+        .pyramid {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 20px 0;
+        }
+        .pyramid-layer {
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            text-align: center;
+            width: 80%;
+            font-weight: 600;
+        }
+        .layer-5 { background: var(--danger); width: 90%; }
+        .layer-4 { background: #e67e22; width: 78%; }
+        .layer-3 { background: var(--warning); width: 66%; }
+        .layer-2 { background: #3498db; width: 54%; }
+        .layer-1 { background: var(--success); width: 42%; }
+        .layer-desc { font-size: 11px; opacity: 0.85; font-weight: 400; margin-top: 3px; }
+
+        /* 巡检加载动画 */
+        @keyframes loadingBar {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(300%); }
+        }
+
+        /* 巡检详情折叠 */
+        .health-layer-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        .health-layer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .health-layer-header:hover { background: var(--bg-panel); }
+        .health-layer-body { display: none; padding: 0 20px 16px; }
+        .health-layer-body.open { display: block; }
+        .health-item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 13px;
+        }
+        .health-item-row:last-child { border-bottom: none; }
+        .health-item-pass { color: var(--success); }
+        .health-item-fail { color: var(--danger); }
+        .health-item-warn { color: var(--warning); }
+        .health-suggestion { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .alert-banner {
+            padding: 14px 20px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .alert-banner.critical { background: rgba(231, 76, 92, 0.15); border-left: 4px solid var(--danger); }
+        .alert-banner.warning { background: rgba(243, 156, 18, 0.15); border-left: 4px solid var(--warning); }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status-badge.healthy { background: rgba(0, 200, 83, 0.15); color: var(--success); }
+        .status-badge.warning { background: rgba(243, 156, 18, 0.15); color: var(--warning); }
+        .status-badge.critical { background: rgba(231, 76, 92, 0.15); color: var(--danger); }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+            .nav-links { gap: 10px; }
+            .nav-links a { font-size: 12px; padding: 6px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">Aurora 量化交易系统</div>
+        <div class="nav-links">
+            <a href="/dashboard">🏠 控制台</a>
+            <a href="/aurora_main">🚀 Aurora主系统</a>
+            <a href="/main_system">⚙️ QS-Robot外壳</a>
+            <a href="/stock_pool">📈 股票池</a>
+            <a href="/technical_analysis">📊 技术分析</a>
+            <a href="/vibe_analysis">🧠 Vibe智能体</a>
+            <a href="/cline-agent">🤖 Cline智能体</a>
+            <a href="/model-switch">🔄 模型切换</a>
+            <a href="/chat">💬 智能助手</a>
+            <a href="/maintenance" class="active">🔧 系统维护</a>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="page-header">
+            <h1>🔧 系统维护</h1>
+            <p>安全配置 · 用户管理 · 告警系统 · 系统监控 · 系统巡检</p>
+        </div>
+
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('security')">🛡️ 安全配置</button>
+            <button class="tab-btn" onclick="switchTab('users')">👥 用户管理</button>
+            <button class="tab-btn" onclick="switchTab('alerts')">🔔 告警系统</button>
+            <button class="tab-btn" onclick="switchTab('monitor')">📊 系统监控</button>
+            <button class="tab-btn" onclick="switchTab('health')">🏥 系统巡检</button>
+        </div>
+
+        <!-- ========== Tab 1: 安全配置 ========== -->
+        <div id="tab-security" class="tab-content active">
+            <div class="grid-2">
+                <!-- 登录安全 -->
+                <div class="card">
+                    <div class="card-title"><span class="icon">🔐</span> 登录安全</div>
+                    <div class="config-row">
+                        <div>
+                            <div class="config-label">双因素认证</div>
+                            <div class="config-desc">登录时要求第二因素验证</div>
+                        </div>
+                        <span class="config-value status-on">● 已启用</span>
+                    </div>
+                    <div class="config-row">
+                        <div>
+                            <div class="config-label">会话超时</div>
+                            <div class="config-desc">无操作自动退出时间</div>
+                        </div>
+                        <span class="config-value">30分钟</span>
+                    </div>
+                    <div class="config-row">
+                        <div>
+                            <div class="config-label">并发限制</div>
+                            <div class="config-desc">同一账号最大并发会话数</div>
+                        </div>
+                        <span class="config-value">3个</span>
+                    </div>
+                    <div class="config-row">
+                        <div>
+                            <div class="config-label">登录审计</div>
+                            <div class="config-desc">记录所有登录/登出事件</div>
+                        </div>
+                        <span class="config-value status-on">● 已启用</span>
+                    </div>
+                </div>
+
+                <!-- IP白名单 -->
+                <div class="card">
+                    <div class="card-title"><span class="icon">🌐</span> IP白名单</div>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <input type="text" class="input-field" id="ip-input" placeholder="输入IP地址...">
+                        <button class="btn btn-primary" onclick="addIP()">添加</button>
+                    </div>
+                    <div id="ip-list" style="font-size: 13px; color: var(--text-secondary);">
+                        <div class="config-row">
+                            <span>127.0.0.1</span>
+                            <span style="color: var(--success);">本地</span>
+                            <button class="btn btn-sm btn-danger" onclick="removeIP('127.0.0.1')">移除</button>
+                        </div>
+                        <div class="config-row">
+                            <span>192.168.1.100</span>
+                            <span style="color: var(--success);">工作站</span>
+                            <button class="btn btn-sm btn-danger" onclick="removeIP('192.168.1.100')">移除</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 五层防钓鱼 -->
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div class="card-title"><span class="icon">🏰</span> 五层金字塔防钓鱼体系</div>
+                    <div class="pyramid">
+                        <div class="pyramid-layer layer-5">
+                            第5层：生物特征验证
+                            <div class="layer-desc">人脸识别 · 声纹验证 · 设备指纹</div>
+                        </div>
+                        <div class="pyramid-layer layer-4">
+                            第4层：策略互锁
+                            <div class="layer-desc">多策略交叉验证 · 异常交易检测 · 风控模块监控</div>
+                        </div>
+                        <div class="pyramid-layer layer-3">
+                            第3层：IP与地理位置
+                            <div class="layer-desc">IP白名单 · 地理位置验证 · 异地登录检测</div>
+                        </div>
+                        <div class="pyramid-layer layer-2">
+                            第2层：会话安全
+                            <div class="layer-desc">会话管理 · 超时检测 · 并发限制</div>
+                        </div>
+                        <div class="pyramid-layer layer-1">
+                            第1层：基础认证
+                            <div class="layer-desc">bcrypt密码 · 双因素认证 · 登录审计</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 交易安全 -->
+                <div class="card">
+                    <div class="card-title"><span class="icon">💱</span> 交易安全</div>
+                    <div class="config-row">
+                        <div class="config-label">交易验证</div>
+                        <span class="config-value status-on">● 已启用</span>
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">一键冻结</div>
+                        <button class="btn btn-danger btn-sm" onclick="blockAllFunds()">紧急冻结</button>
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">黑名单管理</div>
+                        <span class="config-value">0条记录</span>
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">资金模式</div>
+                        <select class="input-field" style="width: auto;" onchange="setFundMode(this.value)">
+                            <option value="normal">正常模式</option>
+                            <option value="only-trading">仅交易</option>
+                            <option value="readonly">只读模式</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 安全审计 -->
+                <div class="card">
+                    <div class="card-title"><span class="icon">📋</span> 安全审计</div>
+                    <div id="audit-list" style="font-size: 13px; max-height: 200px; overflow-y: auto;">
+                        <div class="config-row" style="justify-content: center; color: var(--text-secondary);">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 2: 用户管理 ========== -->
+        <div id="tab-users" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div class="card-title" style="margin-bottom: 0;"><span class="icon">👥</span> 用户列表</div>
+                    <button class="btn btn-primary" onclick="showCreateUser()">+ 新建用户</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>用户名</th>
+                                <th>角色</th>
+                                <th>状态</th>
+                                <th>最后登录</th>
+                                <th>登录IP</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-table-body">
+                            <tr>
+                                <td>admin</td>
+                                <td><span style="color: var(--accent-gold);">管理员</span></td>
+                                <td><span class="status-dot online"></span> 活跃</td>
+                                <td>2026-06-15 09:30</td>
+                                <td>127.0.0.1</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline">编辑</button>
+                                    <button class="btn btn-sm btn-warning">禁用</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>trader</td>
+                                <td><span style="color: var(--accent-blue);">交易员</span></td>
+                                <td><span class="status-dot online"></span> 活跃</td>
+                                <td>2026-06-14 15:20</td>
+                                <td>192.168.1.100</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline">编辑</button>
+                                    <button class="btn btn-sm btn-warning">禁用</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>viewer</td>
+                                <td><span style="color: var(--text-secondary);">观察者</span></td>
+                                <td><span class="status-dot warning"></span> 未激活</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline">编辑</button>
+                                    <button class="btn btn-sm btn-success">启用</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 创建用户表单 -->
+            <div class="card" id="create-user-form" style="display: none;">
+                <div class="card-title"><span class="icon">➕</span> 新建用户</div>
+                <div class="grid-2">
+                    <div>
+                        <div class="config-label">用户名</div>
+                        <input type="text" class="input-field" id="new-username" placeholder="输入用户名">
+                    </div>
+                    <div>
+                        <div class="config-label">密码</div>
+                        <input type="password" class="input-field" id="new-password" placeholder="输入密码">
+                    </div>
+                    <div>
+                        <div class="config-label">角色</div>
+                        <select class="input-field" id="new-role">
+                            <option value="admin">管理员</option>
+                            <option value="trader">交易员</option>
+                            <option value="viewer">观察者</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: flex-end; gap: 10px;">
+                        <button class="btn btn-primary" onclick="createUser()">创建</button>
+                        <button class="btn btn-outline" onclick="hideCreateUser()">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 3: 告警系统 ========== -->
+        <div id="tab-alerts" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div class="card-title" style="margin-bottom: 0;"><span class="icon">🔔</span> 告警列表</div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-sm btn-outline" onclick="loadAlerts()">🔄 刷新</button>
+                        <button class="btn btn-sm btn-primary" onclick="showSendAlert()">+ 发送告警</button>
+                    </div>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>级别</th>
+                                <th>类型</th>
+                                <th>消息</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-table-body">
+                            <tr>
+                                <td>2026-06-15 09:00</td>
+                                <td><span style="color: var(--success);">INFO</span></td>
+                                <td>系统</td>
+                                <td>系统启动完成</td>
+                                <td><span style="color: var(--success);">已读</span></td>
+                                <td><button class="btn btn-sm btn-outline">详情</button></td>
+                            </tr>
+                            <tr>
+                                <td>2026-06-14 22:00</td>
+                                <td><span style="color: var(--warning);">WARN</span></td>
+                                <td>风控</td>
+                                <td>回撤超过阈值5%</td>
+                                <td><span style="color: var(--danger);">未读</span></td>
+                                <td><button class="btn btn-sm btn-primary btn-sm">标记已读</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 4: 系统监控 ========== -->
+        <div id="tab-monitor" class="tab-content">
+            <div class="grid-4">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-strategies">-</div>
+                    <div class="stat-label">策略数量</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--success);" id="stat-uptime">-</div>
+                    <div class="stat-label">运行时间</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--accent-gold);" id="stat-memory">-</div>
+                    <div class="stat-label">内存使用</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--accent-purple);" id="stat-cpu">-</div>
+                    <div class="stat-label">CPU使用率</div>
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top: 20px;">
+                <div class="card">
+                    <div class="card-title"><span class="icon">💚</span> 健康检查</div>
+                    <div id="health-check-list">
+                        <div class="config-row">
+                            <span>策略模块</span>
+                            <span class="config-value status-on">● 正常</span>
+                        </div>
+                        <div class="config-row">
+                            <span>数据库</span>
+                            <span class="config-value status-on">● 正常</span>
+                        </div>
+                        <div class="config-row">
+                            <span>风控模块</span>
+                            <span class="config-value status-on">● 正常</span>
+                        </div>
+                        <div class="config-row">
+                            <span>回测引擎</span>
+                            <span class="config-value status-on">● 正常</span>
+                        </div>
+                        <div class="config-row">
+                            <span>券商接口</span>
+                            <span class="config-value status-off">● 未连接</span>
+                        </div>
+                        <div class="config-row">
+                            <span>监控模块</span>
+                            <span class="config-value status-on">● 正常</span>
+                        </div>
+                        <div class="config-row">
+                            <span>ML模块</span>
+                            <span class="config-value status-on">● 正常</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title"><span class="icon">🗄️</span> 数据库统计</div>
+                    <div id="db-stats">
+                        <div class="config-row">
+                            <span>数据库大小</span>
+                            <span class="config-value">-</span>
+                        </div>
+                        <div class="config-row">
+                            <span>策略记录</span>
+                            <span class="config-value">-</span>
+                        </div>
+                        <div class="config-row">
+                            <span>回测记录</span>
+                            <span class="config-value">-</span>
+                        </div>
+                        <div class="config-row">
+                            <span>交易记录</span>
+                            <span class="config-value">-</span>
+                        </div>
+                        <div class="config-row">
+                            <span>审计日志</span>
+                            <span class="config-value">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 5: 系统巡检 ========== -->
+        <div id="tab-health" class="tab-content">
+            <!-- 操作栏 -->
+            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="runHealthCheck('quick')" id="btn-quick-check">
+                    🔍 快速巡检
+                </button>
+                <button class="btn btn-outline" onclick="runHealthCheck('deep')" id="btn-deep-check">
+                    🔬 深度巡检
+                </button>
+                <span style="color: var(--text-secondary); font-size: 13px;">|</span>
+                <button class="btn btn-success" onclick="toggleScheduler()" id="btn-scheduler">
+                    ⏰ 开启定时巡检
+                </button>
+                <span style="color: var(--text-secondary); font-size: 13px; margin-left: 8px;" id="scheduler-status">定时巡检: 已关闭</span>
+                <span style="color: var(--text-secondary); font-size: 12px; margin-left: auto;" id="last-check-time">上次巡检: -</span>
+            </div>
+
+            <!-- 评分大盘 -->
+            <div class="grid-4" style="margin-bottom: 20px;">
+                <div class="stat-card">
+                    <div class="stat-value" id="health-score">-</div>
+                    <div class="stat-label">健康评分</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--success);" id="health-passed">-</div>
+                    <div class="stat-label">通过项</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--danger);" id="health-failed">-</div>
+                    <div class="stat-label">失败项</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--accent-gold);" id="health-elapsed">-</div>
+                    <div class="stat-label">耗时(秒)</div>
+                </div>
+            </div>
+
+            <!-- 7层概览卡片 -->
+            <div class="grid-4" style="margin-bottom: 20px;" id="layer-cards">
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">🛡️</div>
+                    <div class="stat-label">安全与认证</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">🔗</div>
+                    <div class="stat-label">业务功能链路</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">⚡</div>
+                    <div class="stat-label">系统可靠性</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">📊</div>
+                    <div class="stat-label">数据与行情</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">💰</div>
+                    <div class="stat-label">交易与风控</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">🤖</div>
+                    <div class="stat-label">AI与智能体</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+                <div class="stat-card" style="opacity: 0.5;">
+                    <div style="font-size: 1.5rem;">🔧</div>
+                    <div class="stat-label">运维与部署</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">等待巡检...</div>
+                </div>
+            </div>
+
+            <!-- 巡检中加载动画 -->
+            <div id="health-loading" style="display: none; text-align: center; padding: 40px;">
+                <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+                <div style="color: var(--text-secondary);">巡检进行中，请稍候...</div>
+                <div style="width: 200px; height: 4px; background: var(--bg-panel); border-radius: 2px; margin: 15px auto; overflow: hidden;">
+                    <div style="width: 60%; height: 100%; background: var(--accent-blue); border-radius: 2px; animation: loadingBar 1.5s infinite;"></div>
+                </div>
+            </div>
+
+            <!-- 详情区 -->
+            <div id="health-detail" style="display: none;">
+                <!-- 告警区 -->
+                <div id="health-alerts" style="margin-bottom: 20px;"></div>
+
+                <!-- 各层详情 - 可折叠 -->
+                <div id="health-layers-detail"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab切换
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+
+            if (tab === 'monitor') loadMonitorData();
+            if (tab === 'alerts') loadAlerts();
+            if (tab === 'users') loadUsers();
+            if (tab === 'security') { loadIPWhitelist(); loadAuditLogs(); }
+            if (tab === 'health') loadSchedulerStatus();
+        }
+
+        // ========== IP白名单 ==========
+        function loadIPWhitelist() {
+            fetch('/api/security/whitelist/list')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data && d.data.ips) {
+                        const list = document.getElementById('ip-list');
+                        list.innerHTML = d.data.ips.map(ip => {
+                            let label = '';
+                            if (ip === '127.0.0.1' || ip === '::1') label = '<span style="color: var(--success);">本地</span>';
+                            else if (ip.startsWith('192.168.')) label = '<span style="color: var(--success);">内网</span>';
+                            else label = '<span style="color: var(--accent-blue);">外部</span>';
+                            return `<div class="config-row">
+                                <span>${ip}</span>
+                                ${label}
+                                <button class="btn btn-sm btn-danger" onclick="removeIP('${ip}')">移除</button>
+                            </div>`;
+                        }).join('');
+                    }
+                })
+                .catch(e => console.error('加载IP白名单失败:', e));
+        }
+
+        function addIP() {
+            const ip = document.getElementById('ip-input').value.trim();
+            if (!ip) { alert('请输入IP地址'); return; }
+            fetch('/api/security/whitelist/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip: ip })
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.data?.message || d.message || '添加成功');
+                document.getElementById('ip-input').value = '';
+                loadIPWhitelist();
+            })
+            .catch(e => alert('添加失败: ' + e));
+        }
+
+        function removeIP(ip) {
+            if (!confirm(`确认移除IP ${ip}？`)) return;
+            fetch('/api/security/whitelist/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip: ip })
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.data?.message || d.message || '移除成功');
+                loadIPWhitelist();
+            })
+            .catch(e => alert('移除失败: ' + e));
+        }
+
+        // ========== 安全审计日志 ==========
+        function loadAuditLogs() {
+            fetch('/api/security/audit-logs?limit=30')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data && d.data.logs) {
+                        const list = document.getElementById('audit-list');
+                        if (d.data.logs.length === 0) {
+                            list.innerHTML = '<div class="config-row" style="justify-content: center; color: var(--text-secondary);">暂无审计记录</div>';
+                            return;
+                        }
+                        list.innerHTML = d.data.logs.map(log => {
+                            let resultColor = 'var(--success)';
+                            if (log.result === 'failed') resultColor = 'var(--danger)';
+                            const opName = {
+                                'login': '登录', 'logout': '登出', 'strategy_start': '启动策略',
+                                'strategy_stop': '停止策略', 'backtest': '回测', 'optimization': '优化',
+                                'risk_alert': '风控告警', 'admin_action': '管理操作',
+                            }[log.operation] || log.operation;
+                            return `<div class="config-row">
+                                <span>${log.time || '-'}</span>
+                                <span style="color: ${resultColor};">${opName}${log.result === 'failed' ? '失败' : '成功'}</span>
+                                <span>${log.user}${log.ip ? ' (' + log.ip + ')' : ''}</span>
+                            </div>`;
+                        }).join('');
+                    }
+                })
+                .catch(e => console.error('加载审计日志失败:', e));
+        }
+
+        function blockAllFunds() {
+            if (!confirm('确认冻结所有资金？此操作不可撤销！')) return;
+            fetch('/api/fund/block-all', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => alert(d.message || '资金已冻结'))
+                .catch(e => alert('冻结失败: ' + e));
+        }
+
+        function setFundMode(mode) {
+            fetch('/api/fund/mode/only-trading', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: mode })
+            })
+            .then(r => r.json())
+            .then(d => alert(d.message || '模式已切换'))
+            .catch(e => alert('切换失败: ' + e));
+        }
+
+        // 用户管理功能
+        function showCreateUser() {
+            document.getElementById('create-user-form').style.display = 'block';
+        }
+
+        function hideCreateUser() {
+            document.getElementById('create-user-form').style.display = 'none';
+        }
+
+        function createUser() {
+            const username = document.getElementById('new-username').value.trim();
+            const password = document.getElementById('new-password').value.trim();
+            const role = document.getElementById('new-role').value;
+            if (!username || !password) { alert('请填写用户名和密码'); return; }
+
+            fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, role })
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.message || '用户已创建');
+                hideCreateUser();
+                loadUsers();
+            })
+            .catch(e => alert('创建失败: ' + e));
+        }
+
+        function loadUsers() {
+            fetch('/api/users')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data && d.data.users) {
+                        const tbody = document.getElementById('users-table-body');
+                        tbody.innerHTML = d.data.users.map(u => `
+                            <tr>
+                                <td><strong>${u.username || '?'}</strong></td>
+                                <td><span style="color: ${u.role === 'admin' ? 'var(--accent-gold)' : 'var(--accent-blue)'};">${u.role || 'user'}</span></td>
+                                <td><span class="status-dot online"></span> ${u.status || '活跃'}</td>
+                                <td>${u.last_login || '-'}</td>
+                                <td>${u.last_ip || '-'}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline">编辑</button>
+                                    <button class="btn btn-sm btn-warning">禁用</button>
+                                </td>
+                            </tr>
+                        `).join('');
+                    }
+                })
+                .catch(e => console.error('加载用户失败:', e));
+        }
+
+        // 告警系统功能
+        function loadAlerts() {
+            fetch('/api/alerts')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data && d.data.alerts) {
+                        const tbody = document.getElementById('alerts-table-body');
+                        tbody.innerHTML = d.data.alerts.map(a => `
+                            <tr>
+                                <td>${a.time || '-'}</td>
+                                <td>${a.level || 'INFO'}</td>
+                                <td>${a.type || '-'}</td>
+                                <td>${a.message || '-'}</td>
+                                <td>${a.read ? '<span style="color: var(--success);">已读</span>' : '<span style="color: var(--danger);">未读</span>'}</td>
+                                <td>${a.read ? '' : '<button class="btn btn-sm btn-primary" onclick="markRead(\'' + a.id + '\')">标记已读</button>'}</td>
+                            </tr>
+                        `).join('');
+                    }
+                })
+                .catch(e => console.error('加载告警失败:', e));
+        }
+
+        function markRead(id) {
+            fetch('/api/alerts/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            })
+            .then(r => r.json())
+            .then(d => { alert(d.message || '已标记'); loadAlerts(); })
+            .catch(e => alert('失败: ' + e));
+        }
+
+        function showSendAlert() {
+            const message = prompt('输入告警消息:');
+            if (!message) return;
+            const level = prompt('告警级别 (INFO/WARN/ERROR):', 'INFO');
+            fetch('/api/alerts/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, level })
+            })
+            .then(r => r.json())
+            .then(d => { alert(d.message || '告警已发送'); loadAlerts(); })
+            .catch(e => alert('发送失败: ' + e));
+        }
+
+        // 系统监控功能
+        function loadMonitorData() {
+            // 加载健康检查
+            fetch('/api/health/full')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data) {
+                        const data = d.data;
+                        document.getElementById('stat-strategies').textContent = data.strategies || '-';
+                        document.getElementById('stat-memory').textContent = data.memory || '-';
+                        document.getElementById('stat-cpu').textContent = data.cpu || '-';
+
+                        // 更新健康检查列表
+                        const healthList = document.getElementById('health-check-list');
+                        healthList.innerHTML = `
+                            <div class="config-row"><span>策略模块</span><span class="config-value ${data.strategies ? 'status-on' : 'status-off'}">${data.strategies ? '● 正常' : '● 异常'}</span></div>
+                            <div class="config-row"><span>数据库</span><span class="config-value ${data.database ? 'status-on' : 'status-off'}">${data.database ? '● 正常' : '● 异常'}</span></div>
+                            <div class="config-row"><span>风控模块</span><span class="config-value ${data.risk ? 'status-on' : 'status-off'}">${data.risk ? '● 正常' : '● 异常'}</span></div>
+                            <div class="config-row"><span>回测引擎</span><span class="config-value ${data.backtest ? 'status-on' : 'status-off'}">${data.backtest ? '● 正常' : '● 异常'}</span></div>
+                            <div class="config-row"><span>券商接口</span><span class="config-value ${data.broker ? 'status-on' : 'status-off'}">${data.broker ? '● 正常' : '● 未连接'}</span></div>
+                            <div class="config-row"><span>监控模块</span><span class="config-value ${data.monitor ? 'status-on' : 'status-off'}">${data.monitor ? '● 正常' : '● 异常'}</span></div>
+                            <div class="config-row"><span>ML模块</span><span class="config-value ${data.ml ? 'status-on' : 'status-off'}">${data.ml ? '● 正常' : '● 异常'}</span></div>
+                        `;
+                    }
+                })
+                .catch(e => console.error('加载健康检查失败:', e));
+
+            // 加载监控状态
+            fetch('/api/monitor/status')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data) {
+                        document.getElementById('stat-uptime').textContent = d.data.uptime || '-';
+                    }
+                })
+                .catch(e => console.error('加载监控状态失败:', e));
+
+            // 加载数据库统计
+            fetch('/api/monitor/database-stats')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data) {
+                        const dbStats = document.getElementById('db-stats');
+                        dbStats.innerHTML = `
+                            <div class="config-row"><span>数据库大小</span><span class="config-value">${d.data.size || '-'}</span></div>
+                            <div class="config-row"><span>策略记录</span><span class="config-value">${d.data.strategies || '-'}</span></div>
+                            <div class="config-row"><span>回测记录</span><span class="config-value">${d.data.backtests || '-'}</span></div>
+                            <div class="config-row"><span>交易记录</span><span class="config-value">${d.data.trades || '-'}</span></div>
+                            <div class="config-row"><span>审计日志</span><span class="config-value">${d.data.audit_logs || '-'}</span></div>
+                        `;
+                    }
+                })
+                .catch(e => console.error('加载数据库统计失败:', e));
+        }
+
+        // ========== 系统巡检 ==========
+        let schedulerRunning = false;
+
+        function runHealthCheck(mode) {
+            document.getElementById('health-loading').style.display = 'block';
+            document.getElementById('health-detail').style.display = 'none';
+            document.getElementById('btn-quick-check').disabled = true;
+            document.getElementById('btn-deep-check').disabled = true;
+
+            fetch('/api/health/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: mode })
+            })
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('health-loading').style.display = 'none';
+                document.getElementById('btn-quick-check').disabled = false;
+                document.getElementById('btn-deep-check').disabled = false;
+                if (d.success && d.data) {
+                    renderHealthReport(d.data);
+                    document.getElementById('last-check-time').textContent = '上次巡检: ' + new Date().toLocaleTimeString();
+                } else {
+                    alert('巡检失败: ' + (d.message || '未知错误'));
+                }
+            })
+            .catch(e => {
+                document.getElementById('health-loading').style.display = 'none';
+                document.getElementById('btn-quick-check').disabled = false;
+                document.getElementById('btn-deep-check').disabled = false;
+                alert('巡检请求失败: ' + e);
+            });
+        }
+
+        function renderHealthReport(data) {
+            document.getElementById('health-detail').style.display = 'block';
+
+            // 评分大盘
+            const score = data.overall_score;
+            const scoreEl = document.getElementById('health-score');
+            scoreEl.textContent = score;
+            if (data.overall_status === 'healthy') scoreEl.style.color = 'var(--success)';
+            else if (data.overall_status === 'warning') scoreEl.style.color = 'var(--warning)';
+            else scoreEl.style.color = 'var(--danger)';
+
+            document.getElementById('health-passed').textContent = data.passed_checks;
+            document.getElementById('health-failed').textContent = data.failed_checks;
+            document.getElementById('health-elapsed').textContent = data.elapsed_seconds;
+
+            // 层级卡片
+            renderLayerCards(data.layers);
+
+            // 告警
+            renderAlerts(data.alerts);
+
+            // 详情
+            renderLayersDetail(data.layers);
+        }
+
+        function renderLayerCards(layers) {
+            const container = document.getElementById('layer-cards');
+            const allLayers = [
+                { icon: '🛡️', name: '安全与认证', key: 'L1_安全认证' },
+                { icon: '🔗', name: '业务功能链路', key: 'L2_业务链路' },
+                { icon: '⚡', name: '系统可靠性', key: 'L3_系统可靠性' },
+                { icon: '📊', name: '数据与行情', key: 'L4_数据行情' },
+                { icon: '💰', name: '交易与风控', key: 'L5_交易风控' },
+                { icon: '🤖', name: 'AI与智能体', key: 'L6_AI智能体' },
+                { icon: '🔧', name: '运维与部署', key: 'L7_运维部署' },
+            ];
+
+            const layerMap = {};
+            layers.forEach(l => layerMap[l.layer] = l);
+
+            container.innerHTML = allLayers.map(ll => {
+                const l = layerMap[ll.key];
+                if (!l) return `<div class="stat-card"><div style="font-size:1.5rem;">${ll.icon}</div><div class="stat-label">${ll.name}</div><div style="font-size:12px;color:var(--text-secondary);">无数据</div></div>`;
+
+                let statusColor = 'var(--success)';
+                if (l.status === 'warning') statusColor = 'var(--warning)';
+                else if (l.status === 'critical') statusColor = 'var(--danger)';
+
+                let statusText = '健康';
+                if (l.status === 'warning') statusText = '警告';
+                else if (l.status === 'critical') statusText = '严重';
+
+                return `<div class="stat-card">
+                    <div style="font-size:1.5rem;">${l.icon || ll.icon}</div>
+                    <div class="stat-label">${l.name}</div>
+                    <div style="font-size:13px;font-weight:600;color:${statusColor};">${statusText} ${l.passed}/${l.total}</div>
+                    <div style="font-size:11px;color:var(--text-secondary);">评分 ${l.score}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderAlerts(alerts) {
+            const container = document.getElementById('health-alerts');
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            container.innerHTML = alerts.map(a => `<div class="alert-banner ${a.level}">
+                <span>${a.level === 'critical' ? '🔴' : '🟡'}</span>
+                <div>
+                    <strong>${a.title}</strong>
+                    <div style="margin-top: 3px;">${a.message}</div>
+                    ${a.suggestion ? `<div class="health-suggestion">💡 ${a.suggestion}</div>` : ''}
+                </div>
+            </div>`).join('');
+        }
+
+        function renderLayersDetail(layers) {
+            const container = document.getElementById('health-layers-detail');
+            container.innerHTML = layers.map(l => {
+                const items = (l.items || []).map(it => {
+                    let cls = 'health-item-pass';
+                    let icon = '✅';
+                    if (!it.passed) {
+                        cls = it.severity === 'critical' ? 'health-item-fail' : 'health-item-warn';
+                        icon = it.severity === 'critical' ? '❌' : '⚠️';
+                    }
+                    return `<div class="health-item-row">
+                        <div>
+                            <span class="${cls}">${icon} ${it.name}</span>
+                            <div style="font-size:12px;color:var(--text-secondary);">${it.detail}</div>
+                            ${!it.passed && it.suggestion ? `<div class="health-suggestion">💡 ${it.suggestion}</div>` : ''}
+                        </div>
+                        <span style="font-size:11px;color:var(--text-secondary);">${it.elapsed_ms}ms</span>
+                    </div>`;
+                }).join('');
+
+                let badge = '<span class="status-badge healthy">健康</span>';
+                if (l.status === 'warning') badge = '<span class="status-badge warning">警告</span>';
+                else if (l.status === 'critical') badge = '<span class="status-badge critical">严重</span>';
+
+                return `<div class="health-layer-card">
+                    <div class="health-layer-header" onclick="this.nextElementSibling.classList.toggle('open')">
+                        <div>
+                            <span style="font-size:1.1rem;margin-right:8px;">${l.icon || '📋'}</span>
+                            <strong>${l.name}</strong>
+                            ${badge}
+                        </div>
+                        <div style="color:var(--text-secondary);font-size:13px;">
+                            评分 ${l.score} · ${l.passed}/${l.total}通过 · ▼
+                        </div>
+                    </div>
+                    <div class="health-layer-body">${items}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function toggleScheduler() {
+            if (schedulerRunning) {
+                fetch('/api/health/scheduler', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'stop' })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    schedulerRunning = false;
+                    updateSchedulerUI();
+                });
+            } else {
+                const interval = prompt('定时巡检间隔（分钟）:', '30');
+                if (!interval) return;
+                fetch('/api/health/scheduler', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'start', interval: parseInt(interval) })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    schedulerRunning = true;
+                    updateSchedulerUI();
+                });
+            }
+        }
+
+        function loadSchedulerStatus() {
+            fetch('/api/health/scheduler', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'status' })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success && d.data) {
+                    schedulerRunning = d.data.running || false;
+                    updateSchedulerUI();
+                    if (d.data.last_report) {
+                        document.getElementById('last-check-time').textContent =
+                            '上次巡检: ' + new Date(d.data.last_report.timestamp).toLocaleTimeString();
+                    }
+                }
+            });
+        }
+
+        function updateSchedulerUI() {
+            const btn = document.getElementById('btn-scheduler');
+            const status = document.getElementById('scheduler-status');
+            if (schedulerRunning) {
+                btn.textContent = '⏸️ 关闭定时巡检';
+                btn.className = 'btn btn-danger';
+                status.textContent = '定时巡检: 运行中';
+                status.style.color = 'var(--success)';
+            } else {
+                btn.textContent = '⏰ 开启定时巡检';
+                btn.className = 'btn btn-success';
+                status.textContent = '定时巡检: 已关闭';
+                status.style.color = 'var(--text-secondary)';
+            }
+        }
+
+        // 初始加载
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMonitorData();
+            loadIPWhitelist();
+            loadAuditLogs();
+        });
+    </script>
+</body>
+</html>

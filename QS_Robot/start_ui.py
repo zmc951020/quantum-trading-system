@@ -34,6 +34,7 @@ except ImportError:
 
 try:
     from ui.server import app
+    from config.config import config
     print("[OK] UI 模块加载成功")
 except Exception as e:
     print(f"[ERROR] UI 模块加载失败: {e}")
@@ -41,10 +42,13 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
+# 从配置读取端口
+shell_port = config.get('port_allocation.qs_robot_shell', 5001)
+
 print("\n启动服务器...")
-print("访问地址: http://localhost:5000")
+print(f"访问地址: http://localhost:{shell_port}")
 print("按 Ctrl+C 停止服务器")
 print("=" * 60 + "\n")
 
-app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False)
 

@@ -1,4 +1,25 @@
 {
+  "port_allocation": {
+    "aurora_kernel": 5002,
+    "qs_robot_shell": 5003
+  },
+  "aurora_api_gateway": {
+    "enabled": true,
+    "aurora_base_url": "http://127.0.0.1:5002",
+    "auth": {
+      "username": "admin",
+      "_comment": "password must be set via environment variable AURORA_ADMIN_PASSWORD, not hardcoded in config",
+      "password": ""
+    },
+    "cache": {
+      "enabled": true,
+      "default_ttl": 60
+    },
+    "timeout": {
+      "read": 30,
+      "write": 60
+    }
+  },
   "llm_providers": {
     "ollama": {
       "enabled": true,

@@ -1,23 +1,29 @@
-
 import os
 import sys
 import uuid
+import urllib.request
+import json as _json
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, send_from_directory, redirect, url_for
+from flask import Flask, render_template, jsonify, request, send_from_directory, redirect, url_for, make_response
 from flask_cors import CORS
 
-# 模拟用户数据库
+# 模拟用户数据库（密码将在启动时通过bcrypt哈希初始化）
 USERS = {
-    'admin': {'password': 'password', 'role': 'admin', 'name': '系统管理员', 'tier': 1},
-    'trader': {'password': 'password', 'role': 'trader', 'name': '交易员', 'tier': 2},
-    'analyst': {'password': 'password', 'role': 'analyst', 'name': '分析师', 'tier': 3},
-    'risk': {'password': 'password', 'role': 'risk', 'name': '风控员', 'tier': 4},
-    'viewer': {'password': 'password', 'role': 'viewer', 'name': '查看员', 'tier': 5},
-    'guest': {'password': 'password', 'role': 'guest', 'name': '访客', 'tier': 6},
+    'admin': {'password': 'admin123', 'role': 'admin', 'name': '系统管理员', 'tier': 1},
+    'trader': {'password': 'trader123', 'role': 'trader', 'name': '交易员', 'tier': 2},
+    'analyst': {'password': 'analyst123', 'role': 'analyst', 'name': '分析师', 'tier': 3},
+    'risk': {'password': 'risk123', 'role': 'risk', 'name': '风控员', 'tier': 4},
+    'viewer': {'password': 'viewer123', 'role': 'viewer', 'name': '查看员', 'tier': 5},
+    'guest': {'password': 'guest', 'role': 'guest', 'name': '访客', 'tier': 6},
 }
 
-# 会话存储（内存）
+# 会话存储（内存）+ 失败登录计数器
 SESSIONS = {}
+FAILED_LOGINS = {}  # IP -> {count, last_attempt, blocked_until}
+
+SESSION_TIMEOUT_HOURS = 2  # 金融系统会话超时：2小时
+MAX_FAILED_LOGINS = 5      # 最大失败次数
+LOGIN_LOCKOUT_MINUTES = 15  # 锁定时间：15分钟
 
 def create_session(username):
     """创建会话"""
@@ -26,7 +32,7 @@ def create_session(username):
         'username': username,
         'user': USERS[username],
         'created_at': datetime.now(),
-        'expires_at': datetime.now() + timedelta(hours=24)
+        'expires_at': datetime.now() + timedelta(hours=SESSION_TIMEOUT_HOURS)
     }
     return session_id
 
@@ -67,12 +73,31 @@ from config.config import config
 from llm_manager import llm_manager
 from extensions.data_sources import AuroraDataSource
 from qs_robot_core import QSRobotCore
+from core.security import get_password_manager, get_audit_logger, OperationType
 
 # 导入股票池智能管理系统
 from stock_pool.main import StockPoolSystem
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
-CORS(app)  # 允许跨域
+# 安全模块实例
+password_manager = get_password_manager()
+audit_logger = get_audit_logger()
+
+# 初始化密码哈希（将明文密码转换为bcrypt哈希，确保登录验证通过）
+for username, info in USERS.items():
+    plain_pw = info['password']
+    # 如果密码不是bcrypt哈希格式，则进行哈希
+    if not plain_pw.startswith('$2b$') and not plain_pw.startswith('$2a$'):
+        info['password'] = password_manager.hash_password_str(plain_pw)
+        print(f"[Auth] 用户 {username} 密码已哈希")
+
+app = Flask(__name__, static_folder='static', template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
+# 安全CORS配置：仅允许本地和可信域名
+cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5003,http://127.0.0.1:5003,http://localhost:5000')
+CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in cors_origins.split(',')]}})
+
+# 禁用模板缓存
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.jinja_env.auto_reload = True
 
 # 初始化数据源和机器人核心
 data_source = AuroraDataSource()
@@ -82,18 +107,48 @@ robot_core = QSRobotCore()
 # 初始化股票池系统
 stock_pool_system = StockPoolSystem()
 
+# ============================================================
+# 注册API网关蓝图（豆包融合方案）
+# 统一通过 gateway.py 管理所有 /api/* 路由，消除路由重复冲突
+# ============================================================
+try:
+    from api.gateway import api_gateway
+
+    # 注册API网关蓝图（统一入口，url_prefix='/api' 已在网关内部定义）
+    app.register_blueprint(api_gateway)
+
+    print("[API Gateway] API网关已注册（统一入口）")
+    print("[API Gateway] - /api/aurora/* -> Aurora代理")
+    print("[API Gateway] - /api/strategy/* -> 策略路由")
+    print("[API Gateway] - /api/backtest/* -> 回测路由")
+    print("[API Gateway] - /api/risk/* -> 风控路由")
+    print("[API Gateway] - /api/broker/* -> 经纪商路由")
+    print("[API Gateway] - /api/status -> 系统状态")
+    print("[API Gateway] - /api/health -> 健康检查")
+except ImportError as e:
+    print(f"[API Gateway] API网关导入失败: {e}")
+except Exception as e:
+    print(f"[API Gateway] API网关注册失败: {e}")
+
+
+@app.route('/dashboard')
+def dashboard_home():
+    """控制台首页 - 策略优化+Vibe智能体分析+股票池"""
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
+    return render_template('dashboard.html')
+
 
 @app.route('/')
-def dashboard_home():
-    """统一控制台首页 - 含模块导航+自动化流程+机器人浮标"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
-    return render_template('dashboard.html')
+def root_home():
+    """根路径 - 跳转到控制台首页"""
+    return redirect(url_for('dashboard_home'))
 
 
 @app.route('/chat')
 def chat_page():
-    """纯对话智能助手页面（原 index.html）"""
+    """智能助手对话页面 - 可与AI对话"""
     if not is_logged_in():
         return redirect(url_for('login_page'))
     return render_template('index.html')
@@ -127,28 +182,117 @@ def logout():
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
-    """登录API"""
+    """登录API - 使用bcrypt密码加密验证"""
     try:
         data = request.get_json()
         username = data.get('username', '')
         password = data.get('password', '')
         city = data.get('city', '')
         
+        # 获取客户端IP
+        ip_address = request.remote_addr
+        
+        # IP白名单校验（非本地地址时检查）
+        if ip_address not in ('127.0.0.1', '::1'):
+            try:
+                from api.aurora_core_adapter import get_aurora_adapter
+                adapter = get_aurora_adapter()
+                if not adapter.is_ip_whitelisted(ip_address):
+                    audit_logger.log(
+                        user="anonymous",
+                        operation=OperationType.LOGIN,
+                        target=username,
+                        result="failed",
+                        details={"reason": "IP不在白名单中"},
+                        ip_address=ip_address
+                    )
+                    return jsonify({
+                        "success": False,
+                        "message": f"IP {ip_address} 不在白名单中，登录被拒绝"
+                    }), 403
+            except Exception as e:
+                print(f"[Auth] IP白名单检查异常: {e}")
+        
+        # 暴力破解防护
+        now = datetime.now()
+        if ip_address in FAILED_LOGINS:
+            lockout = FAILED_LOGINS[ip_address]
+            if lockout.get('blocked_until') and now < lockout['blocked_until']:
+                remaining = int((lockout['blocked_until'] - now).total_seconds())
+                return jsonify({
+                    "success": False,
+                    "message": f"登录尝试过多，请{remaining}秒后重试"
+                }), 429
+        
         if not username or not password:
+            # 记录失败日志
+            audit_logger.log(
+                user="anonymous",
+                operation=OperationType.LOGIN,
+                target=username,
+                result="failed",
+                details={"reason": "用户名或密码为空"},
+                ip_address=ip_address
+            )
             return jsonify({"success": False, "message": "用户名或密码不能为空"}), 400
         
         user = USERS.get(username)
-        if not user or user['password'] != password:
+        if not user:
+            # 记录失败日志
+            audit_logger.log(
+                user="anonymous",
+                operation=OperationType.LOGIN,
+                target=username,
+                result="failed",
+                details={"reason": "用户不存在"},
+                ip_address=ip_address
+            )
+            return jsonify({"success": False, "message": "用户名或密码错误"}), 401
+        
+        # 使用bcrypt验证密码
+        if not password_manager.verify_password_str(password, user['password']):
+            # 记录失败登录
+            if ip_address not in FAILED_LOGINS:
+                FAILED_LOGINS[ip_address] = {'count': 0, 'last_attempt': now}
+            FAILED_LOGINS[ip_address]['count'] += 1
+            FAILED_LOGINS[ip_address]['last_attempt'] = now
+            if FAILED_LOGINS[ip_address]['count'] >= MAX_FAILED_LOGINS:
+                FAILED_LOGINS[ip_address]['blocked_until'] = now + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+            # 记录失败日志
+            audit_logger.log(
+                user="anonymous",
+                operation=OperationType.LOGIN,
+                target=username,
+                result="failed",
+                details={"reason": "密码错误"},
+                ip_address=ip_address
+            )
             return jsonify({"success": False, "message": "用户名或密码错误"}), 401
         
         session_id = create_session(username)
         
-        return jsonify({
+        # 登录成功，清除失败计数
+        FAILED_LOGINS.pop(ip_address, None)
+        
+        # 记录成功登录日志
+        audit_logger.log(
+            user=username,
+            operation=OperationType.LOGIN,
+            target=username,
+            result="success",
+            details={"role": user['role'], "city": city},
+            ip_address=ip_address,
+            session_id=session_id
+        )
+        
+        resp = jsonify({
             "success": True,
             "message": "登录成功",
             "session_id": session_id,
             "user": user
         })
+        resp.set_cookie('session_id', session_id, max_age=86400)
+        return resp
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -197,17 +341,40 @@ def api_get_users():
 
 @app.route('/main_system')
 def main_system_page():
-    """策略管理主系统"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
+    """QS-Robot 外壳 - 包含导航栏、七大进入模块、模型切换、技术分析"""
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
     return render_template('main_system.html')
+
+
+@app.route('/aurora_main')
+def aurora_main_page():
+    """Aurora 量化主系统 - 策略管理核心、优化器中心、完整工作流"""
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
+    return render_template('aurora_main.html')
+
+
+@app.route('/aurora_core')
+def aurora_core_page():
+    """Aurora 量化核心系统 - 备用入口"""
+    return render_template('aurora_main.html')
+
+
+@app.route('/maintenance')
+def maintenance_page():
+    """系统维护页面 - 安全配置、用户管理、告警系统、系统监控"""
+    return render_template('maintenance.html')
 
 
 @app.route('/stock_pool')
 def stock_pool_page():
     """股票池智能管理系统页面"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
     return render_template('stock_pool.html')
 
 
@@ -679,24 +846,27 @@ def integration_health_check():
 @app.route('/technical_analysis')
 def technical_analysis_page():
     """技术分析系统页面"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
     return render_template('technical_analysis.html')
 
 
 @app.route('/cline-agent')
 def cline_agent_page():
-    """Cline智能体聊天页面"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
+    """Cline智能体交互页面"""
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
     return render_template('cline_agent.html')
 
 
 @app.route('/model-switch')
 def model_switch_page():
     """模型切换面板页面"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
     return render_template('model_switch.html')
 
 
@@ -742,8 +912,9 @@ def technical_analyze():
 @app.route('/vibe_analysis')
 def vibe_analysis_page():
     """Vibe-Trading智能体可视化分析页面"""
-    if not is_logged_in():
-        return redirect(url_for('login_page'))
+    # 临时跳过登录验证
+    # if not is_logged_in():
+    #     return redirect(url_for('login_page'))
     return render_template('vibe_analysis.html')
 
 
@@ -1888,48 +2059,129 @@ LLM_CONFIG = {
 
 @app.route('/api/llm/models', methods=['GET'])
 def api_llm_models():
-    """获取可用模型列表"""
+    """获取可用模型列表 - 从llm_manager动态获取"""
     try:
-        models = [
-            {"name": "gpt-4o", "provider": "EchoBird", "description": "GPT-4o 高性能模型，适合复杂推理和量化分析", "context": "128K", "performance": "高", "price": "中", "is_active": LLM_CONFIG['current_model'] == 'gpt-4o'},
-            {"name": "gpt-4", "provider": "EchoBird", "description": "GPT-4 旗舰模型，最强推理能力", "context": "8K", "performance": "极高", "price": "高", "is_active": LLM_CONFIG['current_model'] == 'gpt-4'},
-            {"name": "gpt-3.5-turbo", "provider": "EchoBird", "description": "GPT-3.5 Turbo，性价比之选", "context": "16K", "performance": "中", "price": "低", "is_active": LLM_CONFIG['current_model'] == 'gpt-3.5-turbo'},
-            {"name": "claude-3-opus", "provider": "EchoBird", "description": "Claude 3 Opus，超长上下文", "context": "200K", "performance": "极高", "price": "高", "is_active": LLM_CONFIG['current_model'] == 'claude-3-opus'},
-            {"name": "claude-3-sonnet", "provider": "EchoBird", "description": "Claude 3 Sonnet，平衡性能与成本", "context": "200K", "performance": "高", "price": "中", "is_active": LLM_CONFIG['current_model'] == 'claude-3-sonnet'},
-            {"name": "gemini-1.5-pro", "provider": "EchoBird", "description": "Gemini 1.5 Pro，多模态能力强", "context": "1M", "performance": "极高", "price": "高", "is_active": LLM_CONFIG['current_model'] == 'gemini-1.5-pro'},
-            {"name": "deepseek-chat", "provider": "EchoBird", "description": "深度求索开源模型，量化专用", "context": "64K", "performance": "中", "price": "免费", "is_active": LLM_CONFIG['current_model'] == 'deepseek-chat'},
-            {"name": "qwen-max", "provider": "EchoBird", "description": "通义千问 Max，中文优化", "context": "128K", "performance": "高", "price": "中", "is_active": LLM_CONFIG['current_model'] == 'qwen-max'},
-        ]
-        
+        # 尝试从EchoBird提供者获取动态模型列表
+        echobird_provider = llm_manager.get_provider('echobird')
+        dynamic_models = []
+
+        if echobird_provider:
+            # 检查EchoBird服务是否可用
+            is_available = echobird_provider.is_available()
+
+            if is_available:
+                # 从EchoBird服务获取实际可用的模型列表
+                available_models = echobird_provider.get_available_models()
+
+                # 如果获取到了模型列表，使用动态列表
+                if available_models:
+                    current_model = llm_manager.active_provider.model if llm_manager.active_provider else LLM_CONFIG['current_model']
+
+                    for model_name in available_models:
+                        # 根据模型名称推断描述信息
+                        desc = _get_model_description(model_name)
+                        dynamic_models.append({
+                            "name": model_name,
+                            "provider": "EchoBird",
+                            "description": desc,
+                            "context": "动态",
+                            "performance": "动态",
+                            "price": "动态",
+                            "is_active": model_name == current_model
+                        })
+
+        # 如果动态获取失败，使用默认列表
+        if not dynamic_models:
+            current_model = LLM_CONFIG['current_model']
+            dynamic_models = [
+                {"name": "gpt-4o", "provider": "EchoBird", "description": "GPT-4o 高性能模型，适合复杂推理和量化分析", "context": "128K", "performance": "高", "price": "中", "is_active": current_model == 'gpt-4o'},
+                {"name": "gpt-4", "provider": "EchoBird", "description": "GPT-4 旗舰模型，最强推理能力", "context": "8K", "performance": "极高", "price": "高", "is_active": current_model == 'gpt-4'},
+                {"name": "gpt-3.5-turbo", "provider": "EchoBird", "description": "GPT-3.5 Turbo，性价比之选", "context": "16K", "performance": "中", "price": "低", "is_active": current_model == 'gpt-3.5-turbo'},
+                {"name": "claude-3-opus", "provider": "EchoBird", "description": "Claude 3 Opus，超长上下文", "context": "200K", "performance": "极高", "price": "高", "is_active": current_model == 'claude-3-opus'},
+                {"name": "claude-3-sonnet", "provider": "EchoBird", "description": "Claude 3 Sonnet，平衡性能与成本", "context": "200K", "performance": "高", "price": "中", "is_active": current_model == 'claude-3-sonnet'},
+                {"name": "gemini-1.5-pro", "provider": "EchoBird", "description": "Gemini 1.5 Pro，多模态能力强", "context": "1M", "performance": "极高", "price": "高", "is_active": current_model == 'gemini-1.5-pro'},
+                {"name": "deepseek-chat", "provider": "EchoBird", "description": "深度求索开源模型，量化专用", "context": "64K", "performance": "中", "price": "免费", "is_active": current_model == 'deepseek-chat'},
+                {"name": "qwen-max", "provider": "EchoBird", "description": "通义千问 Max，中文优化", "context": "128K", "performance": "高", "price": "中", "is_active": current_model == 'qwen-max'},
+            ]
+
         return jsonify({
             "success": True,
-            "models": models,
+            "models": dynamic_models,
             "current_model": LLM_CONFIG['current_model'],
             "provider": "EchoBird",
+            "echobird_available": echobird_provider.is_available() if echobird_provider else False,
             "message": "模型列表加载成功"
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _get_model_description(model_name: str) -> str:
+    """根据模型名称获取描述信息"""
+    descriptions = {
+        "gpt-4o": "GPT-4o 高性能模型，适合复杂推理和量化分析",
+        "gpt-4": "GPT-4 旗舰模型，最强推理能力",
+        "gpt-3.5-turbo": "GPT-3.5 Turbo，性价比之选",
+        "claude-3-opus": "Claude 3 Opus，超长上下文",
+        "claude-3-sonnet": "Claude 3 Sonnet，平衡性能与成本",
+        "gemini-1.5-pro": "Gemini 1.5 Pro，多模态能力强",
+        "deepseek-chat": "深度求索开源模型，量化专用",
+        "qwen-max": "通义千问 Max，中文优化",
+        "qwen2.5-coder": "通义千问代码模型",
+        "llama3": "Llama 3 开源模型",
+        "mistral": "Mistral 开源模型",
+    }
+    # 模糊匹配
+    for key, desc in descriptions.items():
+        if key in model_name.lower():
+            return desc
+    return f"EchoBird代理模型: {model_name}"
+
+
 @app.route('/api/llm/switch', methods=['POST'])
 def api_llm_switch():
-    """切换LLM模型"""
+    """切换LLM模型 - 真正调用llm_manager切换"""
     try:
         data = request.get_json()
         model_name = data.get('model', '')
-        
+
         if not model_name:
             return jsonify({"success": False, "error": "模型名称不能为空"}), 400
-        
-        LLM_CONFIG['current_model'] = model_name
-        
-        return jsonify({
-            "success": True,
-            "message": f"已切换到模型: {model_name}",
-            "current_model": model_name
-        })
+
+        # 步骤1: 切换到EchoBird提供者
+        if not llm_manager.set_active_provider('echobird'):
+            # 如果EchoBird不可用，尝试使用当前提供者
+            if llm_manager.active_provider is None:
+                return jsonify({
+                    "success": False,
+                    "error": "没有可用的LLM提供者，请检查EchoBird服务是否启动"
+                }), 500
+
+        # 步骤2: 设置模型
+        success = llm_manager.set_model(model_name)
+
+        if success:
+            # 更新内存配置
+            LLM_CONFIG['current_model'] = model_name
+
+            return jsonify({
+                "success": True,
+                "message": f"已成功切换到模型: {model_name}",
+                "current_model": model_name,
+                "provider": llm_manager.active_provider.name if llm_manager.active_provider else "unknown"
+            })
+        else:
+            # 即使llm_manager返回失败，也更新配置（可能是新模型）
+            LLM_CONFIG['current_model'] = model_name
+            return jsonify({
+                "success": True,
+                "message": f"已设置模型: {model_name}（请确保EchoBird服务支持此模型）",
+                "current_model": model_name,
+                "warning": "模型可能不在EchoBird服务列表中"
+            })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -2017,10 +2269,18 @@ def launch_desktop():
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
 
 
+# ========== Aurora 原系统 API 代理（已由 api/gateway.py 统一管理） ==========
+# 注意: /api/aurora/* 和 /api/aurora/system/info 路由已迁移至 api/gateway.py
+# 通过 AuroraAPIAdapter 提供更完善的代理功能（缓存、批量请求、自动重认证）
+# 如需直接调用 Aurora，请使用 api/aurora_adapter.py 中的 AuroraAPIAdapter
+
+
 if __name__ == '__main__':
+    # 从配置读取端口
+    shell_port = config.get('port_allocation.qs_robot_shell', 5003)
     print("=" * 50)
     print("QS Robot 智能助手启动中...")
-    print("访问地址: http://localhost:5000")
+    print(f"访问地址: http://localhost:{shell_port}")
     print("=" * 50)
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False, threaded=True)
 

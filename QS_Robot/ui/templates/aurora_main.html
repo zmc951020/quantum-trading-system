@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora 量化系统 - 主系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f3a 50%, #0a0e1a 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+        }
+
+        /* 顶部导航栏 */
+        .navbar {
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(107, 165, 247, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 22px;
+            font-weight: 700;
+            color: #6ba5f7;
+        }
+        .nav-brand-icon { font-size: 30px; }
+        .nav-menu {
+            display: flex;
+            gap: 20px;
+        }
+        .nav-link {
+            color: #8ba3c7;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .nav-link:hover {
+            color: #fff;
+            background: rgba(107, 165, 247, 0.15);
+        }
+        .nav-link.active {
+            color: #6ba5f7;
+            background: rgba(107, 165, 247, 0.2);
+        }
+
+        /* 主内容区 */
+        .main-content {
+            padding: 30px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* 页面标题 */
+        .page-header {
+            margin-bottom: 30px;
+        }
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .page-subtitle {
+            color: #8ba3c7;
+            font-size: 14px;
+        }
+
+        /* 模块卡片 */
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .module-card {
+            background: rgba(22, 33, 62, 0.8);
+            border: 1px solid rgba(107, 165, 247, 0.2);
+            border-radius: 16px;
+            padding: 25px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .module-card:hover {
+            border-color: #6ba5f7;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(107, 165, 247, 0.15);
+        }
+        .module-icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+        }
+        .module-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .module-desc {
+            color: #8ba3c7;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        .module-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+        }
+        .stat-item {
+            padding: 6px 12px;
+            background: rgba(107, 165, 247, 0.1);
+            border-radius: 6px;
+            color: #6ba5f7;
+        }
+
+        /* 策略标签库 */
+        .section {
+            background: rgba(22, 33, 62, 0.8);
+            border: 1px solid rgba(107, 165, 247, 0.2);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Tab导航 */
+        .tab-nav {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            padding: 8px 20px;
+            border: 1px solid rgba(107, 165, 247, 0.3);
+            border-radius: 8px;
+            background: rgba(10, 14, 26, 0.5);
+            color: #8ba3c7;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .tab-btn:hover { background: rgba(107, 165, 247, 0.15); color: #fff; }
+        .tab-btn.active {
+            background: rgba(107, 165, 247, 0.25);
+            color: #6ba5f7;
+            border-color: rgba(107, 165, 247, 0.5);
+        }
+        .tab-count {
+            font-size: 11px;
+            color: #6b7280;
+            margin-left: 4px;
+        }
+        .tab-btn.active .tab-count { color: #93c5fd; }
+
+        /* 策略表格 */
+        .strategy-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .strategy-table th, .strategy-table td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(107, 165, 247, 0.1);
+        }
+        .strategy-table th {
+            background: rgba(107, 165, 247, 0.1);
+            color: #8ba3c7;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .strategy-table tr:hover {
+            background: rgba(107, 165, 247, 0.05);
+        }
+        .strategy-name {
+            font-weight: 600;
+            color: #fff;
+        }
+        .strategy-category {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            background: rgba(107, 165, 247, 0.15);
+            color: #6ba5f7;
+        }
+        .strategy-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .status-running {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+        .status-stopped {
+            background: rgba(107, 114, 128, 0.15);
+            color: #9ca3af;
+        }
+        .strategy-score {
+            font-weight: 600;
+            color: #fbbf24;
+        }
+
+        /* 优化器标签库 */
+        .optimizer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .optimizer-card {
+            background: rgba(10, 14, 26, 0.6);
+            border: 1px solid rgba(107, 165, 247, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .optimizer-icon {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .optimizer-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 5px;
+        }
+        .optimizer-desc {
+            font-size: 12px;
+            color: #8ba3c7;
+        }
+
+        /* 操作按钮 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* 机器人浮标 */
+        .robot-float {
+            position: fixed;
+            right: 30px;
+            bottom: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            cursor: pointer;
+            box-shadow: 0 5px 25px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
+            z-index: 9999;
+        }
+        .robot-float:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 35px rgba(102, 126, 234, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+        <a href="/main_system" class="nav-brand" style="text-decoration: none;">
+            <span class="nav-brand-icon">🎯</span>
+            <span>Aurora 量化</span>
+        </a>
+        <div class="nav-menu">
+            <a href="/dashboard" class="nav-link">🏠 控制台</a>
+            <a href="/aurora_main" class="nav-link active">🚀 Aurora主系统</a>
+            <a href="/main_system" class="nav-link">⚙️ QS-Robot外壳</a>
+            <a href="/stock_pool" class="nav-link">📈 股票池</a>
+            <a href="/technical_analysis" class="nav-link">📊 技术分析</a>
+            <a href="/vibe_analysis" class="nav-link">🧠 Vibe智能体</a>
+            <a href="/cline-agent" class="nav-link">🤖 Cline智能体</a>
+            <a href="/model-switch" class="nav-link">🔄 模型切换</a>
+            <a href="/chat" class="nav-link">💬 智能助手</a>
+            <a href="/maintenance" class="nav-link">🔧 系统维护</a>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <!-- 页面标题 -->
+        <div class="page-header">
+            <h1 class="page-title">Aurora 量化主系统</h1>
+            <p class="page-subtitle">策略管理核心 · 优化器中心 · 完整工作流</p>
+        </div>
+
+        <!-- 核心模块入口 -->
+        <div class="modules-grid" id="modules-grid">
+            <!-- 动态加载 -->
+        </div>
+
+        <!-- 策略标签库 -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">📋 策略标签库</h2>
+                <button class="btn btn-primary" onclick="navigateTo('/main_system')">查看全部</button>
+            </div>
+            <!-- 类型Tab切换 -->
+            <div class="tab-nav" id="strategy-tabs">
+                <button class="tab-btn active" onclick="filterStrategies('all')">全部<span class="tab-count" id="tab-count-all"></span></button>
+                <button class="tab-btn" onclick="filterStrategies('physics')">物理建模<span class="tab-count" id="tab-count-physics"></span></button>
+                <button class="tab-btn" onclick="filterStrategies('ml')">ML增强<span class="tab-count" id="tab-count-ml"></span></button>
+                <button class="tab-btn" onclick="filterStrategies('traditional')">传统策略<span class="tab-count" id="tab-count-traditional"></span></button>
+                <button class="tab-btn" onclick="filterStrategies('grid')">网格交易<span class="tab-count" id="tab-count-grid"></span></button>
+            </div>
+            <table class="strategy-table">
+                <thead>
+                    <tr>
+                        <th style="width:5%">#</th>
+                        <th style="width:25%">策略名称</th>
+                        <th style="width:12%">分类</th>
+                        <th style="width:10%">版本</th>
+                        <th style="width:10%">评分</th>
+                        <th style="width:12%">状态</th>
+                        <th style="width:26%">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="strategy-table-body">
+                    <tr><td colspan="7" style="text-align:center;color:#8ba3c7;">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 优化器标签库 -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">🔬 优化器标签库</h2>
+                <button class="btn btn-primary" onclick="navigateTo('/optimizer')">管理优化器</button>
+            </div>
+            <div class="optimizer-grid" id="optimizer-grid">
+                <div class="optimizer-card"><div class="optimizer-name">加载中...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 机器人浮标 -->
+    <div class="robot-float" onclick="openChat()">🤖</div>
+
+    <script>
+        function navigateTo(url) {
+            window.location.href = url;
+        }
+        function openChat() {
+            window.location.href = '/chat';
+        }
+
+        function formatName(name) {
+            const displayNames = {
+                'fourier_rl': '傅里叶RL策略',
+                'bernoulli_coanda': '伯努利-康达策略',
+                'shepherd_rotation': '牧羊人V6轮动',
+                'gyro': '陀螺仪策略V7',
+                'generic': '通用优化器',
+                'adaptive_ml_strategy': '自适应ML策略',
+                'adaptive_range_grid': '自适应范围网格',
+                'analyze_strategy': '分析策略',
+                'downtrend_optimized': '下行趋势优化',
+                'final_market_adaptive': '终版市场自适应',
+                'fluid_dynamics_strategy': '流体动力学策略',
+                'fractal_chaos_strategy': '分形混沌策略',
+                'fund_allocation': '资金分配',
+                'grid_trading': '网格交易',
+                'gyro_precession_strategy': '陀螺进动策略',
+                'high_return_grid': '高收益网格',
+                'huijin_value_strategy': '汇金价值策略',
+                'ml_range_grid': 'ML范围网格',
+                'multi_factor_resonance': '多因子共振',
+                'newton_momentum_enhanced': '牛顿动量增强',
+                'optimized_strategy_deepseek': 'DeepSeek优化策略',
+                'optimized_strategy_fast': '快速优化策略',
+                'ppo_trading_agent': 'PPO交易智能体',
+                'quantum_finance_strategy': '量子金融策略',
+                'rl_adaptive_param_strategy': 'RL自适应参数',
+                'simple_optimized_strategy': '简单优化策略',
+                'simple_ppo_test': '简单PPO测试',
+                'simple_test': '简单测试',
+                'thermodynamic_entropy_enhanced': '热力学熵增强',
+                'trend_trading': '趋势交易',
+            };
+            return displayNames[name] || name;
+        }
+
+        function getCategory(name) {
+            if (name.includes('gyro')) return '陀螺仪';
+            if (name.includes('fourier') || name.includes('rl')) return '强化学习';
+            if (name.includes('bernoulli') || name.includes('coanda')) return '伯努利';
+            if (name.includes('shepherd')) return '智能轮动';
+            if (name.includes('grid')) return '网格交易';
+            if (name.includes('adaptive') || name.includes('ml')) return '自适应';
+            if (name.includes('fractal') || name.includes('chaos')) return '混沌';
+            if (name.includes('thermodynamic') || name.includes('fluid')) return '流体力学';
+            if (name.includes('newton')) return '动量';
+            if (name.includes('quantum')) return '量子';
+            if (name.includes('resonance') || name.includes('factor')) return '多因子';
+            if (name.includes('fund') || name.includes('huijin')) return '资金管理';
+            if (name.includes('ppo')) return 'PPO';
+            if (name.includes('trend')) return '趋势跟踪';
+            return '其他';
+        }
+
+        // 全局策略数据（用于Tab过滤）
+        let allStrategies = [];
+        let currentFilter = 'all';
+
+        // 策略类型到Tab的映射
+        function getStrategyTabGroup(s) {
+            const type = (s.strategy_type || 'general').toLowerCase();
+            const name = (s.name || '').toLowerCase();
+            // 物理建模：physics类型 或 包含物理关键词
+            if (type === 'physics' || ['newton', 'thermo', 'fractal', 'fluid', 'entropy', 'gyro', 'bernoulli', 'vortex', 'reynolds'].some(k => name.includes(k)))
+                return 'physics';
+            // ML增强：ml/rl类型
+            if (['ml', 'rl', 'fourier'].includes(type) || ['ppo', 'rl_', 'adaptive_ml'].some(k => name.includes(k)))
+                return 'ml';
+            // 网格交易
+            if (type === 'grid' || name.includes('grid'))
+                return 'grid';
+            // 传统策略：趋势/价值/复合
+            return 'traditional';
+        }
+
+        // 渲染策略表格
+        function renderStrategies(filter) {
+            const tbody = document.getElementById('strategy-table-body');
+            let filtered = allStrategies;
+            if (filter && filter !== 'all') {
+                filtered = allStrategies.filter(s => getStrategyTabGroup(s) === filter);
+            }
+
+            // 更新Tab计数
+            document.getElementById('tab-count-all').textContent = `(${allStrategies.length})`;
+            document.getElementById('tab-count-physics').textContent = `(${allStrategies.filter(s => getStrategyTabGroup(s) === 'physics').length})`;
+            document.getElementById('tab-count-ml').textContent = `(${allStrategies.filter(s => getStrategyTabGroup(s) === 'ml').length})`;
+            document.getElementById('tab-count-traditional').textContent = `(${allStrategies.filter(s => getStrategyTabGroup(s) === 'traditional').length})`;
+            document.getElementById('tab-count-grid').textContent = `(${allStrategies.filter(s => getStrategyTabGroup(s) === 'grid').length})`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#8ba3c7;">该分类暂无策略</td></tr>';
+                return;
+            }
+
+            const typeLabels = { physics: '物理建模', ml: 'ML增强', rl: '强化学习', fourier: '傅里叶', grid: '网格交易', trend: '趋势跟踪', value: '价值投资', composite: '多因子', general: '通用' };
+            tbody.innerHTML = filtered.map((s, i) => {
+                const name = s.name || '?';
+                const displayName = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const strategyType = s.strategy_type || 'general';
+                const typeLabel = typeLabels[strategyType] || strategyType;
+                const version = s.version || '-';
+                const score = s.performance_score || 0;
+                const enabled = s.enabled !== false;
+                const tabGroup = getStrategyTabGroup(s);
+                const groupBadge = tabGroup === 'physics' ? '🔵' : tabGroup === 'ml' ? '🟣' : tabGroup === 'grid' ? '🟢' : '⚪';
+                return `<tr>
+                    <td style="color:#6b7280;">${i + 1}</td>
+                    <td><span class="strategy-name">${groupBadge} ${displayName}</span></td>
+                    <td><span class="strategy-category">${typeLabel}</span></td>
+                    <td style="color:#9ca3af;">${version}</td>
+                    <td><span class="strategy-score">${typeof score === 'number' ? score.toFixed(1) : '-'}</span></td>
+                    <td><span class="strategy-status ${enabled ? 'status-running' : 'status-stopped'}">${enabled ? '已启用' : '已禁用'}</span></td>
+                    <td>
+                        <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;margin-right:4px" onclick="navigateTo('/main_system')">详情</button>
+                        <button class="btn" style="padding:5px 10px;font-size:11px;background:rgba(251,191,36,0.2);color:#fbbf24" onclick="runOptimization('${name}')">优化</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        // Tab切换
+        function filterStrategies(type) {
+            currentFilter = type;
+            document.querySelectorAll('#strategy-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.querySelector(`#strategy-tabs .tab-btn[onclick*="'${type}'"]`);
+            if (activeBtn) activeBtn.classList.add('active');
+            renderStrategies(type);
+        }
+
+        // 一键优化
+        function runOptimization(strategyName) {
+            if (confirm(`确定要对「${strategyName}」执行韬定律优化吗？`)) {
+                fetch('/api/tau/optimize', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({strategy: strategyName, optimizer: 'tau_cluster'})
+                })
+                .then(r => r.json())
+                .then(d => alert(d.message || '优化已启动'))
+                .catch(e => alert('优化请求失败: ' + e.message));
+            }
+        }
+
+        // 加载策略列表
+        function loadStrategies() {
+            fetch('/api/strategy/list')
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success || !d.data || !d.data.strategies) return;
+                    allStrategies = d.data.strategies;
+
+                    // 更新模块卡片
+                    const modulesGrid = document.getElementById('modules-grid');
+                    const typeCount = {};
+                    allStrategies.forEach(s => { const t = s.strategy_type || 'other'; typeCount[t] = (typeCount[t] || 0) + 1; });
+                    const enabledCount = allStrategies.filter(s => s.enabled !== false).length;
+
+                    modulesGrid.innerHTML = `
+                        <div class="module-card" onclick="navigateTo('/main_system')">
+                            <div class="module-icon">📋</div>
+                            <div class="module-title">策略管理中心</div>
+                            <div class="module-desc">${allStrategies.length}个策略 · ${enabledCount}已启用 · ${Object.keys(typeCount).length}种类型</div>
+                            <div class="module-stats">
+                                <span class="stat-item">🎯 总策略 ${allStrategies.length}</span>
+                                <span class="stat-item">✅ 已启用 ${enabledCount}</span>
+                            </div>
+                        </div>
+                        <div class="module-card" onclick="navigateTo('/optimizer')">
+                            <div class="module-icon">🔬</div>
+                            <div class="module-title">参数优化中心</div>
+                            <div class="module-desc">韬定律优化器集群 + Aurora引擎优化器</div>
+                            <div class="module-stats">
+                                <span class="stat-item">时间缩微</span>
+                                <span class="stat-item">空间折叠</span>
+                            </div>
+                        </div>
+                        <div class="module-card" onclick="navigateTo('/backtest')">
+                            <div class="module-icon">📈</div>
+                            <div class="module-title">回测验证中心</div>
+                            <div class="module-desc">历史回测、参数验证、绩效分析、曲线展示</div>
+                            <div class="module-stats">
+                                <span class="stat-item">实时回测</span>
+                                <span class="stat-item">增量计算</span>
+                            </div>
+                        </div>
+                        <div class="module-card" onclick="navigateTo('/maintenance')">
+                            <div class="module-icon">🛡️</div>
+                            <div class="module-title">系统维护</div>
+                            <div class="module-desc">安全配置、用户管理、告警系统、系统监控</div>
+                            <div class="module-stats">
+                                <span class="stat-item">五层防钓鱼</span>
+                                <span class="stat-item">一键冻结</span>
+                            </div>
+                        </div>
+                    `;
+
+                    // 渲染策略表格
+                    renderStrategies('all');
+                })
+                .catch(e => console.error('加载策略失败:', e));
+        }
+
+        // 加载优化器模块
+        function loadOptimizers() {
+            fetch('/api/optimizer/list')
+                .then(r => r.json())
+                .then(d => {
+                    const optimizers = (d.data && d.data.optimizers) ? d.data.optimizers : [];
+                    const grid = document.getElementById('optimizer-grid');
+                    if (optimizers.length === 0) {
+                        grid.innerHTML = '<div class="optimizer-card"><div class="optimizer-name">暂无优化器</div></div>';
+                        return;
+                    }
+                    const icons = { 'tau_cluster': '⚡', 'tau_bernoulli': '🌀', 'tau_shepherd': '🐑', 'tau_grid': '📊', 'tau_rl': '🤖' };
+                    grid.innerHTML = optimizers.map(o => {
+                        const icon = icons[o.name] || '🔬';
+                        return `
+                        <div class="optimizer-card" onclick="navigateTo('/main_system')" style="cursor:pointer">
+                            <div class="optimizer-icon">${icon}</div>
+                            <div class="optimizer-name">${o.display}</div>
+                            <div class="optimizer-desc">${o.description}</div>
+                        </div>`;
+                    }).join('');
+                })
+                .catch(e => console.error('加载优化器失败:', e));
+        }
+
+        // 初始加载
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStrategies();
+            loadOptimizers();
+        });
+    </script>
+
+    <!-- 机器人浮标脚本 -->
+    <script src="/static/robot-widget.js"></script>
+</body>
+</html>

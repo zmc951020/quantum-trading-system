@@ -1,0 +1,141 @@
+<h2>补充：真实交易模块 & 严格防空体系</h2>
+<p class="subtitle">这是5002 Aurora最核心的功能，必须完整迁移到5003统一入口</p>
+
+<div class="section">
+  <h3>5002 Aurora 真实交易模块全景</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+    <div class="mockup">
+      <div class="mockup-header">交易执行层</div>
+      <div class="mockup-body">
+        <div style="padding: 12px; font-size: 13px; line-height: 1.8;">
+          <div style="color:#27ae60;">✅ /api/trade/validate &nbsp;— 交易验证</div>
+          <div style="color:#27ae60;">✅ /api/trade/execute &nbsp;— 交易执行</div>
+          <div style="color:#27ae60;">✅ /api/trade/report &nbsp;&nbsp;— 交易报告</div>
+          <div style="color:#27ae60;">✅ /api/trade/security — 交易安全</div>
+          <div style="color:#27ae60;">✅ /api/broker/* &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;— 券商接口</div>
+          <div style="color:#27ae60;">✅ /api/orders &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;— 订单管理</div>
+          <div style="color:#27ae60;">✅ /api/positions &nbsp;&nbsp;&nbsp;— 持仓管理</div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">资金安全层</div>
+      <div class="mockup-body">
+        <div style="padding: 12px; font-size: 13px; line-height: 1.8;">
+          <div style="color:#27ae60;">✅ /api/fund/validate &nbsp;— 资金验证</div>
+          <div style="color:#27ae60;">✅ /api/fund/block-all — 一键冻结</div>
+          <div style="color:#27ae60;">✅ /api/fund/blacklist — 黑名单</div>
+          <div style="color:#27ae60;">✅ /api/fund/mode &nbsp;&nbsp;&nbsp;&nbsp;— 资金模式</div>
+          <div style="color:#27ae60;">✅ /api/fund/config &nbsp;&nbsp;— 资金配置</div>
+          <div style="color:#27ae60;">✅ /api/accounts/* &nbsp;&nbsp;— 账户管理</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>五层金字塔防钓鱼体系</h3>
+  <div style="background: #0a0e1a; border-radius: 10px; padding: 20px; margin-top: 10px;">
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+      <div style="background: #e74c3c; color: #fff; padding: 12px 30px; border-radius: 8px; width: 80%; text-align: center; font-size: 13px;">
+        <strong>第5层：生物特征验证</strong><br>
+        <span style="font-size: 11px; opacity: 0.8;">人脸识别 · 声纹验证 · 设备指纹</span>
+      </div>
+      <div style="background: #e67e22; color: #fff; padding: 12px 30px; border-radius: 8px; width: 70%; text-align: center; font-size: 13px;">
+        <strong>第4层：策略互锁</strong><br>
+        <span style="font-size: 11px; opacity: 0.8;">多策略交叉验证 · 异常交易检测 · 风控模块监控</span>
+      </div>
+      <div style="background: #f39c12; color: #fff; padding: 12px 30px; border-radius: 8px; width: 60%; text-align: center; font-size: 13px;">
+        <strong>第3层：IP与地理位置</strong><br>
+        <span style="font-size: 11px; opacity: 0.8;">IP白名单 · 地理位置验证 · 异地登录检测</span>
+      </div>
+      <div style="background: #3498db; color: #fff; padding: 12px 30px; border-radius: 8px; width: 50%; text-align: center; font-size: 13px;">
+        <strong>第2层：会话安全</strong><br>
+        <span style="font-size: 11px; opacity: 0.8;">会话管理 · 超时检测 · 并发限制</span>
+      </div>
+      <div style="background: #27ae60; color: #fff; padding: 12px 30px; border-radius: 8px; width: 40%; text-align: center; font-size: 13px;">
+        <strong>第1层：基础认证</strong><br>
+        <span style="font-size: 11px; opacity: 0.8;">bcrypt密码 · 双因素认证 · 登录审计</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>系统维护页面 - 安全配置Tab细化</h3>
+  <div style="background: #16213e; border-radius: 10px; padding: 15px; margin-top: 10px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+      <div style="background: #0a0e1a; border-radius: 6px; padding: 10px;">
+        <div style="color: #e74c3c; font-weight: bold;">🔐 交易安全</div>
+        <div style="color: #8ba3c7; font-size: 12px; margin-top: 5px;">
+          · 交易验证（下单前无感校验）<br>
+          · 交易执行（加密通道）<br>
+          · 交易报告（实时审计）<br>
+          · 一键冻结（紧急熔断）<br>
+          · 黑名单管理
+        </div>
+      </div>
+      <div style="background: #0a0e1a; border-radius: 6px; padding: 10px;">
+        <div style="color: #e67e22; font-weight: bold;">🛡️ 五层防钓鱼</div>
+        <div style="color: #8ba3c7; font-size: 12px; margin-top: 5px;">
+          · 第1层：基础认证状态<br>
+          · 第2层：会话安全评分<br>
+          · 第3层：IP/地理验证<br>
+          · 第4层：策略互锁状态<br>
+          · 第5层：生物特征状态
+        </div>
+      </div>
+      <div style="background: #0a0e1a; border-radius: 6px; padding: 10px;">
+        <div style="color: #f39c12; font-weight: bold;">💰 资金安全</div>
+        <div style="color: #8ba3c7; font-size: 12px; margin-top: 5px;">
+          · 资金验证<br>
+          · 资金模式配置<br>
+          · 账户管理<br>
+          · 风控参数配置
+        </div>
+      </div>
+      <div style="background: #0a0e1a; border-radius: 6px; padding: 10px;">
+        <div style="color: #3498db; font-weight: bold;">📋 安全审计</div>
+        <div style="color: #8ba3c7; font-size: 12px; margin-top: 5px;">
+          · 登录审计日志<br>
+          · 异常登录检测<br>
+          · 交易审计追踪<br>
+          · 安全事件告警
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>代理路由：交易安全模块</h3>
+  <div style="background: #0a0e1a; border-radius: 8px; padding: 15px; margin-top: 10px; font-family: monospace; font-size: 12px; color: #6ba5f7; line-height: 1.8;">
+    # 5003 → 5002 代理路由（完全透传，5002执行所有安全逻辑）<br><br>
+    /api/trade/validate &nbsp;&nbsp;&nbsp;→ 5002 /api/trade/validate<br>
+    /api/trade/execute &nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/trade/execute<br>
+    /api/trade/report &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/trade/report<br>
+    /api/trade/security &nbsp;&nbsp;&nbsp;→ 5002 /api/trade/security<br>
+    /api/fund/validate &nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/fund/validate<br>
+    /api/fund/block-all &nbsp;&nbsp;&nbsp;→ 5002 /api/fund/block-all<br>
+    /api/fund/blacklist &nbsp;&nbsp;&nbsp;→ 5002 /api/fund/blacklist<br>
+    /api/fund/mode &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/fund/mode<br>
+    /api/fund/config &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 5002 /api/fund/config<br>
+    /api/security/config &nbsp;&nbsp;→ 5002 /api/security/config<br>
+    /api/security/whitelist → 5002 /api/security/whitelist<br>
+    /api/security/off-hours → 5002 /api/security/off-hours<br>
+    /api/security/location-check → 5002<br>
+    /api/security/all-check &nbsp;→ 5002<br>
+    /api/accounts/* &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 5002<br><br>
+    <span style="color: #e74c3c;"># 关键原则：交易安全逻辑在5002执行，5003只做纯代理转发</span>
+  </div>
+</div>
+
+<div style="background: #16213e; border-left: 3px solid #e74c3c; padding: 15px; border-radius: 5px; margin-top: 15px;">
+  <strong style="color: #e74c3c;">硬约束：</strong>
+  <p style="margin: 8px 0 0 0; color: #ccc; font-size: 13px;">
+    交易操作仅允许从本地机器、注册登录用户、模型服务商服务器和交易所服务器发起；
+    所有通信工具（如微信）在交易期间禁止使用。
+    这些安全逻辑<strong>全部在5002 Aurora执行</strong>，5003仅做UI展示和代理转发。
+  </p>
+</div>

@@ -1,0 +1,55 @@
+# QS_Robot .gitignore — 金融级敏感文件保护
+# 环境变量 / 密钥 / 数据库 / 日志
+
+# 环境变量（包含密钥和密码）
+.env
+*.env
+.env.*
+
+# 配置文件（可能含敏感信息）
+config.local.json
+config.secret.json
+*.local.json
+
+# 用户数据库（含密码哈希）
+users.json
+users.local.json
+
+# 安全日志
+security.log
+audit.log
+*.audit.log
+ip_whitelist.json
+
+# SQLite数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# 优化器历史
+optimizer_history.db
+strategy_optimization_store.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup

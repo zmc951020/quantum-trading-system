@@ -25,6 +25,10 @@ class QSConfig:
     def _load_default_config(self):
         """加载默认配置"""
         return {
+            "port_allocation": {
+                "aurora_kernel": 5000,
+                "qs_robot_shell": 5001
+            },
             "llm_providers": {
                 "ollama": {
                     "enabled": True,
