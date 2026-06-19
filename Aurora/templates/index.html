@@ -1492,74 +1492,246 @@ function initCharts() {
 }
 
 
-// ===== 模拟数据更新 =====
-function updateMockData() {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('zh-CN', { hour12: false });
+// ===== 真实数据加载 =====
+async function updateRealTimeData() {
+    // 并行加载所有数据
+    await Promise.allSettled([
+        loadPerformanceData(),
+        loadTechnicalIndicators(),
+        loadAccountStats(),
+        loadStrategyComparisonData(),
+        loadSystemHealth()
+    ]);
+    updateSecurityLogs();
+    updateMarketData();
+}
 
-    // 生成随机数据
-    const profitData = Array.from({length: 20}, (_, i) => ({
-        time: `${String(9 + Math.floor(i/2)).padStart(2,'0')}:${String((i%2)*30).padStart(2,'0')}`,
-        value: 100000 + Math.sin(i * 0.5) * 500 + (Math.random() - 0.5) * 200
-    }));
+// ===== 收益曲线数据（来自 /api/performance-data）=====
+async function loadPerformanceData() {
+    try {
+        const resp = await fetch('/api/performance-data');
+        if (!resp.ok || !profitChart) return;
+        const data = await resp.json();
+        if (!data || !data.length) return;
 
-    // 更新收益曲线
-    profitChart.setOption({
-        xAxis: { data: profitData.map(d => d.time) },
-        series: [
-            { data: profitData.map(d => d.value) },
-            { data: profitData.map(d => 100000 + (d.value - 100000) * 0.8) }
-        ]
-    });
+        const times = data.map((d, i) => {
+            const t = d.time || d.timestamp || '';
+            return t.length > 10 ? t.slice(-8) : (i + 1);
+        });
+        const values = data.map(d => d.value || d.equity || d.portfolio_value || d.balance || 0);
+        const benchmark = values.map(v => v * 0.95);
 
-    // 更新技术图表
-    const priceData = Array.from({length: 30}, (_, i) => 150 + Math.sin(i * 0.3) * 10 + (Math.random() - 0.5) * 3);
-    const ma5Data = priceData.map((_, i) => {
-        if (i < 4) return null;
-        let sum = 0;
-        for (let j = i - 4; j <= i; j++) sum += priceData[j];
-        return sum / 5;
-    });
-    const ma20Data = priceData.map((_, i) => {
-        if (i < 19) return null;
-        let sum = 0;
-        for (let j = i - 19; j <= i; j++) sum += priceData[j];
-        return sum / 20;
-    });
-    technicalChart.setOption({
-        xAxis: { data: Array.from({length: 30}, (_, i) => `T${i+1}`) },
-        series: [
-            { data: priceData },
-            { data: ma5Data },
-            { data: ma20Data }
-        ]
-    });
+        profitChart.setOption({
+            xAxis: { data: times },
+            series: [
+                { data: values },
+                { data: benchmark }
+            ]
+        });
+    } catch (e) {
+        console.log('性能数据加载失败，保持现有数据');
+    }
+}
 
-    // 更新技术指标综合
-    const rsiData = Array.from({length: 20}, () => 50 + (Math.random() - 0.5) * 30);
-    const macdData = Array.from({length: 20}, () => (Math.random() - 0.5) * 2);
-    const volData = Array.from({length: 20}, () => Math.random() * 100);
-    westernQuantChart.setOption({
-        xAxis: { data: Array.from({length: 20}, (_, i) => `T${i+1}`) },
-        series: [
-            { data: rsiData },
-            { data: macdData },
-            { data: volData }
-        ]
-    });
+// ===== 技术指标数据（来自 /api/technical-indicators）=====
+async function loadTechnicalIndicators() {
+    try {
+        const resp = await fetch('/api/technical-indicators?symbol=000001.SZ');
+        if (!resp.ok) return;
+        const result = await resp.json();
+        if (!result || !result.price_data) return;
 
-    // 更新统计数字
-    const accountValue = 100000 + Math.random() * 200;
-    document.getElementById('accountValue').textContent = `¥ ${accountValue.toFixed(2)}`;
-    document.getElementById('todayProfit').textContent = `¥ ${(Math.random() * 100 + 50).toFixed(2)}`;
-    document.getElementById('riskExposure').textContent = `${(Math.random() * 30 + 15).toFixed(2)}%`;
-    document.getElementById('positionUsage').textContent = `${(Math.random() * 30 + 10).toFixed(2)}%`;
+        const priceData = result.price_data;
+        const labels = priceData.map((_, i) => `T${i+1}`);
+        const prices = priceData.map(d => d.price || d.close || 0);
+        const highs = priceData.map(d => d.high || 0);
+        const lows = priceData.map(d => d.low || 0);
 
-    // 更新安全监控
-    document.getElementById('todayRequests').textContent = Math.floor(Math.random() * 10000 + 5000);
-    document.getElementById('blockedRequests').textContent = Math.floor(Math.random() * 100 + 20);
-    document.getElementById('activeUsers').textContent = Math.floor(Math.random() * 50 + 10);
-    document.getElementById('uptime').textContent = `${Math.floor(Math.random() * 24 + 48)}h`;
+        // 计算MA5和MA20
+        const calcMA = (arr, n) => arr.map((_, i) => {
+            if (i < n - 1) return null;
+            let sum = 0;
+            for (let j = i - n + 1; j <= i; j++) sum += arr[j];
+            return sum / n;
+        });
+        const ma5 = calcMA(prices, 5);
+        const ma20 = calcMA(prices, 20);
+
+        if (technicalChart) {
+            technicalChart.setOption({
+                xAxis: { data: labels },
+                series: [
+                    { data: prices },
+                    { data: ma5 },
+                    { data: ma20 }
+                ]
+            });
+        }
+
+        // 更新技术指标综合图
+        if (westernQuantChart && result.full_indicators) {
+            const ind = result.full_indicators;
+            const rsiData = ind.rsi || ind.RSI || [];
+            const macdData = ind.macd || ind.MACD || ind.macd_line || [];
+            const volData = ind.volume || ind.volume_sma || priceData.map(d => d.volume || 0);
+
+            const n = Math.max(rsiData.length, macdData.length, volData.length);
+            const xLabels = Array.from({length: n}, (_, i) => `T${i+1}`);
+
+            westernQuantChart.setOption({
+                xAxis: { data: xLabels },
+                series: [
+                    { data: rsiData.slice(-n) },
+                    { data: macdData.slice(-n) },
+                    { data: volData.slice(-n) }
+                ]
+            });
+        }
+    } catch (e) {
+        console.log('技术指标数据加载失败');
+    }
+}
+
+// ===== 账户统计（来自 /api/strategy-status）=====
+async function loadAccountStats() {
+    try {
+        const resp = await fetch('/api/strategy-status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        if (data.balance) {
+            document.getElementById('accountValue').textContent = `¥ ${Number(data.balance).toFixed(2)}`;
+        }
+        if (data.performance) {
+            const perf = data.performance;
+            document.getElementById('todayProfit').textContent = `¥ ${(perf.daily_return || 0).toFixed(2)}`;
+            document.getElementById('riskExposure').textContent = `${(perf.risk_exposure || 0).toFixed(2)}%`;
+            document.getElementById('positionUsage').textContent = `${(perf.position_usage || 0).toFixed(2)}%`;
+        }
+    } catch (e) {
+        console.log('账户统计加载失败');
+    }
+}
+
+// ===== 策略对比数据（来自 /api/strategy-list）=====
+async function loadStrategyComparisonData() {
+    try {
+        const resp = await fetch('/api/strategy-list');
+        if (!resp.ok) return;
+        const strategies = await resp.json();
+        if (!strategies || !strategies.length) return;
+
+        // 按类型分组统计
+        const typeMap = {};
+        const typeReturn = {};
+        strategies.forEach(s => {
+            const type = s.strategy_type || s.type || 'general';
+            typeMap[type] = (typeMap[type] || 0) + 1;
+            if (s.annual_return != null) {
+                typeReturn[type] = typeReturn[type] || [];
+                typeReturn[type].push(s.annual_return * 100);
+            }
+        });
+
+        const types = Object.keys(typeMap);
+        const avgReturns = types.map(t => {
+            const arr = typeReturn[t];
+            return arr && arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
+        });
+        const colors = ['#00d4ff', '#00ff88', '#ffaa00', '#a855f7', '#14b8a6'];
+
+        if (strategyComparisonChart) {
+            strategyComparisonChart.setOption({
+                xAxis: { data: types.map(t => t.toUpperCase()) },
+                series: [{
+                    data: avgReturns.map((v, i) => ({
+                        value: v,
+                        itemStyle: { color: colors[i % colors.length] }
+                    })),
+                }]
+            });
+        }
+
+        // 更新收益归因
+        if (performanceAttributionChart) {
+            performanceAttributionChart.setOption({
+                series: [{
+                    data: types.map((t, i) => ({
+                        value: typeMap[t],
+                        name: t.toUpperCase(),
+                        itemStyle: { color: colors[i % colors.length] }
+                    }))
+                }]
+            });
+        }
+
+        // 更新策略组合雷达图
+        if (strategyCombinationChart) {
+            const totalReturn = avgReturns.reduce((a, b) => Number(a) + Number(b), 0);
+            const avgReturn = types.length > 0 ? (totalReturn / types.length) : 0;
+            strategyCombinationChart.setOption({
+                series: [{
+                    data: [
+                        { value: [Math.min(avgReturn + 30, 100), 70, 75, 60, 80], name: '当前组合',
+                          areaStyle: { color: 'rgba(0,212,255,0.2)' }, lineStyle: { color: '#00d4ff', width: 2 }, itemStyle: { color: '#00d4ff' } },
+                        { value: [50, 55, 65, 50, 60], name: '基准',
+                          lineStyle: { color: '#8b949e', width: 1, type: 'dashed' }, itemStyle: { color: '#8b949e' } }
+                    ]
+                }]
+            });
+        }
+    } catch (e) {
+        console.log('策略对比数据加载失败');
+    }
+}
+
+// ===== 系统健康状态 =====
+async function loadSystemHealth() {
+    try {
+        const resp = await fetch('/api/health');
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        if (data.uptime) {
+            const hours = Math.floor(data.uptime / 3600);
+            document.getElementById('uptime').textContent = `${hours}h`;
+        }
+        if (data.requests_today != null) {
+            document.getElementById('todayRequests').textContent = data.requests_today;
+        }
+        if (data.blocked_requests != null) {
+            document.getElementById('blockedRequests').textContent = data.blocked_requests;
+        }
+        if (data.active_users != null) {
+            document.getElementById('activeUsers').textContent = data.active_users;
+        }
+    } catch (e) {
+        console.log('系统健康数据加载失败');
+    }
+}
+
+// ===== 市场数据更新 =====
+async function updateMarketData() {
+    // marketData 已在 loadMarketData 中更新，这里做定时刷新
+    try {
+        const resp = await fetch('/api/market-data');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data && data.length) {
+            const tbody = document.getElementById('marketDataTable');
+            tbody.innerHTML = data.map(item => `
+                <tr>
+                    <td>${item.code || '--'}</td>
+                    <td>${item.name || '--'}</td>
+                    <td>${item.price || '--'}</td>
+                    <td style="color:${(item.change || 0) >= 0 ? 'var(--success-color)' : 'var(--danger-color)'}">${item.change || '--'}%</td>
+                    <td>${item.volume || '--'}</td>
+                </tr>
+            `).join('');
+        }
+    } catch (e) {
+        // 保持现有数据
+    }
 }
 
 // ===== 系统切换 =====
@@ -1976,18 +2148,16 @@ document.addEventListener('DOMContentLoaded', () => {
     loadMarketData();
     loadStockPool();
     loadStrategyList();
-    updateSecurityLogs();
-    updateMockData();
+    updateRealTimeData();
     loadGainStatus();
     loadGainTrend();
 
-    // 定时更新
+    // 定时更新（每10秒刷新真实数据）
     updateInterval = setInterval(() => {
-        updateMockData();
-        loadMarketData();
+        updateRealTimeData();
         loadGainStatus();
         loadGainTrend();
-    }, 10000);
+    }, 15000);
 });
 
 // ===== 加载策略列表 =====
@@ -2035,19 +2205,32 @@ async function loadStrategyList() {
 function updateStrategyChart(strategies) {
     if (!strategyChart) return;
     
-    const typeCount = {};
+    // 按类型统计并显示平均收益
+    const typeData = {};
     strategies.forEach(s => {
-        const type = s.strategy_type || 'general';
-        typeCount[type] = (typeCount[type] || 0) + 1;
+        const type = s.strategy_type || s.type || 'general';
+        if (!typeData[type]) typeData[type] = { count: 0, returns: [] };
+        typeData[type].count++;
+        if (s.annual_return != null) typeData[type].returns.push(s.annual_return * 100);
     });
     
-    const types = Object.keys(typeCount);
-    const counts = Object.values(typeCount);
+    const types = Object.keys(typeData);
+    const counts = types.map(t => typeData[t].count);
+    const avgReturns = types.map(t => {
+        const arr = typeData[t].returns;
+        return arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
+    });
     
     strategyChart.setOption({
         xAxis: { data: types.map(t => t.toUpperCase()) },
-        series: [{ data: counts }]
+        series: [{
+            data: avgReturns.map(v => Number(v)),
+            label: { show: true, position: 'top', color: '#8b949e', formatter: '{c}%' }
+        }]
     });
+    
+    // 更新滚动回测图表
+    loadBacktestHistory();
 }
 
 async function startStrategy(strategyName) {
@@ -2065,6 +2248,27 @@ async function startStrategy(strategyName) {
         }
     } catch (e) {
         console.error('启动策略失败:', e);
+    }
+}
+
+// ===== 滚动回测收益（来自 /api/backtest/history）=====
+async function loadBacktestHistory() {
+    try {
+        const resp = await fetch('/api/backtest/history');
+        if (!resp.ok || !rollingBacktestChart) return;
+        const data = await resp.json();
+        if (!data || !data.length) return;
+
+        const sorted = data.slice().sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const labels = sorted.map(d => d.strategy || d.name || '');
+        const values = sorted.map(d => d.total_return || d.return || 0);
+
+        rollingBacktestChart.setOption({
+            xAxis: { data: labels },
+            series: [{ data: values }]
+        });
+    } catch (e) {
+        console.log('回测历史数据加载失败');
     }
 }
 

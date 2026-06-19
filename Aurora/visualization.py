@@ -6694,32 +6694,96 @@ def update_system_config():
 # 韬定律优化器API（迁移自5000端口 web/app.py）
 # ══════════════════════════════════════════════════════════════════════════════
 
-# 优化器注册表
+# 优化器注册表（完整11个 — 对齐 optimizers_config.py）
 OPTIMIZER_REGISTRY = {
-    'shepherd_v5': {
-        'id': 'shepherd_v5',
-        'name': '牧羊人智能体优化器 V5',
-        'version': '5.0.0',
-        'description': '五层智能体协同优化，策略自演进',
-        'icon': '🐑',
-        'features': ['五层优化', '基因进化', '策略自演进', '智能调参']
-    },
     'shepherd_v6': {
         'id': 'shepherd_v6',
-        'name': '牧羊人智能体优化器 V6',
+        'name': '牧羊人V6综合优化器',
         'version': '6.0.0',
-        'description': '六层安全门禁增强版，全方位策略优化',
+        'description': '系统论金融级自演化框架，五层闭环架构，逻辑与参数完全解耦，五行安全门禁体系，多专家协同评审',
         'icon': '🐑',
-        'features': ['六层安全', '基因进化', '策略自演进', '智能调参', '风控增强']
+        'features': ['五层闭环', '基因进化', '12专家评审', '五行门禁', 'Pareto优化', '过拟合检测'],
     },
-    'tau': {
-        'id': 'tau',
-        'name': '韬定律参数优化器',
+    'enhanced': {
+        'id': 'enhanced',
+        'name': '增强策略优化器',
         'version': '2.0.0',
-        'description': '基于韬理论的参数空间搜索优化',
-        'icon': '⚡',
-        'features': ['参数优化', '空间搜索', '快速收敛']
-    }
+        'description': '集成多种高级优化算法：遗传算法、贝叶斯优化、网格搜索、多目标Pareto优化',
+        'icon': '🚀',
+        'features': ['遗传算法', '贝叶斯优化', 'Pareto优化', 'Walk-Forward'],
+    },
+    'shepherd_v5': {
+        'id': 'shepherd_v5',
+        'name': '牧羊人V5优化器',
+        'version': '5.0.0',
+        'description': '基于五行理论的策略参数优化器，兼顾收益与风险控制',
+        'icon': '🐑',
+        'features': ['五行理论', '风险控制', '参数优化', '敏感性分析'],
+    },
+    'rl_robot': {
+        'id': 'rl_robot',
+        'name': '强化学习机器人',
+        'version': '1.5.0',
+        'description': '基于PPO算法的强化学习优化器，自动完成策略回测和参数优化',
+        'icon': '🤖',
+        'features': ['PPO强化学习', '自动优化', '多周期验证', '策略进化'],
+    },
+    'smart_param': {
+        'id': 'smart_param',
+        'name': '贝叶斯智能参数优化器',
+        'version': '1.2.0',
+        'description': '基于高斯过程回归的贝叶斯优化器，高效探索参数空间',
+        'icon': '🧠',
+        'features': ['高斯过程', 'EI/UCB采集', '多目标Pareto', '自适应探索'],
+    },
+    'gyro_v7': {
+        'id': 'gyro_v7',
+        'name': 'Gyro V7优化器',
+        'version': '7.0.0',
+        'description': '基于陀螺仪原理的策略优化器，专门针对趋势跟踪策略',
+        'icon': '🔬',
+        'features': ['陀螺仪原理', '趋势跟踪', '进动效应', '自适应'],
+    },
+    'genetic': {
+        'id': 'genetic',
+        'name': '遗传算法优化器',
+        'version': '1.0.0',
+        'description': '基于进化算法的参数优化器，全局搜索最优解',
+        'icon': '🧬',
+        'features': ['选择交叉变异', '精英保留', '自适应变异率'],
+    },
+    'grid_search': {
+        'id': 'grid_search',
+        'name': '网格搜索优化器',
+        'version': '1.0.0',
+        'description': '暴力网格搜索优化器，遍历所有参数组合',
+        'icon': '🔲',
+        'features': ['参数网格穷举', '全面搜索', '基准对比'],
+    },
+    'random_search': {
+        'id': 'random_search',
+        'name': '随机搜索优化器',
+        'version': '1.0.0',
+        'description': '随机参数采样优化器，比网格搜索更高效',
+        'icon': '🎲',
+        'features': ['随机采样', '高维空间', '高效探索'],
+    },
+    'hmm_grid': {
+        'id': 'hmm_grid',
+        'name': 'HMM网格优化器',
+        'version': '1.0.0',
+        'description': '隐马尔可夫模型参数优化器，专门针对市场状态识别',
+        'icon': '🔮',
+        'features': ['HMM模型', '市场状态识别', '状态转移优化'],
+    },
+    'quantum': {
+        'id': 'quantum',
+        'name': '量子优化器',
+        'version': '0.5.0',
+        'description': '量子计算启发的优化器，用于复杂优化问题',
+        'icon': '⚛️',
+        'features': ['量子退火', '叠加态探索', '隧穿效应', '组合优化'],
+    },
 }
 
 # 优化器任务存储
@@ -6786,60 +6850,61 @@ def api_optimizer_run():
         try:
             task['status'] = 'running'
             task['progress'] = 5
-            task['current_stage'] = 'Layer 0 — 数据感知层：采集策略数据...'
-            time.sleep(0.5)
-            task['progress'] = 15
-            task['current_stage'] = 'Layer 1 — 自我诊断层：识别策略缺陷...'
-            time.sleep(0.8)
-            task['progress'] = 30
-            
-            if optimizer_id == 'shepherd_v6':
-                task['current_stage'] = 'Layer 安全 — 五行安全门禁：硬约束校验...'
-                time.sleep(0.5)
-                task['progress'] = 40
-            
-            task['current_stage'] = 'Layer 2 — 自主演化层：基因进化 + 参数优化...'
-            time.sleep(1.0)
-            task['progress'] = 55
-            
-            task['current_stage'] = '基因维度分析：信号检测/入场时机/离场时机/风控/仓位/市场状态...'
-            time.sleep(0.8)
-            task['progress'] = 70
-            
-            task['current_stage'] = 'Layer 3 — 专家复审层：四维专家协同评审...'
-            time.sleep(0.5)
-            task['progress'] = 80
-            
-            task['current_stage'] = 'Layer 4 — 落地归档层：生成优化报告...'
-            time.sleep(0.5)
-            task['progress'] = 95
-            
-            # 模拟优化结果
+            task['current_stage'] = '初始化优化器引擎...'
+
+            # 导入真实优化器
+            from optimizer_enhanced import EnhancedOptimizer as EnhancedStrategyOptimizer
+            from optimizers_config import get_optimizer_by_id
+
+            opt_config = get_optimizer_by_id(optimizer_id)
+            if not opt_config:
+                raise ValueError(f"优化器 {optimizer_id} 未在配置中找到")
+
+            task['progress'] = 10
+            task['current_stage'] = f'启动 {opt_config["name"]}...'
+
+            # 创建增强优化器实例
+            optimizer = EnhancedStrategyOptimizer({
+                "optimization_db": "optimizer_history.db",
+            })
+
+            task['progress'] = 20
+            task['current_stage'] = '构建参数空间...'
+
+            # 执行真实优化
+            result = optimizer.optimize_enhanced(
+                strategy_name=strategy_name,
+                optimizer_type=optimizer_id,
+                param_space=None,  # 使用默认参数空间
+                objective="sharpe_ratio",
+                max_iterations=100,
+                population_size=50,
+                early_stopping_rounds=30,
+            )
+
+            task['progress'] = 90
+            task['current_stage'] = '生成优化报告...'
+
             task['result'] = {
                 'strategy_name': strategy_name,
-                'optimizer': optimizer_meta['name'],
-                'original_score': round(random.uniform(55, 75), 1),
-                'optimized_score': round(random.uniform(78, 95), 1),
-                'sharpe_improvement': round(random.uniform(0.15, 0.5), 2),
-                'max_drawdown_reduction': round(random.uniform(5, 25), 1),
-                'win_rate_improvement': round(random.uniform(3, 18), 1),
-                'gene_improvements': [
-                    {'dimension': '信号检测', 'before': round(random.uniform(55, 70), 1), 'after': round(random.uniform(75, 92), 1)},
-                    {'dimension': '入场时机', 'before': round(random.uniform(50, 72), 1), 'after': round(random.uniform(78, 95), 1)},
-                    {'dimension': '离场时机', 'before': round(random.uniform(52, 68), 1), 'after': round(random.uniform(80, 93), 1)},
-                    {'dimension': '风险控制', 'before': round(random.uniform(58, 75), 1), 'after': round(random.uniform(82, 96), 1)},
-                    {'dimension': '仓位管理', 'before': round(random.uniform(50, 70), 1), 'after': round(random.uniform(76, 94), 1)},
-                ],
-                'recommendation': '通过优化评审，建议部署到生产环境',
-                'optimization_time': f'{random.uniform(2.5, 5.5):.1f}s',
+                'optimizer': opt_config['name'],
+                'optimizer_id': optimizer_id,
+                'best_params': result.get('best_params', {}),
+                'best_score': result.get('best_score', 0),
+                'iterations_used': result.get('iterations_used', 0),
+                'convergence': result.get('convergence', 'completed'),
+                'optimization_history': result.get('optimization_history', []),
+                'recommendation': '优化完成，请查看最佳参数',
+                'optimization_time': f'{result.get("iterations_used", 0)}轮迭代',
                 'timestamp': datetime.now().isoformat(),
+                'source': 'Aurora真实优化引擎',
             }
-            
+
             task['progress'] = 100
             task['current_stage'] = '优化完成'
             task['status'] = 'completed'
-            logger.info(f"[优化器] 任务 {task_id} 完成: {strategy_name} via {optimizer_meta['name']}")
-            
+            logger.info(f"[优化器] 任务 {task_id} 完成: {strategy_name} via {opt_config['name']} (真实优化)")
+
         except Exception as e:
             task['status'] = 'failed'
             task['error'] = str(e)
