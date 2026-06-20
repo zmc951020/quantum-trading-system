@@ -195,10 +195,11 @@ class UnifiedDataBus:
         params = {"symbol": symbol, "period": period, **kwargs}
         return self._cache.get(data_type, params)
 
-    def _set_cache(self, data_type: str, symbol: str, period: str = "",
-                   **kwargs) -> bool:
+    def _set_cache(self, data_type: str, params: Dict[str, Any],
+                   data: Dict[str, Any], ttl: int = None) -> bool:
         """设置缓存"""
-        return self._cache.set(data_type, data_type, self._cache_ttl.get(data_type, 3600))
+        ttl = ttl if ttl is not None else self._cache_ttl.get(data_type, 3600)
+        return self._cache.set(data_type, params, data, ttl=ttl)
 
     # --------------------------------------------------------
     # K线数据获取

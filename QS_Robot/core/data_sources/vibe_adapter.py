@@ -6,6 +6,7 @@ Vibe-Trading 港大智能体数据源适配器（占位实现）
 """
 
 from typing import Dict, List, Optional, Any
+import importlib.util
 
 from core.data_sources.base_adapter import BaseDataSourceAdapter
 
@@ -18,7 +19,6 @@ class VibeAdapter(BaseDataSourceAdapter):
     def _init(self):
         self._available = False
         try:
-            import importlib
             mod = importlib.util.find_spec("vibe_trading_ai")
             if mod is not None:
                 self._available = True

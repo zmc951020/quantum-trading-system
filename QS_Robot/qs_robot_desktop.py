@@ -70,7 +70,7 @@ def load_config():
         'fullscreen': False,
         'remote_host': '127.0.0.1',
         'remote_port': 5001,  # QS-Robot外壳端口
-        'aurora_port': 5000,  # Aurora内核端口
+        'aurora_port': 5003,  # Aurora内核端口（5003主端口）
         'remember_login': False,
         'saved_credentials': {'username': '', 'password': ''}
     }
@@ -306,7 +306,7 @@ class ChatMessage:
 class AuroraAPIClient:
     """Aurora 系统 API 客户端"""
     
-    def __init__(self, base_url='http://127.0.0.1:5000'):
+    def __init__(self, base_url='http://127.0.0.1:5003'):
         self.base_url = base_url
         self.session_id = None
         self.username = None

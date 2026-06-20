@@ -321,6 +321,60 @@
                     选择策略后点击"启动强强联合流程"执行完整自动化流程...
                 </div>
             </div>
+
+            <!-- Cline智能体联动面板 -->
+            <div class="panel" style="grid-column: 1 / -1; border: 1px solid #667eea;">
+                <div class="panel-header">
+                    <span class="panel-title" style="color: #667eea;">🤖 Cline智能体联动</span>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="cline-env" onchange="switchClineEnv()" 
+                                style="padding: 4px 8px; background: #0f0f1a; border: 1px solid #2a2a4a; 
+                                       border-radius: 4px; color: #fff; font-size: 12px;">
+                            <option value="simulation">🟢 模拟环境</option>
+                            <option value="live">🔴 实盘环境</option>
+                        </select>
+                        <span id="cline-env-status" style="font-size: 11px; color: #10b981;">模拟环境 - 全功能开放</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                    <span style="color: #8ba3c7; font-size: 13px;">📊 图表联动:</span>
+                    <button class="btn btn-primary" onclick="sendToCline('analyze')" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                        📈 发送到Cline分析
+                    </button>
+                    <button class="btn btn-secondary" onclick="sendToCline('optimize')">
+                        🔬 策略优化
+                    </button>
+                    <button class="btn btn-secondary" onclick="sendToCline('develop')">
+                        💻 代码开发
+                    </button>
+                    <button class="btn btn-secondary" onclick="openClineFullPage()">
+                        🔗 打开完整Cline
+                    </button>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="text" id="cline-strategy-input" placeholder="策略名称（优化用）" value="伯努利-康达策略"
+                           style="flex: 1; padding: 8px; background: #0f0f1a; border: 1px solid #2a2a4a; 
+                                  border-radius: 6px; color: #fff; font-size: 13px;">
+                    <input type="text" id="cline-task-input" placeholder="开发任务描述" value="实时行情WebSocket模块"
+                           style="flex: 1; padding: 8px; background: #0f0f1a; border: 1px solid #2a2a4a; 
+                                  border-radius: 6px; color: #fff; font-size: 13px;">
+                </div>
+
+                <div id="cline-mini-result" class="analysis-result" style="max-height: 200px; border: 1px solid #667eea;">
+                    💡 点击上方按钮，将当前技术分析图表上下文发送给Cline智能体进行深度分析、策略优化或代码开发
+                </div>
+
+                <!-- 任务进度 -->
+                <div id="cline-task-progress" style="display: none; margin-top: 10px; padding: 10px; background: #0f0f1a; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="color: #8ba3c7; font-size: 13px;">📋 任务进度</span>
+                        <span id="cline-task-count" style="color: #667eea; font-size: 12px;"></span>
+                    </div>
+                    <div id="cline-task-list" style="max-height: 150px; overflow-y: auto; font-size: 12px;"></div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -617,6 +671,169 @@
                 alert('⚠️ 调用失败，请确保Web服务已启动\n\n错误信息: ' + error.message);
             });
         }
+
+        // ==================== Cline智能体联动功能 ====================
+        let clineEnvironment = 'simulation';
+
+        function switchClineEnv() {
+            const env = document.getElementById('cline-env').value;
+            fetch('/api/cline/environment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ environment: env })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    clineEnvironment = env;
+                    const statusEl = document.getElementById('cline-env-status');
+                    if (env === 'live') {
+                        statusEl.textContent = '实盘环境 - 高风险操作受限';
+                        statusEl.style.color = '#ef4444';
+                    } else {
+                        statusEl.textContent = '模拟环境 - 全功能开放';
+                        statusEl.style.color = '#10b981';
+                    }
+                }
+            });
+        }
+
+        function getCurrentSymbol() {
+            // 优先从技术分析输入框获取
+            const taSymbol = document.getElementById('ta-symbol').value.trim();
+            if (taSymbol && /^\d{6}$/.test(taSymbol)) return taSymbol;
+            // 其次从Vibe输入框获取
+            const vibeSymbol = document.getElementById('vibe-symbol').value.trim();
+            if (vibeSymbol && /^\d{6}$/.test(vibeSymbol)) return vibeSymbol;
+            return null;
+        }
+
+        function getCurrentIndicators() {
+            // 从技术分析结果中提取当前指标
+            const resultEl = document.getElementById('ta-result');
+            const text = resultEl.textContent || '';
+            const indicators = {};
+            const ma5Match = text.match(/MA5:\s*([\d.]+)/);
+            const rsiMatch = text.match(/RSI[^:]*:\s*([\d.]+)/);
+            const macdMatch = text.match(/MACD:\s*([\d.]+)/);
+            if (ma5Match) indicators.ma5 = ma5Match[1];
+            if (rsiMatch) indicators.rsi = rsiMatch[1];
+            if (macdMatch) indicators.macd = macdMatch[1];
+            return indicators;
+        }
+
+        async function sendToCline(action) {
+            const symbol = getCurrentSymbol();
+            if (!symbol) {
+                alert('请先在技术分析面板输入6位股票代码');
+                return;
+            }
+
+            const resultEl = document.getElementById('cline-mini-result');
+            resultEl.innerHTML = '🤖 正在发送上下文给Cline智能体...';
+
+            try {
+                const body = {
+                    symbol: symbol,
+                    action: action,
+                    indicators: getCurrentIndicators(),
+                    period: 'daily',
+                };
+
+                if (action === 'optimize') {
+                    body.strategy = document.getElementById('cline-strategy-input').value.trim();
+                }
+                if (action === 'develop') {
+                    body.task = document.getElementById('cline-task-input').value.trim();
+                }
+
+                // 1. 获取上下文消息
+                const ctxResp = await fetch('/api/cline/context', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const ctxData = await ctxResp.json();
+
+                if (!ctxData.success) {
+                    resultEl.innerHTML = `<span class="error">❌ 上下文构建失败: ${ctxData.error}</span>`;
+                    return;
+                }
+
+                // 2. 提交到任务管理器（带环境隔离）
+                const taskResp = await fetch('/api/cline/task/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: ctxData.context_message,
+                        symbol: symbol,
+                        environment: clineEnvironment,
+                        priority: action === 'optimize' ? 'BATCH_BACKTEST' : 'CLINE_DEV',
+                    })
+                });
+                const taskData = await taskResp.json();
+
+                if (taskData.success) {
+                    resultEl.innerHTML = `<span class="info">✅ 任务已提交 (${taskData.task_id})</span>\n` +
+                        `<span class="info">📋 消息: ${ctxData.context_message}</span>\n` +
+                        `<span class="info">🔒 环境: ${taskData.environment} | 优先级: ${taskData.priority}</span>`;
+                    // 刷新任务进度
+                    refreshTaskProgress();
+                } else {
+                    resultEl.innerHTML = `<span class="error">❌ ${taskData.error || '提交失败'}</span>`;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">❌ 请求失败: ${error.message}</span>`;
+            }
+        }
+
+        async function refreshTaskProgress() {
+            try {
+                const resp = await fetch('/api/cline/task/status');
+                const data = await resp.json();
+                if (data.success && data.data) {
+                    const d = data.data;
+                    const progressEl = document.getElementById('cline-task-progress');
+                    const listEl = document.getElementById('cline-task-list');
+                    const countEl = document.getElementById('cline-task-count');
+
+                    const running = d.running || [];
+                    const queued = d.queued || [];
+                    const completed = (d.completed || []).slice(-5);
+
+                    if (running.length === 0 && queued.length === 0) {
+                        progressEl.style.display = 'none';
+                        return;
+                    }
+
+                    progressEl.style.display = 'block';
+                    countEl.textContent = `运行中: ${running.length} | 排队: ${queued.length} | 已完成: ${d.stats?.total_completed || 0}`;
+
+                    let html = '';
+                    running.forEach(t => {
+                        html += `<div style="padding: 4px 8px; margin: 2px 0; background: rgba(102,126,234,0.2); border-radius: 4px; color: #667eea;">▶ ${t.task_id.slice(-12)}: ${t.message.slice(0, 50)}...</div>`;
+                    });
+                    queued.forEach(t => {
+                        html += `<div style="padding: 4px 8px; margin: 2px 0; background: rgba(245,158,11,0.1); border-radius: 4px; color: #f59e0b;">⏳ ${t.task_id.slice(-12)}: ${t.message.slice(0, 50)}...</div>`;
+                    });
+                    completed.forEach(t => {
+                        const color = t.status === 'completed' ? '#10b981' : '#ef4444';
+                        const icon = t.status === 'completed' ? '✅' : '❌';
+                        html += `<div style="padding: 4px 8px; margin: 2px 0; border-radius: 4px; color: ${color};">${icon} ${t.task_id.slice(-12)}: ${t.message.slice(0, 40)}... (${t.elapsed_ms || 0}ms)</div>`;
+                    });
+                    listEl.innerHTML = html || '<div style="color: #5a6a85;">无任务</div>';
+                }
+            } catch (e) {
+                console.error('任务进度刷新失败:', e);
+            }
+        }
+
+        function openClineFullPage() {
+            window.open('/cline-agent', '_blank');
+        }
+
+        // 定时刷新任务进度
+        setInterval(refreshTaskProgress, 5000);
     </script>
     <script src="/static/robot-widget.js"></script>
 </body>

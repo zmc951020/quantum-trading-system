@@ -8,7 +8,7 @@ AKShare 数据源适配器
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
-from core.data_bus import create_kline_format, create_financial_format
+from core.data_bus import create_kline_format
 from core.data_sources.base_adapter import BaseDataSourceAdapter
 
 
@@ -41,12 +41,12 @@ class AKShareAdapter(BaseDataSourceAdapter):
                 if data is not None and data.get("count", 0) > 0:
                     return data
 
-            # AKShare不可用或获取失败，使用模拟数据
-            return self._generate_mock_kline(symbol, days)
+            # AKShare不可用或获取失败，使用基类的模拟数据
+            return self._generate_mock_kline(symbol, days, period)
 
         except Exception as e:
             print(f"[AKShareAdapter] get_kline异常: {e}")
-            return self._generate_mock_kline(symbol, days)
+            return self._generate_mock_kline(symbol, days, period)
 
     def _fetch_kline(self, symbol: str, period: str, days: int) -> Optional[Dict[str, Any]]:
         """通过 AKShare 获取 K线"""
@@ -56,6 +56,9 @@ class AKShareAdapter(BaseDataSourceAdapter):
 
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
+            # 分钟级API需要datetime格式
+            start_dt_str = start_date.strftime("%Y-%m-%d 09:30:00")
+            end_dt_str = end_date.strftime("%Y-%m-%d 15:00:00")
 
             period_map = {
                 "daily": "daily",
@@ -79,11 +82,12 @@ class AKShareAdapter(BaseDataSourceAdapter):
                     adjust="qfq"
                 )
             else:
-                df = self._ak.stock_zh_a_minute(
+                # 使用 stock_zh_a_hist_min_em (新版API)
+                df = self._ak.stock_zh_a_hist_min_em(
                     symbol=symbol,
                     period=ak_period,
-                    start_date=start_str,
-                    end_date=end_str,
+                    start_date=start_dt_str,
+                    end_date=end_dt_str,
                     adjust="qfq"
                 )
 
@@ -178,57 +182,6 @@ class AKShareAdapter(BaseDataSourceAdapter):
             print(f"[AKShareAdapter] 标准化K线失败: {e}")
             return None
 
-    def _generate_mock_kline(self, symbol: str, days: int) -> Dict[str, Any]:
-        """生成模拟K线数据（当AKShare不可用时）"""
-        import random
-        random.seed(hash(symbol) & 0xFFFFFFFF)
-
-        n = min(days, 500)
-        base_price = 10.0 + (hash(symbol) % 50) / 10.0
-
-        dates = []
-        opens = []
-        highs = []
-        lows = []
-        closes = []
-        volumes = []
-
-        price = base_price
-        end_date = datetime.now()
-
-        for i in range(n):
-            d = end_date - timedelta(days=n - i)
-            dates.append(d.strftime("%Y-%m-%d"))
-
-            change = random.uniform(-0.03, 0.03)
-            open_p = price * (1 + random.uniform(-0.01, 0.01))
-            close_p = price * (1 + change)
-            high_p = max(open_p, close_p) * (1 + random.uniform(0, 0.01))
-            low_p = min(open_p, close_p) * (1 - random.uniform(0, 0.01))
-            vol = random.uniform(500000, 2000000)
-
-            opens.append(round(open_p, 2))
-            highs.append(round(high_p, 2))
-            lows.append(round(low_p, 2))
-            closes.append(round(close_p, 2))
-            volumes.append(round(vol, 0))
-
-            price = close_p
-
-        return create_kline_format(
-            symbol=symbol,
-            name=f"{symbol}(模拟)",
-            market="A股",
-            period="daily",
-            dates=dates,
-            opens=opens,
-            highs=highs,
-            lows=lows,
-            closes=closes,
-            volumes=volumes,
-            source="AKShare-Mock"
-        )
-
     # --------------------------------------------------------
     # 财务数据获取
     # --------------------------------------------------------
@@ -312,21 +265,6 @@ class AKShareAdapter(BaseDataSourceAdapter):
             print(f"[AKShareAdapter] AKShare获取财务数据失败: {e}")
             return self._generate_mock_financial(symbol)
 
-    def _generate_mock_financial(self, symbol: str) -> Dict[str, Any]:
-        """生成模拟财务数据"""
-        import random
-        random.seed(hash(symbol) & 0xFFFFFFFF)
-        return create_financial_format(
-            symbol=symbol,
-            pe=round(8 + random.random() * 30, 2),
-            pb=round(0.5 + random.random() * 5, 2),
-            eps=round(random.random() * 3, 2),
-            roe=round(5 + random.random() * 20, 2),
-            total_market_cap=round(100 + random.random() * 900, 2),
-            industry="金融",
-            source="AKShare-Mock"
-        )
-
     # --------------------------------------------------------
     # 实时数据
     # --------------------------------------------------------
@@ -335,19 +273,47 @@ class AKShareAdapter(BaseDataSourceAdapter):
         """获取实时行情"""
         try:
             if self._ak is not None:
-                df = self._ak.stock_zh_a_spot_em()
-                if df is not None and not df.empty:
-                    match = df[df.iloc[:, 1].astype(str).str.contains(symbol, na=False)]
-                    if not match.empty:
-                        row = match.iloc[0]
-                        return {
-                            "symbol": symbol,
-                            "price": float(row.get("最新价", 0)),
-                            "change_pct": float(row.get("涨跌幅", 0)),
-                            "volume": float(row.get("成交量", 0)),
-                            "amount": float(row.get("成交额", 0)),
-                            "source": "AKShare"
-                        }
+                # 优先使用旧版 spot API（兼容性更好）
+                try:
+                    df = self._ak.stock_zh_a_spot()
+                    if df is not None and not df.empty:
+                        # 旧版列名通常是：代码, 名称, 最新价, 涨跌幅, 涨跌额, 成交量, 成交额, ...
+                        match = None
+                        for col in df.columns:
+                            # 找到代码列
+                            if '代码' in str(col):
+                                match = df[df[col].astype(str).str.contains(symbol, na=False)]
+                                break
+                        if match is not None and not match.empty:
+                            row = match.iloc[0]
+                            cols = df.columns.tolist()
+                            return {
+                                "symbol": symbol,
+                                "price": float(row.get(cols[2], 0)) if len(cols) > 2 else 0,
+                                "change_pct": float(row.get(cols[3], 0)) if len(cols) > 3 else 0,
+                                "volume": float(row.get(cols[5], 0)) if len(cols) > 5 else 0,
+                                "amount": float(row.get(cols[6], 0)) if len(cols) > 6 else 0,
+                                "source": "AKShare"
+                            }
+                except Exception:
+                    pass
+                # fallback to new API
+                try:
+                    df = self._ak.stock_zh_a_spot_em()
+                    if df is not None and not df.empty:
+                        match = df[df.iloc[:, 1].astype(str).str.contains(symbol, na=False)]
+                        if not match.empty:
+                            row = match.iloc[0]
+                            return {
+                                "symbol": symbol,
+                                "price": float(row.get("最新价", 0)),
+                                "change_pct": float(row.get("涨跌幅", 0)),
+                                "volume": float(row.get("成交量", 0)),
+                                "amount": float(row.get("成交额", 0)),
+                                "source": "AKShare"
+                            }
+                except Exception:
+                    pass
         except Exception as e:
             pass
         return None
@@ -360,15 +326,36 @@ class AKShareAdapter(BaseDataSourceAdapter):
         """获取股票列表"""
         try:
             if self._ak is not None:
-                df = self._ak.stock_zh_a_spot_em()
-                if df is not None and not df.empty:
-                    result = []
-                    for i in range(min(len(df), 500)):
-                        row = df.iloc[i]
-                        code = str(row.iloc[1]) if len(df.columns) > 1 else f"{i:06d}"
-                        name = str(row.iloc[2]) if len(df.columns) > 2 else f"股票{code}"
-                        result.append({"code": code, "name": name})
-                    return result
+                # 优先使用旧版 spot API（兼容性更好）
+                try:
+                    df = self._ak.stock_zh_a_spot()
+                    if df is not None and not df.empty:
+                        result = []
+                        cols = df.columns.tolist()
+                        code_col = next((c for c in cols if '代码' in str(c)), cols[0]) if len(cols) > 0 else cols[0]
+                        name_col = next((c for c in cols if '名称' in str(c)), cols[1]) if len(cols) > 1 else cols[1]
+                        limit = min(len(df), 500)
+                        for i in range(limit):
+                            row = df.iloc[i]
+                            code = str(row.get(code_col, f"{i:06d}")).zfill(6)
+                            name = str(row.get(name_col, f"股票{code}"))
+                            result.append({"code": code, "name": name})
+                        return result
+                except Exception:
+                    pass
+                # fallback to new API
+                try:
+                    df = self._ak.stock_zh_a_spot_em()
+                    if df is not None and not df.empty:
+                        result = []
+                        for i in range(min(len(df), 500)):
+                            row = df.iloc[i]
+                            code = str(row.iloc[1]) if len(df.columns) > 1 else f"{i:06d}"
+                            name = str(row.iloc[2]) if len(df.columns) > 2 else f"股票{code}"
+                            result.append({"code": code, "name": name})
+                        return result
+                except Exception:
+                    pass
         except Exception as e:
             pass
         return []

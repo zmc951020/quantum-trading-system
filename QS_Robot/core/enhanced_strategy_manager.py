@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 QS Robot - 增强型策略管理器（双核统一版 V2.0）
 ==============================================
@@ -67,10 +67,23 @@ class StrategyInfo:
     performance: Dict = field(default_factory=dict)
     last_backtest: Optional[str] = None
     params: Dict = field(default_factory=dict)
+    best_params: Dict = field(default_factory=dict)
+    best_score: float = 0.0
+    version: int = 0
 
 
 @dataclass
 class BacktestResult:
+    """
+    回测结果（EnhancedStrategyManager 使用）
+    
+    单位约定:
+    - total_return_pct: 百分比 (如 31.95 表示 31.95%)
+    - sharpe_ratio: 比率 (原值, 如 1.5)
+    - max_drawdown: 百分比 (如 15.0 表示 15%)
+    - win_rate: 百分比 (如 65.0 表示 65%)
+    - total_trades: 整数 (交易次数)
+    """
     strategy_name: str
     total_return_pct: float
     sharpe_ratio: float
@@ -100,7 +113,7 @@ class SystemHealth:
 class AuroraAPIClient:
     """与Aurora可视化层通信的HTTP客户端"""
 
-    def __init__(self, base_url: str = "http://localhost:5000", timeout: int = 10):
+    def __init__(self, base_url: str = "http://localhost:5003", timeout: int = 10):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self._available = False
@@ -317,6 +330,8 @@ class SimulatedFallbackEngine:
              "description": "动态范围检测+网格交易"},
             {"name": "FinalOptimizedStrategy", "category": "Ensemble", "label": "综合优化策略",
              "description": "多策略融合+综合优化"},
+            {"name": "special_forces_wyckoff", "category": "特种兵", "label": "特种兵・威科夫量价自适应",
+             "description": "威科夫三定律+四级周期共振+68维量价结构因子+强化学习自动寻优"},
         ]
 
     def run_backtest(self, name: str, days: int = 30, balance: float = 100000.0,
@@ -880,47 +895,78 @@ class RealKlineBacktestEngine:
     def _simulate_trades(self, closes, signals, balance):
         import numpy as np
         n = len(closes)
-        fee_rate = 0.0003
-        slippage = 0.001
+        # A股实际费率: 印花税0.05%(卖出) + 佣金0.025% + 过户费0.001% ≈ 0.075%
+        fee_rate = 0.00075
+        # 动态滑点: 基础0.05% + 波动率补偿
+        volatility = np.std(np.diff(closes) / (closes[:-1] + 1e-10)) if n > 10 else 0.02
+        slippage = max(0.0005, min(0.02, 0.0005 + volatility * 0.05))
+        min_lot = 100  # A股最小交易单位: 100股(一手)
+        price_limit = 0.10  # 涨跌停限制: ±10%
         cash = np.zeros(n)
         shares = np.zeros(n)
         equity = np.zeros(n)
         cash[0] = balance
         equity[0] = balance
         trade_logs = []
+        # T+1跟踪: 记录当天买入的股数，次日才可卖出
+        pending_shares = 0.0  # 今日买入、明日才可卖出的股数
+
+        # 计算涨跌停价格
+        prev_close = closes[0]
 
         for i in range(1, n):
             cash[i] = cash[i-1]
             shares[i] = shares[i-1]
+
+            # 涨跌停检查: 价格不能超过涨跌停限制
+            upper_limit = prev_close * (1 + price_limit)
+            lower_limit = prev_close * (1 - price_limit)
+            effective_price = max(lower_limit, min(upper_limit, closes[i]))
+            prev_close = closes[i]
+
             target_pos = float(signals[i])
-            total_equity = cash[i] + shares[i] * closes[i]
-            current_pos = (shares[i] * closes[i]) / total_equity if total_equity > 0 else 0
+            total_equity = cash[i] + shares[i] * effective_price
+            current_pos = (shares[i] * effective_price) / total_equity if total_equity > 0 else 0
 
             if abs(target_pos - current_pos) > 0.05:
                 target_value = total_equity * target_pos
-                current_value = shares[i] * closes[i]
+                current_value = shares[i] * effective_price
                 delta_value = target_value - current_value
 
                 if abs(delta_value) > 10:
-                    trade_price = closes[i] * (1 + slippage) if delta_value > 0 else closes[i] * (1 - slippage)
+                    trade_price = effective_price * (1 + slippage) if delta_value > 0 else effective_price * (1 - slippage)
                     trade_shares = delta_value / trade_price
-                    fee = abs(delta_value) * fee_rate
+
+                    # A股最小交易单位: 向下取整到100的倍数
+                    trade_shares = int(abs(trade_shares) // min_lot) * min_lot
+                    if trade_shares == 0:
+                        continue
+
+                    trade_shares = trade_shares if delta_value > 0 else -trade_shares
+                    fee = abs(trade_shares * trade_price) * fee_rate
 
                     if trade_shares > 0:
+                        # 买入
                         cost = trade_shares * trade_price + fee
                         if cash[i] >= cost:
                             cash[i] -= cost
                             shares[i] += trade_shares
+                            pending_shares += trade_shares  # T+1: 今日买入不可卖
                             trade_logs.append(("buy", i, float(trade_price), float(trade_shares)))
                     else:
-                        sell_shares = min(-trade_shares, shares[i])
-                        if sell_shares > 0:
+                        # 卖出: T+1检查 — 当日买入的不可卖出
+                        sell_shares = min(-trade_shares, shares[i] - pending_shares)
+                        if sell_shares >= min_lot:
                             proceeds = sell_shares * trade_price - fee
                             cash[i] += proceeds
                             shares[i] -= sell_shares
                             trade_logs.append(("sell", i, float(trade_price), float(sell_shares)))
 
-            equity[i] = cash[i] + shares[i] * closes[i]
+            # 次日: 释放T+1锁定
+            if i > 0:
+                pending_shares = max(0, pending_shares - max(0, shares[i-1] - shares[i]))
+
+            equity[i] = cash[i] + shares[i] * effective_price
 
         if n < 2:
             return {"final_balance": balance, "total_return_pct": 0, "sharpe": 0,
@@ -973,7 +1019,7 @@ class EnhancedStrategyManager:
     - 真实K线模式 → 使用RealKlineBacktestEngine（基于AKShare数据源跑真实行情）
     """
 
-    def __init__(self, aurora_base_url: str = "http://localhost:5000"):
+    def __init__(self, aurora_base_url: str = "http://localhost:5003"):
         # 三核心
         self.aurora = AuroraAPIClient(base_url=aurora_base_url)
         self.fallback = SimulatedFallbackEngine()
@@ -1003,14 +1049,21 @@ class EnhancedStrategyManager:
             self.parameter_store = None
 
         # 启动健康检查线程
+        self._shutdown_event = threading.Event()
         self._health_thread = threading.Thread(target=self._health_check_loop, daemon=True)
         self._health_thread.start()
+
+    def shutdown(self):
+        """优雅关闭：停止健康检查线程"""
+        self._shutdown_event.set()
+        if self._health_thread and self._health_thread.is_alive():
+            self._health_thread.join(timeout=5)
 
     # ---- 模式管理 ----
 
     def _health_check_loop(self):
-        """后台健康检查（每30秒一次）"""
-        while True:
+        """后台健康检查（每30秒一次，收到 shutdown 信号后退出）"""
+        while not self._shutdown_event.is_set():
             try:
                 available = self.aurora.check_available()
                 with self._lock:
@@ -1025,7 +1078,7 @@ class EnhancedStrategyManager:
             except Exception as e:
                 with self._lock:
                     self._mode = SystemMode.AURORA_FALLBACK
-            time.sleep(30)
+            self._shutdown_event.wait(30)  # 可中断的sleep
 
     def get_mode(self) -> SystemMode:
         """获取当前运行模式"""
@@ -1092,13 +1145,13 @@ class EnhancedStrategyManager:
                     version = info.get('current_version', 0) if info else 0
                     best_params_info = f"（使用优化参数 v{version}, score={best_score:.2f}）"
                     # 同步到 active_strategies 缓存
-                    self._active_strategies[name] = type('obj', (object,), {
-                        'name': name, 'label': name, 'category': '',
-                        'description': f'v{version}, score={best_score:.2f}',
-                        'status': StrategyStatus.RUNNING,
-                        'best_params': best_params, 'best_score': best_score,
-                        'version': version
-                    })()
+                    self._active_strategies[name] = StrategyInfo(
+                        name=name, label=name, category='',
+                        description=f'v{version}, score={best_score:.2f}',
+                        status=StrategyStatus.RUNNING,
+                        best_params=best_params, best_score=best_score,
+                        version=version
+                    )
             except Exception as e:
                 print(f"[WARN] 加载优化参数失败，使用默认: {e}")
 
@@ -1274,12 +1327,12 @@ class EnhancedStrategyManager:
             info = _ps.get_strategy(strategy_name)
             version = info.get('current_version', 0) if info else 0
             # 同步到 active_strategies 缓存（供GUI/运行时使用）
-            self._active_strategies[strategy_name] = type('obj', (object,), {
-                'name': strategy_name, 'label': strategy_name,
-                'category': 'optimized', 'description': f'v{version}, score={best_score:.2f}',
-                'best_params': best_params, 'best_score': best_score,
-                'version': version, 'status': 'optimized'
-            })()
+            self._active_strategies[strategy_name] = StrategyInfo(
+                name=strategy_name, label=strategy_name,
+                category='optimized', description=f'v{version}, score={best_score:.2f}',
+                best_params=best_params, best_score=best_score,
+                version=version, status=StrategyStatus.RUNNING
+            )
             return {
                 'success': True, 'strategy': strategy_name,
                 'best_params': best_params, 'best_score': round(best_score, 4),
@@ -1319,7 +1372,8 @@ class EnhancedStrategyManager:
         """
         运行韬定律策略优化器集群优化
         - Aurora模式: 调用 aurora.run_tau_optimization
-        - 回退模式: 使用 tau_optimizer_cluster.TauOptimizerCluster 本地执行
+        - 主力模式: 使用熵韬收敛优化器 (EntropyTauOptimizer) 本地执行
+        - 兜底模式: 使用原韬定律 (TauOptimizerCluster) 本地执行
         """
         start_time = time.time()
 
@@ -1357,9 +1411,9 @@ class EnhancedStrategyManager:
             except Exception as e:
                 pass
 
-        # 2) 回退模式: 使用 TauOptimizerCluster 本地执行
+        # 2) 主力模式: 使用熵韬收敛优化器 (EntropyTauOptimizer) 本地执行
         try:
-            from .tau_optimizer_cluster import TauOptimizerCluster  # 延迟导入, 避免循环依赖
+            from .tau_enhanced_optimizer import EntropyTauOptimizer
 
             # 默认参数范围 (未提供时使用通用双均线示例范围)
             ranges = param_ranges or {
@@ -1368,15 +1422,18 @@ class EnhancedStrategyManager:
                 'threshold': (0.01, 0.1)
             }
 
-            # 延迟初始化 tau_cluster
-            if self.tau_cluster is None or self.tau_cluster.strategy_name != strategy_name:
-                self.tau_cluster = TauOptimizerCluster(ranges, strategy_name=strategy_name)
+            # 创建熵韬收敛优化器实例
+            tau_cluster = EntropyTauOptimizer(
+                ranges, strategy_name=strategy_name,
+                strategy_mgr=self
+            )
 
-            # 运行三层空间折叠优化
-            fold_result = self.tau_cluster.run_folding_optimization(
+            # 运行五维熵驱动收敛优化
+            fold_result = tau_cluster.run_enhanced_optimization(
                 coarse_points=coarse_points,
                 refined_points_per_region=max(5, refined_points // max(1, len(ranges))),
-                validation_points=5
+                validation_points=5,
+                entropy_decay=True
             )
 
             best_params = fold_result.get('best_params') or {}
@@ -1384,6 +1441,8 @@ class EnhancedStrategyManager:
             _best_score = round(best_result.score(), 4) if best_result else 0.0
             _total_evals = fold_result.get('total_evaluations', 0)
             _pattern_analysis = fold_result.get('pattern_analysis')
+            _convergence = fold_result.get('convergence', {})
+            _risk_summary = fold_result.get('risk_summary', {})
 
             # 记录优化结果到持久化存储
             try:
@@ -1393,7 +1452,7 @@ class EnhancedStrategyManager:
                     strategy_name=strategy_name,
                     best_params=best_params,
                     best_score=_best_score,
-                    method="tau_cluster_v1",
+                    method="entropy_tau_v4",
                     total_evals=_total_evals,
                     param_ranges=param_ranges,
                 )
@@ -1416,30 +1475,64 @@ class EnhancedStrategyManager:
                     'cluster_status': fold_result.get('cluster_status', {}),
                     'total_evals': _total_evals,
                     'time_elapsed': round(time.time() - start_time, 3),
-                    'mode': 'tau_cluster_fallback',
+                    'mode': 'entropy_tau',
                     'pattern_analysis': _pattern_analysis,
+                    'convergence': _convergence,
+                    'risk_summary': _risk_summary,
                 }
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': f'TauOptimizerCluster 执行失败: {e}',
-                'data': {
-                    'best_params': {},
-                    'best_score': 0.0,
-                    'best_return': 0.0,
-                    'best_sharpe': 0.0,
-                    'cluster_status': {},
-                    'total_evals': 0,
-                    'time_elapsed': round(time.time() - start_time, 3)
+            # 3) 兜底模式: 熵韬失败时，回退到原韬定律优化器
+            print(f"  [Fallback] 熵韬优化器失败: {e}，回退到原韬定律...")
+            try:
+                from .tau_optimizer_cluster import TauOptimizerCluster
+                ranges = param_ranges or {
+                    'short_period': (5.0, 50.0),
+                    'long_period': (30.0, 200.0),
+                    'threshold': (0.01, 0.1)
                 }
-            }
+                fallback = TauOptimizerCluster(ranges, strategy_name=strategy_name)
+                fb_result = fallback.run_folding_optimization(
+                    coarse_points=coarse_points,
+                    refined_points_per_region=max(5, refined_points // max(1, len(ranges))),
+                )
+                fb_params = fb_result.get('best_params') or {}
+                fb_best = fb_result.get('best_result')
+                fb_score = round(fb_best.score(), 4) if fb_best else 0.0
+                return {
+                    'success': True,
+                    'data': {
+                        'best_params': fb_params,
+                        'best_score': fb_score,
+                        'best_return': round(getattr(fb_best, 'total_return', 0.0), 4) if fb_best else 0.0,
+                        'best_sharpe': round(getattr(fb_best, 'sharpe_ratio', 0.0), 4) if fb_best else 0.0,
+                        'cluster_status': fb_result.get('cluster_status', {}),
+                        'total_evals': fb_result.get('total_evaluations', 0),
+                        'time_elapsed': round(time.time() - start_time, 3),
+                        'mode': 'tau_cluster_fallback',
+                        'pattern_analysis': fb_result.get('pattern_analysis'),
+                    }
+                }
+            except Exception as fb_e:
+                return {
+                    'success': False,
+                    'error': f'熵韬优化器失败: {e} | 兜底优化器也失败: {fb_e}',
+                    'data': {
+                        'best_params': {},
+                        'best_score': 0.0,
+                        'best_return': 0.0,
+                        'best_sharpe': 0.0,
+                        'cluster_status': {},
+                        'total_evals': 0,
+                        'time_elapsed': round(time.time() - start_time, 3)
+                    }
+                }
 
     def run_tau_shepherd_optimization(self, strategy_name: str = "智能标的轮动",
                                         coarse_points: int = 35,
                                         refined_per_group: int = 15) -> dict:
         """
-        韬定律集群: 智能标的轮动策略专用优化
+        熵韬收敛集群: 智能标的轮动策略专用优化
         - 使用 FactorSpaceFolding 进行三层折叠搜索
         - 68个因子按7组分层优化 (组级粗筛→组内精搜→滚动窗口验证)
         - Phase 1: 35点组级粗筛
@@ -1459,9 +1552,10 @@ class EnhancedStrategyManager:
 
         try:
             from .tau_optimizer_cluster import (
-                TauOptimizerCluster, StrategyOptimizerBus,
+                StrategyOptimizerBus,
                 ShepherdRotationModule, FactorSpaceFolding,
             )
+            from .tau_enhanced_optimizer import EntropyTauOptimizer
 
             # Step 1: 初始化策略感知总线, 自动匹配标的轮动模块
             bus = StrategyOptimizerBus()
@@ -1470,8 +1564,8 @@ class EnhancedStrategyManager:
             if shepherd_mod is None:
                 shepherd_mod = ShepherdRotationModule()  # 兜底: 直接初始化
 
-            # Step 2: 初始化韬定律集群 (使用标的轮动模块的param_ranges)
-            cluster = TauOptimizerCluster(shepherd_mod.param_ranges, strategy_name=strategy_name)
+            # Step 2: 初始化熵韬收敛集群 (使用标的轮动模块的param_ranges)
+            cluster = EntropyTauOptimizer(shepherd_mod.param_ranges, strategy_name=strategy_name)
 
             # Step 3: 因子空间折叠 (Phase 1: 组级粗筛)
             folding = FactorSpaceFolding(shepherd_mod)
@@ -1586,7 +1680,7 @@ class EnhancedStrategyManager:
     def run_tau_bernoulli_optimization(self, strategy_name: str = "伯努利-康达策略",
                                         iterations: int = 50) -> dict:
         """
-        韬定律集群: 伯努利-康达策略专用优化
+        熵韬收敛集群: 伯努利-康达策略专用优化
         - 使用 BernoulliCoandaModule 的12参数空间
         - 使用 ParameterSpaceFolding 三层折叠 (粗筛→精搜→验证)
         - 目标: 多周期共振参数优化
@@ -1604,21 +1698,23 @@ class EnhancedStrategyManager:
 
         try:
             from .tau_optimizer_cluster import (
-                TauOptimizerCluster, StrategyOptimizerBus,
+                StrategyOptimizerBus,
                 BernoulliCoandaModule,
             )
+            from .tau_enhanced_optimizer import EntropyTauOptimizer
 
             # 自动检测并初始化模块
             bus = StrategyOptimizerBus()
             bus.detect_and_init(strategy_name)
             module = bus.current_module or BernoulliCoandaModule()
 
-            # 初始化集群, 使用通用折叠
-            cluster = TauOptimizerCluster(module.param_ranges, strategy_name=strategy_name)
+            # 初始化熵韬收敛集群, 使用通用折叠
+            cluster = EntropyTauOptimizer(module.param_ranges, strategy_name=strategy_name)
 
-            # 运行折叠优化 (使用通用的run_folding_optimization)
-            result = cluster.run_folding_optimization(
-                coarse_points=25, refined_points_per_region=15, validation_points=5)
+            # 运行五维熵驱动收敛优化
+            result = cluster.run_enhanced_optimization(
+                coarse_points=25, refined_points_per_region=15, validation_points=5,
+                entropy_decay=True)
 
             best_params = result.get('best_params', {})
             best_result_obj = result.get('best_result')
@@ -1639,7 +1735,7 @@ class EnhancedStrategyManager:
                     strategy_name=strategy_name,
                     best_params=best_params,
                     best_score=_final_score,
-                    method="tau_bernoulli_v1",
+                    method="entropy_tau_v4",
                     total_evals=_total_evals,
                     param_ranges=module.param_ranges if module is not None else None,
                 )
@@ -1675,6 +1771,268 @@ class EnhancedStrategyManager:
                 'traceback': traceback.format_exc(),
                 'time_elapsed': round(time.time() - start_time, 2)
             }
+
+    # ============================================================
+    # 特种兵策略集成
+    # ============================================================
+
+    def run_special_forces_evolution(self, symbol: str = "510300",
+                                      population_size: int = 20,
+                                      max_generations: int = 30,
+                                      force_refresh: bool = False,
+                                      incremental: bool = False) -> dict:
+        """
+        运行特种兵策略自演进优化
+
+        Args:
+            symbol: 股票代码
+            population_size: 种群大小
+            max_generations: 最大代数
+            force_refresh: 是否强制刷新数据
+            incremental: 是否增量演化
+
+        Returns:
+            dict: 演化结果
+        """
+        start_time = time.time()
+        try:
+            from .special_forces_evolution import (
+                get_evolution_controller,
+                SpecialForcesEvolutionController,
+            )
+            controller = get_evolution_controller()
+
+            if incremental:
+                journal = controller.evolve_incremental(
+                    symbol=symbol,
+                    additional_generations=max_generations,
+                    verbose=True,
+                )
+            else:
+                journal = controller.evolve(
+                    symbol=symbol,
+                    population_size=population_size,
+                    max_generations=max_generations,
+                    force_refresh=force_refresh,
+                    verbose=True,
+                )
+
+            if journal is None:
+                return {
+                    "success": False,
+                    "error": "演化失败（无已有参数，请先运行完整演化）",
+                    "elapsed_seconds": round(time.time() - start_time, 2),
+                }
+
+            params_summary = controller.get_params_summary(symbol)
+
+            # 同步参数到 tau_optimizer_cluster 的参数存储
+            try:
+                from .special_forces_strategy import SpecialForcesStrategy
+                from .tau_optimizer_cluster import get_parameter_store
+                _ps = get_parameter_store()
+                _ps.record_optimization(
+                    strategy_name=f"special_forces_{symbol}",
+                    best_params=journal.final_best_params,
+                    best_score=journal.final_best_score,
+                    method="special_forces_evolution",
+                    total_evals=journal.total_evaluations,
+                    param_ranges=dict(SpecialForcesStrategy.PARAM_RANGES),
+                )
+            except Exception:
+                pass
+
+            return {
+                "success": True,
+                "data": {
+                    "symbol": symbol,
+                    "best_params": journal.final_best_params,
+                    "best_score": journal.final_best_score,
+                    "best_metrics": journal.final_best_metrics,
+                    "total_evaluations": journal.total_evaluations,
+                    "total_elapsed_seconds": journal.total_elapsed_seconds,
+                    "generations": journal.convergence_generation if journal.convergence_generation > 0 else len(journal.generations),
+                    "convergence_generation": journal.convergence_generation,
+                    "params_summary": params_summary,
+                    "elapsed_seconds": round(time.time() - start_time, 2),
+                },
+            }
+        except Exception as e:
+            import traceback
+            return {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "elapsed_seconds": round(time.time() - start_time, 2),
+            }
+
+    def run_special_forces_backtest(self, symbol: str = "510300",
+                                     params: dict = None,
+                                     initial_capital: float = 100000.0,
+                                     use_optimized: bool = True) -> dict:
+        """
+        运行特种兵策略真实回测
+
+        Args:
+            symbol: 股票代码
+            params: 策略参数（不传则使用优化参数或默认值）
+            initial_capital: 初始资金
+            use_optimized: 是否自动使用优化参数
+
+        Returns:
+            dict: 回测结果
+        """
+        start_time = time.time()
+        try:
+            from .special_forces_strategy import (
+                SpecialForcesStrategy,
+                StrategyParams,
+                get_special_forces_strategy,
+            )
+
+            effective_params = params
+            if params is None and use_optimized:
+                try:
+                    from .special_forces_evolution import get_evolution_controller
+                    controller = get_evolution_controller()
+                    best_params = controller.get_best_params(symbol)
+                    if best_params:
+                        effective_params = best_params
+                        print(f"  [SF Backtest] 已加载 {symbol} 优化参数")
+                except Exception:
+                    pass
+
+            strategy = get_special_forces_strategy(symbol, params=effective_params)
+            if not strategy.is_loaded():
+                strategy.load_data()
+
+            result = strategy.run_backtest(initial_capital=initial_capital)
+
+            # 构造与 BacktestResult 兼容的返回
+            bt_result = BacktestResult(
+                strategy_name=f"special_forces_{symbol}",
+                total_return_pct=round(result.total_return * 100, 2),
+                sharpe_ratio=round(result.sharpe_ratio, 4),
+                max_drawdown=round(result.max_drawdown * 100, 2),
+                win_rate=round(result.win_rate * 100, 1),
+                total_trades=result.total_trades,
+                start_date=datetime.now().isoformat(),
+                end_date=datetime.now().isoformat(),
+                db_saved=False,
+            )
+            self._backtest_results.append(bt_result)
+
+            return {
+                "success": True,
+                "data": {
+                    "strategy_name": f"special_forces_{symbol}",
+                    "symbol": symbol,
+                    "total_return": result.total_return,
+                    "total_return_pct": round(result.total_return * 100, 2),
+                    "annual_return": result.annual_return,
+                    "sharpe_ratio": result.sharpe_ratio,
+                    "max_drawdown": result.max_drawdown,
+                    "max_drawdown_pct": round(result.max_drawdown * 100, 2),
+                    "win_rate": result.win_rate,
+                    "profit_factor": result.profit_factor,
+                    "total_trades": result.total_trades,
+                    "win_trades": result.win_trades,
+                    "lose_trades": result.lose_trades,
+                    "avg_win": result.avg_win,
+                    "avg_lose": result.avg_lose,
+                    "equity_curve": result.equity_curve,
+                    "trade_log": result.trade_log,
+                    "phase_distribution": result.phase_distribution,
+                    "elapsed_seconds": result.elapsed_time,
+                    "params": result.params,
+                },
+            }
+        except Exception as e:
+            import traceback
+            return {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "elapsed_seconds": round(time.time() - start_time, 2),
+            }
+
+    def get_special_forces_params(self, symbol: str = "510300") -> dict:
+        """获取特种兵策略参数摘要"""
+        try:
+            from .special_forces_evolution import get_evolution_controller
+            controller = get_evolution_controller()
+            summary = controller.get_params_summary(symbol)
+            best_params = controller.get_best_params(symbol)
+            versions = controller.get_evolution_history(symbol)
+            last_journal = controller.get_last_journal()
+
+            return {
+                "success": True,
+                "data": {
+                    "symbol": symbol,
+                    "summary": summary,
+                    "best_params": best_params,
+                    "versions": versions,
+                    "last_evolution": last_journal.to_dict() if last_journal else None,
+                },
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def start_special_forces(self, symbol: str = "510300",
+                              balance: float = 100000.0,
+                              use_optimized_params: bool = True) -> Tuple[bool, str]:
+        """
+        启动特种兵策略（实盘/模拟交易）
+
+        Args:
+            symbol: 股票代码
+            balance: 初始资金
+            use_optimized_params: 是否自动加载优化参数
+
+        Returns:
+            (success, message)
+        """
+        try:
+            from .special_forces_strategy import get_special_forces_strategy
+            from .special_forces_evolution import get_evolution_controller
+
+            effective_params = None
+            if use_optimized_params:
+                controller = get_evolution_controller()
+                best_params = controller.get_best_params(symbol)
+                if best_params:
+                    effective_params = best_params
+
+            strategy = get_special_forces_strategy(
+                symbol, params=effective_params, force_refresh=True
+            )
+            if not strategy.is_loaded():
+                strategy.load_data()
+
+            strategy_name = f"special_forces_{symbol}"
+            self._active_strategies[strategy_name] = StrategyInfo(
+                name=strategy_name,
+                label=f"特种兵・{symbol}",
+                category="Trend",
+                description=f"威科夫量价自适应 | {symbol}",
+                status=StrategyStatus.RUNNING,
+                best_params=effective_params or {},
+                params=effective_params or {},
+            )
+
+            best_score_info = ""
+            if effective_params:
+                try:
+                    controller = get_evolution_controller()
+                    summary = controller.get_params_summary(symbol)
+                    best_score_info = f"（v{summary.get('version', 0)}, score={summary.get('score', 0):.4f}）"
+                except Exception:
+                    pass
+
+            return True, f"特种兵策略 {symbol} 已启动{best_score_info}"
+        except Exception as e:
+            return False, f"特种兵策略启动失败: {e}"
 
     def get_optimized_strategies_report(self) -> dict:
         """获取所有已优化策略的报告 (供UI显示)
@@ -1746,6 +2104,13 @@ class EnhancedStrategyManager:
                     'groups': list(g.get_param_groups().keys()),
                 },
                 {
+                    'name': 'special_forces',
+                    'description': '特种兵策略自演进优化器 (威科夫量价自适应)',
+                    'params_count': 17,
+                    'keywords': ['special_forces', 'wyckoff', '特种兵', '威科夫', '量价自适应'],
+                    'groups': ['signal_thresholds', 'risk_management', 'position_sizing', 'signal_filter'],
+                },
+                {
                     'name': 'generic',
                     'description': '通用参数优化 (适用于所有策略)',
                     'params_count': 'dynamic',
@@ -1763,9 +2128,9 @@ class EnhancedStrategyManager:
                 result = self.aurora.get_tau_info()
                 if result and result.get('success'):
                     return result.get('data', {
-                        'name': 'TauOptimizerCluster',
-                        'description': '韬定律策略优化器集群 - 时间缩微+空间缩微协同',
-                        'features': ['相似参数复用', '参数空间折叠', '增量回测计算'],
+                        'name': 'EntropyTauOptimizer',
+                        'description': '熵韬收敛优化器集群 - 五维熵驱动收敛引擎',
+                        'features': ['期望/方差/熵/最值/概率五维驱动', '自适应粗筛', '分区域精搜', '熵趋势收敛监控', '风险分区过滤'],
                         'status': 'available'
                     })
             except Exception:
@@ -1774,9 +2139,9 @@ class EnhancedStrategyManager:
         # 2) 本地回退模式
         status = 'initialized' if self.tau_cluster is not None else 'ready'
         return {
-            'name': 'TauOptimizerCluster',
-            'description': '韬定律策略优化器集群 - 时间缩微+空间缩微协同',
-            'features': ['相似参数复用', '参数空间折叠', '增量回测计算'],
+            'name': 'EntropyTauOptimizer',
+            'description': '熵韬收敛优化器集群 - 五维熵驱动收敛引擎',
+            'features': ['期望/方差/熵/最值/概率五维驱动', '自适应粗筛', '分区域精搜', '熵趋势收敛监控', '风险分区过滤'],
             'status': status,
             'mode': 'fallback'
         }
@@ -1785,7 +2150,8 @@ class EnhancedStrategyManager:
         """
         单次带缓存的参数评估
         - Aurora模式: 调用 aurora.run_tau_single
-        - 回退模式: 调用 TauOptimizerCluster.optimize
+        - 主力模式: 调用 EntropyTauOptimizer.optimize
+        - 兜底模式: 调用 TauOptimizerCluster.optimize
         """
         if not params:
             return {
@@ -1803,9 +2169,9 @@ class EnhancedStrategyManager:
             except Exception:
                 pass
 
-        # 2) 回退模式: 使用 TauOptimizerCluster 本地单次评估
+        # 2) 主力模式: 使用 EntropyTauOptimizer 本地单次评估
         try:
-            from .tau_optimizer_cluster import TauOptimizerCluster  # 延迟导入
+            from .tau_enhanced_optimizer import EntropyTauOptimizer
 
             # 根据 params 构造默认 param_ranges (每个参数 ±50% 范围)
             ranges = {}
@@ -1818,7 +2184,7 @@ class EnhancedStrategyManager:
                     ranges[k] = (0.0, 1.0)
 
             if self.tau_cluster is None or self.tau_cluster.strategy_name != strategy_name:
-                self.tau_cluster = TauOptimizerCluster(ranges, strategy_name=strategy_name)
+                self.tau_cluster = EntropyTauOptimizer(ranges, strategy_name=strategy_name)
 
             result, hit_mode = self.tau_cluster.optimize(params)
 
@@ -1838,11 +2204,40 @@ class EnhancedStrategyManager:
                 }
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': f'TauOptimizerCluster 单次评估失败: {e}',
-                'data': {}
-            }
+            # 3) 兜底模式: 回退到原 TaoOptimizerCluster
+            try:
+                from .tau_optimizer_cluster import TauOptimizerCluster
+                ranges = {}
+                for k, v in params.items():
+                    try:
+                        fv = float(v)
+                        half = abs(fv) * 0.5 if fv != 0 else 1.0
+                        ranges[k] = (fv - half, fv + half)
+                    except (TypeError, ValueError):
+                        ranges[k] = (0.0, 1.0)
+                fallback = TauOptimizerCluster(ranges, strategy_name=strategy_name)
+                result, hit_mode = fallback.optimize(params)
+                return {
+                    'success': True,
+                    'data': {
+                        'strategy_name': strategy_name,
+                        'params': params,
+                        'hit_mode': hit_mode,
+                        'total_return': round(getattr(result, 'total_return', 0.0), 4),
+                        'sharpe_ratio': round(getattr(result, 'sharpe_ratio', 0.0), 4),
+                        'max_drawdown': round(getattr(result, 'max_drawdown', 0.0), 4),
+                        'win_rate': round(getattr(result, 'win_rate', 0.0), 4),
+                        'total_trades': getattr(result, 'total_trades', 0),
+                        'is_approximate': getattr(result, 'is_approximate', False),
+                        'score': round(result.score(), 4)
+                    }
+                }
+            except Exception as fb_e:
+                return {
+                    'success': False,
+                    'error': f'单次评估失败: {e} | 兜底: {fb_e}',
+                    'data': {}
+                }
 
     def get_optimization_history(self) -> List[dict]:
         """获取优化历史"""
@@ -1979,13 +2374,18 @@ class EnhancedStrategyManager:
 # 全局单例
 # ============================================================
 
-_strategy_manager_instance = None
+import threading
 
-def get_strategy_manager(aurora_url: str = "http://localhost:5000") -> EnhancedStrategyManager:
-    """获取策略管理器全局单例"""
+_strategy_manager_instance = None
+_strategy_manager_lock = threading.Lock()
+
+def get_strategy_manager(aurora_url: str = "http://localhost:5003") -> EnhancedStrategyManager:
+    """获取策略管理器全局单例（线程安全）"""
     global _strategy_manager_instance
     if _strategy_manager_instance is None:
-        _strategy_manager_instance = EnhancedStrategyManager(aurora_base_url=aurora_url)
+        with _strategy_manager_lock:
+            if _strategy_manager_instance is None:
+                _strategy_manager_instance = EnhancedStrategyManager(aurora_base_url=aurora_url)
     return _strategy_manager_instance
 
 

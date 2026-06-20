@@ -179,7 +179,8 @@ class RealTimePoller:
         if self._is_running:
             return
 
-        self._poll_interval = poll_interval
+        with self._lock:
+            self._poll_interval = poll_interval
         self._is_running = True
         self._init_bus()
 
@@ -205,9 +206,13 @@ class RealTimePoller:
             try:
                 self._poll_once()
             except Exception as e:
+                import traceback
                 print(f"[RealTimePoller] 轮询异常: {e}")
+                traceback.print_exc()
 
-            time.sleep(self._poll_interval)
+            with self._lock:
+                interval = self._poll_interval
+            time.sleep(interval)
 
     def _poll_once(self):
         """执行一次轮询"""
@@ -231,7 +236,8 @@ class RealTimePoller:
                         amount=data.get("amount", 0),
                         source=data.get("source", "")
                     )
-                    self._last_data[symbol] = realtime_data
+                    with self._lock:
+                        self._last_data[symbol] = realtime_data
                     self._notify_subscribers(symbol, realtime_data)
             except Exception as e:
                 print(f"[RealTimePoller] 获取 {symbol} 实时数据失败: {e}")
@@ -270,11 +276,13 @@ class RealTimePoller:
 
     def get_last_data(self, symbol: str) -> Optional[RealTimeData]:
         """获取最后一次获取的实时数据"""
-        return self._last_data.get(symbol)
+        with self._lock:
+            return self._last_data.get(symbol)
 
     def get_all_last_data(self) -> Dict[str, RealTimeData]:
         """获取所有股票的最后实时数据"""
-        return dict(self._last_data)
+        with self._lock:
+            return dict(self._last_data)
 
 # ============================================================
 # 全局单例

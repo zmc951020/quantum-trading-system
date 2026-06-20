@@ -16,7 +16,7 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPalette, QColor
 
 # Aurora系统地址
-AURORA_URL = "http://127.0.0.1:5000"
+AURORA_URL = "http://127.0.0.1:5003"
 DEEPSEEK_URL = f"{AURORA_URL}/deepseek"
 
 class QSLoginWindow(QWidget):

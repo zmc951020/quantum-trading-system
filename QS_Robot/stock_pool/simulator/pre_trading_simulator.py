@@ -12,22 +12,24 @@ from stock_pool.core.models import Stock, Strategy, SimulationResult
 class PreTradingSimulator:
     """预实盘模拟测试引擎"""
     
-    def __init__(self):
+    def __init__(self, seed: int = None):
         self.simulation_config = {
             'duration': 30,           # 模拟天数
             'initial_capital': 1000000,  # 初始资金
             'slippage': 0.001,        # 滑点
             'transaction_cost': 0.0005  # 交易成本
         }
+        self._seed = seed
+        self._rng = random.Random(seed) if seed is not None else random.Random()
     
     def _generate_simulated_prices(self, stock: Stock, days: int) -> List[float]:
-        """生成模拟价格序列"""
+        """生成模拟价格序列（确定性随机游走）"""
         prices = [stock.price]
         volatility = stock.volatility
         
         for _ in range(days):
-            # 随机游走模型
-            change = prices[-1] * (random.gauss(0, volatility) * 0.1)
+            # 随机游走模型（使用确定性RNG确保可复现）
+            change = prices[-1] * (self._rng.gauss(0, volatility) * 0.1)
             new_price = max(0.01, prices[-1] + change)
             prices.append(new_price)
         

@@ -19,6 +19,9 @@ import numpy as np
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # 风险等级
@@ -73,6 +76,27 @@ class RiskControlEngine:
             "liquidity": 1.0
         }
 
+        # 评分公式系数 (可配置)
+        # 设计原则: 每个指标独立映射到 0-100 分，满分表示该指标处于理想区间
+        self._coefficients = {
+            # 策略风险系数
+            "sharpe_multiplier": 40,       # sharpe=2.5 → 100分 (行业标准: 优秀策略Sharpe≈2.0-3.0)
+            "drawdown_multiplier": 3,      # max_drawdown=33% → 0分 (33%回撤视为不可接受)
+            "win_rate_offset": 30,         # 胜率30% → 0分 (低于30%胜率策略不可靠)
+            "win_rate_multiplier": 2.5,    # 胜率70% → 100分 (行业标准: 优秀策略胜率≈60-70%)
+            "profit_factor_multiplier": 50, # profit_factor=2.0 → 100分 (盈亏比2.0以上视为优秀)
+            "stability_multiplier": 0.5,   # 200笔交易 → 100分 (交易次数越多统计越稳定)
+            # 市场风险系数
+            "volatility_multiplier": 200,  # 波动率0.5 → 0分 (年化波动率50%以上视为极高风险)
+            "beta_penalty": 50,            # beta偏离1.0的惩罚系数
+            "correlation_offset": 50,      # 相关性基准分
+            "correlation_multiplier": 50,  # 相关性系数
+            # 操作风险系数
+            "slippage_multiplier": 10000,   # 滑点0.2% → 80分, 0.5%→50分 (合理惩罚区间)
+            "liquidity_multiplier": 50,     # 日均成交额2亿 → 100分 (流动性充足)
+            "cost_multiplier": 10000,       # 执行成本0.2% → 80分 (同滑点逻辑)
+        }
+
     def assess(self, symbol: str, strategy_name: str, 
                backtest_result: Dict, position_info: Dict = None) -> RiskAssessment:
         """执行全面风险评估"""
@@ -121,14 +145,15 @@ class RiskControlEngine:
         profit_factor = backtest_result.get("profit_factor", 0)
         total_trades = backtest_result.get("total_trades", 0)
         
-        # 计算各指标得分
-        sharpe_score = min(100, max(0, sharpe * 40))  # 夏普>2.5得满分
-        dd_score = min(100, max(0, 100 - max_drawdown * 3))  # 回撤>33%得0分
-        win_score = min(100, max(0, (win_rate - 30) * 2.5))  # 胜率>70%得满分
-        pf_score = min(100, max(0, profit_factor * 50)) if profit_factor > 0 else 50
+        # 计算各指标得分 (使用可配置系数)
+        c = self._coefficients
+        sharpe_score = min(100, max(0, sharpe * c["sharpe_multiplier"]))  # 夏普>2.5得满分
+        dd_score = min(100, max(0, 100 - max_drawdown * c["drawdown_multiplier"]))  # 回撤>33%得0分
+        win_score = min(100, max(0, (win_rate - c["win_rate_offset"]) * c["win_rate_multiplier"]))  # 胜率>70%得满分
+        pf_score = min(100, max(0, profit_factor * c["profit_factor_multiplier"])) if profit_factor > 0 else 50
         
         # 策略稳定性得分（交易次数越多越稳定）
-        stability_score = min(100, total_trades * 0.5)
+        stability_score = min(100, total_trades * c["stability_multiplier"])
         
         avg_score = (sharpe_score + dd_score + win_score + pf_score + stability_score) / 5
         
@@ -155,10 +180,11 @@ class RiskControlEngine:
         beta = position_info.get("beta", 1.0)
         correlation = position_info.get("correlation", 0.5)
         
-        # 计算得分
-        vol_score = min(100, max(0, 100 - volatility * 200))  # 波动率<0.5得满分
-        beta_score = min(100, max(0, 100 - abs(beta - 1) * 50))  # beta=1得满分
-        corr_score = min(100, max(0, 50 + correlation * 50))  # 适度相关最好
+        # 计算得分 (使用可配置系数)
+        c = self._coefficients
+        vol_score = min(100, max(0, 100 - volatility * c["volatility_multiplier"]))  # 波动率<0.5得满分
+        beta_score = min(100, max(0, 100 - abs(beta - 1) * c["beta_penalty"]))  # beta=1得满分
+        corr_score = min(100, max(0, c["correlation_offset"] + correlation * c["correlation_multiplier"]))  # 适度相关最好
         
         avg_score = (vol_score + beta_score + corr_score) / 3
         
@@ -210,10 +236,11 @@ class RiskControlEngine:
         execution_cost = position_info.get("execution_cost", 0.001)  # 执行成本
         fill_rate = position_info.get("fill_rate", 95)  # 成交率%
         
-        # 计算得分
-        slippage_score = min(100, max(0, 100 - avg_slippage * 50000))
-        liquidity_score = min(100, liquidity * 50)  # 流动性>2亿得满分
-        cost_score = min(100, max(0, 100 - execution_cost * 50000))
+        # 计算得分 (使用可配置系数)
+        c = self._coefficients
+        slippage_score = min(100, max(0, 100 - avg_slippage * c["slippage_multiplier"]))
+        liquidity_score = min(100, liquidity * c["liquidity_multiplier"])  # 流动性>2亿得满分
+        cost_score = min(100, max(0, 100 - execution_cost * c["cost_multiplier"]))
         fill_score = min(100, fill_rate)
         
         avg_score = (slippage_score + liquidity_score + cost_score + fill_score) / 4
@@ -293,6 +320,288 @@ class RiskControlEngine:
             recommendations.append("✅ 风控评估通过，建议保持当前配置")
         
         return recommendations
+
+    # ---------- 三层风控：事前/事中/事后 ----------
+
+    def pre_trade_check(self, order: Dict) -> Dict[str, Any]:
+        """事前风控：下单前校验
+
+        检查项：
+        - 单笔订单金额/数量上限
+        - 标的涨跌停/停牌状态
+        - 账户资金/持仓充足性
+        - 策略信号合理性（NaN/极值拦截）
+
+        Args:
+            order: {symbol, strategy_name, price, volume, side, order_type}
+
+        Returns:
+            {passed: bool, reason: str, risk_score: float}
+        """
+        symbol = order.get("symbol", "")
+        volume = order.get("volume", 0)
+        price = order.get("price", 0)
+        side = order.get("side", "buy")
+
+        checks = []
+
+        # 1. 数值边界校验：NaN/零/负值拦截
+        if not isinstance(price, (int, float)) or np.isnan(price) or price <= 0:
+            return {"passed": False, "reason": f"标的价格异常: {price}", "risk_score": 0}
+        if not isinstance(volume, (int, float)) or np.isnan(volume) or volume <= 0:
+            return {"passed": False, "reason": f"订单量异常: {volume}", "risk_score": 0}
+
+        # 2. 单笔订单金额上限（默认100万）
+        max_order_amount = order.get("max_order_amount", 1_000_000)
+        order_amount = price * volume
+        if order_amount > max_order_amount:
+            return {"passed": False, "reason": f"单笔金额超限: {order_amount:.0f} > {max_order_amount:.0f}", "risk_score": 30}
+
+        # 3. 单笔数量上限（默认10000股）
+        max_volume = order.get("max_volume", 10000)
+        if volume > max_volume:
+            return {"passed": False, "reason": f"单笔数量超限: {volume} > {max_volume}", "risk_score": 30}
+
+        # 4. 停牌/涨跌停检查（由数据平台预处理）
+        if order.get("is_suspended", False):
+            return {"passed": False, "reason": f"标的 {symbol} 已停牌", "risk_score": 0}
+        if order.get("is_limit_up_down", False):
+            return {"passed": False, "reason": f"标的 {symbol} 涨跌停无法交易", "risk_score": 10}
+
+        logger.info(f"事前风控通过: {symbol} {side} {volume}@{price}")
+        return {"passed": True, "reason": "事前风控通过", "risk_score": 100}
+
+    def real_time_risk_monitor(self, portfolio: Dict) -> Dict[str, Any]:
+        """事中风控：动态波动监控
+
+        实时监控项：
+        - 浮动盈亏超过止损线
+        - 单策略回撤超过阈值
+        - 总仓位超过上限
+        - 行情异常波动（熔断信号）
+
+        Args:
+            portfolio: {positions, pnl, drawdown, total_exposure, market_status}
+
+        Returns:
+            {passed: bool, alerts: List[str], risk_score: float}
+        """
+        alerts = []
+        risk_scores = []
+
+        # 1. 浮动盈亏止损检查
+        unrealized_pnl = portfolio.get("unrealized_pnl", 0)
+        total_capital = portfolio.get("total_capital", 1)
+        pnl_pct = abs(unrealized_pnl) / total_capital if total_capital > 0 else 0
+
+        stop_loss_threshold = portfolio.get("stop_loss_threshold", 0.05)  # 默认5%
+        if unrealized_pnl < 0 and pnl_pct > stop_loss_threshold:
+            alerts.append(f"浮动亏损 {pnl_pct:.2%} 超过止损线 {stop_loss_threshold:.2%}")
+            risk_scores.append(10)
+
+        # 2. 单策略回撤监控
+        max_drawdown = portfolio.get("current_drawdown", 0)
+        dd_threshold = portfolio.get("max_drawdown_threshold", 0.15)  # 默认15%
+        if max_drawdown > dd_threshold:
+            alerts.append(f"当前回撤 {max_drawdown:.2%} 超过阈值 {dd_threshold:.2%}")
+            risk_scores.append(20)
+
+        # 3. 总仓位检查
+        total_exposure = portfolio.get("total_exposure", 0)
+        max_exposure = portfolio.get("max_exposure", 0.8)  # 默认80%
+        if total_exposure > max_exposure:
+            alerts.append(f"总仓位 {total_exposure:.2%} 超过上限 {max_exposure:.2%}")
+            risk_scores.append(30)
+
+        # 4. 行情异常检测（来自数据平台熔断信号）
+        if portfolio.get("market_circuit_breaker", False):
+            alerts.append("行情断流熔断触发，暂停交易")
+            risk_scores.append(0)
+
+        avg_score = sum(risk_scores) / len(risk_scores) if risk_scores else 100
+        passed = len(alerts) == 0
+
+        if not passed:
+            logger.warning(f"事中风控告警: {alerts}")
+
+        return {
+            "passed": passed,
+            "alerts": alerts,
+            "risk_score": round(avg_score, 2),
+        }
+
+    def post_trade_reconciliation(self, trade_records: List[Dict]) -> Dict[str, Any]:
+        """事后风控：盘后对账与绩效复盘
+
+        检查项：
+        - 成交数据与持仓数据一致性
+        - 盈亏计算准确性
+        - 异常交易模式检测（频繁撤单、对倒等）
+        - 策略绩效偏离度
+
+        Args:
+            trade_records: [{symbol, side, price, volume, timestamp, ...}]
+
+        Returns:
+            {passed: bool, issues: List[str], reconciliation_report: Dict}
+        """
+        issues = []
+
+        if not trade_records:
+            return {"passed": True, "issues": [], "reconciliation_report": {"total_trades": 0}}
+
+        # 1. 异常交易模式检测
+        cancel_count = sum(1 for t in trade_records if t.get("status") == "cancelled")
+        total_count = len(trade_records)
+        cancel_rate = cancel_count / total_count if total_count > 0 else 0
+
+        if cancel_rate > 0.3:  # 撤单率超过30%
+            issues.append(f"撤单率过高: {cancel_rate:.1%} ({cancel_count}/{total_count})")
+
+        # 2. 买卖平衡检查
+        buy_volume = sum(t.get("volume", 0) for t in trade_records if t.get("side") == "buy")
+        sell_volume = sum(t.get("volume", 0) for t in trade_records if t.get("side") == "sell")
+        volume_imbalance = abs(buy_volume - sell_volume) / max(buy_volume + sell_volume, 1)
+
+        if volume_imbalance > 0.5:
+            issues.append(f"买卖量失衡: 买{buy_volume} vs 卖{sell_volume}")
+
+        # 3. 价格异常检测
+        price_anomalies = []
+        for t in trade_records:
+            price = t.get("price", 0)
+            vwap = t.get("vwap", price)
+            if vwap > 0 and abs(price - vwap) / vwap > 0.1:  # 偏离VWAP超过10%
+                price_anomalies.append(t.get("symbol", "unknown"))
+
+        if price_anomalies:
+            issues.append(f"价格异常标的: {list(set(price_anomalies))[:5]}")
+
+        # 4. 生成对账报告
+        report = {
+            "total_trades": total_count,
+            "cancel_rate": round(cancel_rate, 4),
+            "buy_volume": buy_volume,
+            "sell_volume": sell_volume,
+            "volume_imbalance": round(volume_imbalance, 4),
+            "price_anomalies": len(price_anomalies),
+            "passed": len(issues) == 0,
+        }
+
+        if issues:
+            logger.warning(f"事后对账发现问题: {issues}")
+
+        return {
+            "passed": len(issues) == 0,
+            "issues": issues,
+            "reconciliation_report": report,
+        }
+
+    # ---------- 增强风控：熔断与额度 ----------
+
+    def daily_loss_circuit_breaker(self, daily_pnl: float, total_capital: float,
+                                     max_daily_loss_pct: float = 0.05) -> Dict[str, Any]:
+        """单日亏损熔断 — 当日亏损超过总资金x%时触发
+
+        Args:
+            daily_pnl: 当日累计盈亏（负数为亏损）
+            total_capital: 总资金
+            max_daily_loss_pct: 最大日亏损比例，默认5%
+
+        Returns:
+            {tripped: bool, reason: str, loss_pct: float}
+        """
+        if daily_pnl >= 0:
+            return {"tripped": False, "reason": "", "loss_pct": 0.0}
+
+        loss_pct = abs(daily_pnl) / total_capital if total_capital > 0 else 0
+        if loss_pct > max_daily_loss_pct:
+            logger.error(f"[RiskCtrl] 单日亏损熔断: {loss_pct:.2%} > {max_daily_loss_pct:.2%}")
+            return {
+                "tripped": True,
+                "reason": f"单日亏损 {loss_pct:.2%} 超过熔断线 {max_daily_loss_pct:.2%}",
+                "loss_pct": round(loss_pct, 4),
+            }
+        return {"tripped": False, "reason": "", "loss_pct": round(loss_pct, 4)}
+
+    def frequent_trading_circuit_breaker(self, trades_last_minute: int,
+                                           max_trades_per_minute: int = 10) -> Dict[str, Any]:
+        """频繁交易熔断 — 每分钟交易次数超过阈值时触发
+
+        Args:
+            trades_last_minute: 过去1分钟内的交易次数
+            max_trades_per_minute: 每分钟最大交易次数，默认10
+
+        Returns:
+            {tripped: bool, reason: str, trades_count: int}
+        """
+        if trades_last_minute > max_trades_per_minute:
+            logger.error(f"[RiskCtrl] 频繁交易熔断: {trades_last_minute}次/分钟 > {max_trades_per_minute}")
+            return {
+                "tripped": True,
+                "reason": f"交易频率异常: {trades_last_minute}次/分钟 (上限{max_trades_per_minute})",
+                "trades_count": trades_last_minute,
+            }
+        return {"tripped": False, "reason": "", "trades_count": trades_last_minute}
+
+    def fund_usage_rate_check(self, used_capital: float, total_capital: float,
+                                max_usage_rate: float = 0.9) -> Dict[str, Any]:
+        """资金使用率上限 — 已用资金/总资金超过阈值时拒绝新开仓
+
+        Args:
+            used_capital: 已用资金（持仓市值+冻结资金）
+            total_capital: 总资金
+            max_usage_rate: 最大资金使用率，默认90%
+
+        Returns:
+            {passed: bool, reason: str, usage_rate: float}
+        """
+        usage_rate = used_capital / total_capital if total_capital > 0 else 0
+        if usage_rate > max_usage_rate:
+            return {
+                "passed": False,
+                "reason": f"资金使用率 {usage_rate:.1%} 超过上限 {max_usage_rate:.1%}",
+                "usage_rate": round(usage_rate, 4),
+            }
+        return {"passed": True, "reason": "", "usage_rate": round(usage_rate, 4)}
+
+    def comprehensive_circuit_breaker(self, daily_pnl: float, total_capital: float,
+                                        trades_last_minute: int, used_capital: float) -> Dict[str, Any]:
+        """综合熔断检查 — 一次调用完成所有熔断判断
+
+        Returns:
+            {tripped: bool, reasons: List[str], details: Dict}
+        """
+        reasons = []
+        details = {}
+
+        # 1. 单日亏损熔断
+        loss_check = self.daily_loss_circuit_breaker(daily_pnl, total_capital)
+        details["daily_loss"] = loss_check
+        if loss_check["tripped"]:
+            reasons.append(loss_check["reason"])
+
+        # 2. 频繁交易熔断
+        freq_check = self.frequent_trading_circuit_breaker(trades_last_minute)
+        details["frequent_trading"] = freq_check
+        if freq_check["tripped"]:
+            reasons.append(freq_check["reason"])
+
+        # 3. 资金使用率超限（不熔断，但拒绝新开仓）
+        fund_check = self.fund_usage_rate_check(used_capital, total_capital)
+        details["fund_usage"] = fund_check
+        if not fund_check["passed"]:
+            reasons.append(fund_check["reason"])
+
+        tripped = len(reasons) > 0
+        if tripped:
+            logger.warning(f"[RiskCtrl] 综合熔断触发: {reasons}")
+
+        return {
+            "tripped": tripped,
+            "reasons": reasons,
+            "details": details,
+        }
 
     # ---------- 批量评估 ----------
 

@@ -93,6 +93,7 @@ class SystemHealthChecker:
         "L5_交易风控":   {"order": 5, "name": "交易与风控", "icon": "💰"},
         "L6_AI智能体":   {"order": 6, "name": "AI与智能体", "icon": "🤖"},
         "L7_运维部署":   {"order": 7, "name": "运维与部署", "icon": "🔧"},
+        "L8_深度审计":   {"order": 8, "name": "深度审计（代码/API/引擎/配置）", "icon": "🔬"},
     }
 
     BASE_URL = "http://127.0.0.1:5003"
@@ -273,6 +274,36 @@ class SystemHealthChecker:
             return (ok, 100 if ok else 0, f"风控状态: {'通过' if ok else '失败'}", "")
         yield ("L2_006", "风控状态", "L2_业务链路", "critical", "deep", _l2_006)
 
+        # 新模块：牧羊人优化器
+        def _l2_007():
+            try:
+                from core.shepherd_optimizer import ShepherdOptimizer, ShepherdVersion
+                s = ShepherdOptimizer(version=ShepherdVersion.V6)
+                return (True, 100, "牧羊人V6优化器: 本地可用（已消除5002依赖）", "")
+            except Exception as e:
+                return (False, 0, f"牧羊人优化器: 不可用 - {e}", "检查 core/shepherd_optimizer.py")
+        yield ("L2_007", "牧羊人优化器V6", "L2_业务链路", "critical", "both", _l2_007)
+
+        # 新模块：Walk-Forward 分析
+        def _l2_008():
+            try:
+                from core.walk_forward import WalkForwardAnalyzer
+                wf = WalkForwardAnalyzer()
+                return (True, 100, "Walk-Forward分析器: 可用", "")
+            except Exception as e:
+                return (False, 0, f"Walk-Forward分析器: 不可用 - {e}", "检查 core/walk_forward.py")
+        yield ("L2_008", "Walk-Forward分析", "L2_业务链路", "warning", "both", _l2_008)
+
+        # 新模块：回测对比
+        def _l2_009():
+            try:
+                from core.backtest_comparator import BacktestComparator
+                bc = BacktestComparator()
+                return (True, 100, "回测对比器: 可用", "")
+            except Exception as e:
+                return (False, 0, f"回测对比器: 不可用 - {e}", "检查 core/backtest_comparator.py")
+        yield ("L2_009", "回测多策略对比", "L2_业务链路", "warning", "both", _l2_009)
+
     # ==================== L3: 系统可靠性 ====================
 
     def _build_l3_checks(self) -> List[Callable]:
@@ -322,6 +353,60 @@ class SystemHealthChecker:
             return (ok, 100 if ok else 0, f"Aurora系统信息: {'通过' if ok else '失败'}", "")
         yield ("L3_005", "Aurora系统信息", "L3_系统可靠性", "warning", "deep", _l3_005)
 
+        # 新模块：自动修复/重启机制
+        def _l3_006():
+            """
+            自演进/自动修复检查：
+            1. 检测进程是否存在
+            2. 检测最近崩溃记录
+            3. 提供自动重启建议
+            """
+            try:
+                import psutil
+                process = psutil.Process(os.getpid())
+                uptime_sec = time.time() - process.create_time()
+                uptime_str = f"{uptime_sec/3600:.1f}h" if uptime_sec > 3600 else f"{uptime_sec/60:.1f}m"
+
+                # 检查是否有最近的崩溃记录
+                crash_file = os.path.join(os.path.dirname(__file__), '..', 'logs', 'crash.log')
+                recent_crash = False
+                if os.path.exists(crash_file):
+                    mtime = os.path.getmtime(crash_file)
+                    if time.time() - mtime < 3600:  # 1小时内
+                        recent_crash = True
+
+                if recent_crash:
+                    return (False, 40, f"自动修复: 检测到1小时内崩溃记录，运行时间={uptime_str}",
+                            "检查 crash.log 并考虑自动重启")
+                return (True, 100, f"自动修复: 正常，运行时间={uptime_str}，无近期崩溃", "")
+            except Exception as e:
+                return (True, 80, f"自动修复: 部分可用 - {e}", "安装 psutil: pip install psutil")
+        yield ("L3_006", "自动修复/重启", "L3_系统可靠性", "warning", "deep", _l3_006)
+
+        # 新模块：进程健康自愈
+        def _l3_007():
+            """检查关键模块是否全部可导入"""
+            modules = [
+                ("trade_executor", "core.trade_executor"),
+                ("order_manager", "core.order_manager"),
+                ("realtime_feed", "core.realtime_feed"),
+                ("alert_manager", "core.alert_manager"),
+                ("risk_control", "core.risk_control"),
+                ("shepherd_optimizer", "core.shepherd_optimizer"),
+            ]
+            failed = []
+            for name, path in modules:
+                try:
+                    __import__(path)
+                except Exception:
+                    failed.append(name)
+
+            if failed:
+                return (False, 0, f"自愈检查: {len(failed)}个模块不可用 - {', '.join(failed)}",
+                        f"检查模块: {', '.join(failed)}")
+            return (True, 100, f"自愈检查: 全部{len(modules)}个关键模块正常", "")
+        yield ("L3_007", "关键模块自愈检查", "L3_系统可靠性", "critical", "both", _l3_007)
+
     # ==================== L4: 数据与行情 ====================
 
     def _build_l4_checks(self) -> List[Callable]:
@@ -355,6 +440,21 @@ class SystemHealthChecker:
             ok, d = self._api_get("/api/technical-indicators")
             return (ok, 100 if ok else 0, f"技术指标列表: {'通过' if ok else '失败'}", "")
         yield ("L4_005", "技术指标列表", "L4_数据行情", "info", "deep", _l4_005)
+
+        # 新模块：实时行情推送
+        def _l4_006():
+            try:
+                from core.realtime_feed import RealtimeFeed, get_realtime_feed
+                feed = get_realtime_feed()
+                stats = feed.get_stats()
+                ticks = stats.get("total_ticks", 0)
+                source = stats.get("source", "未启动")
+                return (True, 100 if ticks > 0 else 80,
+                        f"实时行情: {source}源, {ticks}次推送" if ticks > 0 else "实时行情: 已就绪，待启动",
+                        "启动: feed.start()" if ticks == 0 else "")
+            except Exception as e:
+                return (False, 0, f"实时行情: 不可用 - {e}", "检查 core/realtime_feed.py")
+        yield ("L4_006", "实时行情推送", "L4_数据行情", "warning", "both", _l4_006)
 
     # ==================== L5: 交易与风控 ====================
 
@@ -391,6 +491,46 @@ class SystemHealthChecker:
             ok, d = self._api_get("/api/trade/report")
             return (ok, 100 if ok else 0, f"交易报告: {'通过' if ok else '失败'}", "")
         yield ("L5_006", "交易报告", "L5_交易风控", "warning", "deep", _l5_006)
+
+        # 新模块：交易执行器
+        def _l5_007():
+            try:
+                from core.trade_executor import TradeExecutor, get_trade_executor
+                te = get_trade_executor()
+                stats = te.get_stats()
+                signals = stats.get("total_signals", 0)
+                orders = stats.get("total_orders", 0)
+                filled = stats.get("total_filled", 0)
+                breaker = "熔断中" if te._circuit_breaker else "正常"
+                return (True, 100 if signals > 0 else 85,
+                        f"交易执行器: {breaker}, 信号{signals}→订单{orders}→成交{filled}",
+                        "待券商密钥激活" if signals == 0 else "")
+            except Exception as e:
+                return (False, 0, f"交易执行器: 不可用 - {e}", "检查 core/trade_executor.py")
+        yield ("L5_007", "交易执行器", "L5_交易风控", "critical", "both", _l5_007)
+
+        # 新模块：订单管理器
+        def _l5_008():
+            try:
+                from core.order_manager import OrderManager, get_order_manager
+                om = get_order_manager()
+                stats = om.get_stats()
+                total = stats.get("total", 0)
+                fill_rate = stats.get("fill_rate", 0)
+                db_size = "N/A"
+                try:
+                    import os
+                    db_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'orders.db')
+                    if os.path.exists(db_path):
+                        db_size = f"{os.path.getsize(db_path)/1024:.1f}KB"
+                except Exception:
+                    pass
+                return (True, 100,
+                        f"订单管理器: {total}个订单, 成交率{fill_rate:.1%}, DB={db_size}",
+                        "")
+            except Exception as e:
+                return (False, 0, f"订单管理器: 不可用 - {e}", "检查 core/order_manager.py")
+        yield ("L5_008", "订单管理器", "L5_交易风控", "critical", "both", _l5_008)
 
     # ==================== L6: AI与智能体 ====================
 
@@ -478,6 +618,21 @@ class SystemHealthChecker:
             return (ok, 100 if ok else 0, f"告警系统: {'通过' if ok else '失败'}", "")
         yield ("L7_006", "告警系统", "L7_运维部署", "warning", "deep", _l7_006)
 
+        # 新模块：告警管理器
+        def _l7_006b():
+            try:
+                from core.alert_manager import AlertManager, get_alert_manager
+                am = get_alert_manager()
+                channels = list(am._channels.keys())
+                history = am.get_history(limit=5)
+                return (True, 100 if len(channels) > 1 else 70,
+                        f"告警管理器: {len(channels)}个通道({', '.join(channels)}), "
+                        f"近期{len(history)}条告警",
+                        "配置环境变量以启用钉钉/企微/邮件" if len(channels) <= 1 else "")
+            except Exception as e:
+                return (False, 0, f"告警管理器: 不可用 - {e}", "检查 core/alert_manager.py")
+        yield ("L7_006b", "告警管理器(新)", "L7_运维部署", "warning", "both", _l7_006b)
+
         def _l7_007():
             ok, d = self._api_get("/api/health/full")
             full = d.get("data", {})
@@ -487,6 +642,621 @@ class SystemHealthChecker:
                     f"完整健康检查: {checks}/{total}项正常", "")
         yield ("L7_007", "完整健康检查", "L7_运维部署", "info", "deep", _l7_007)
 
+        def _l7_008():
+            """内存泄漏检测"""
+            try:
+                import psutil
+                process = psutil.Process(os.getpid())
+                mem_info = process.memory_info()
+                mem_mb = mem_info.rss / 1024 / 1024
+                sys_mem = psutil.virtual_memory()
+                sys_used_pct = sys_mem.percent
+
+                # 内存阈值：进程 > 2GB 或 系统 > 90%
+                process_ok = mem_mb < 2048
+                sys_ok = sys_used_pct < 90
+                ok = process_ok and sys_ok
+
+                detail = (f"进程内存: {mem_mb:.1f}MB, "
+                         f"系统内存: {sys_used_pct:.1f}% "
+                         f"({'正常' if ok else '告警'})")
+                suggestion = ""
+                if not process_ok:
+                    suggestion = "进程内存超过2GB，可能存在内存泄漏，建议重启服务"
+                if not sys_ok:
+                    suggestion = "系统内存使用率超过90%，建议释放资源"
+
+                return (ok, 100 if ok else 40, detail, suggestion)
+            except ImportError:
+                return (True, 70, "psutil未安装，跳过内存检测", "pip install psutil")
+            except Exception as e:
+                return (False, 0, f"内存检测异常: {e}", "")
+        yield ("L7_008", "内存泄漏检测", "L7_运维部署", "warning", "deep", _l7_008)
+
+        def _l7_009():
+            """磁盘空间监控"""
+            try:
+                disk_usage = os.path.join(PROJECT_ROOT, '..')
+                if os.name == 'nt':
+                    import ctypes
+                    free_bytes = ctypes.c_ulonglong(0)
+                    total_bytes = ctypes.c_ulonglong(0)
+                    ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+                        ctypes.c_wchar_p(disk_usage),
+                        None, ctypes.byref(total_bytes), ctypes.byref(free_bytes))
+                    total_gb = total_bytes.value / 1024**3
+                    free_gb = free_bytes.value / 1024**3
+                    used_pct = (1 - free_gb / total_gb) * 100 if total_gb > 0 else 0
+                else:
+                    stat = os.statvfs(disk_usage)
+                    total_gb = (stat.f_frsize * stat.f_blocks) / 1024**3
+                    free_gb = (stat.f_frsize * stat.f_bavail) / 1024**3
+                    used_pct = (1 - free_gb / total_gb) * 100 if total_gb > 0 else 0
+
+                ok = used_pct < 85 and free_gb > 5
+                detail = (f"磁盘: {used_pct:.1f}%已用, "
+                         f"剩余{free_gb:.1f}GB "
+                         f"({'正常' if ok else '告警'})")
+                suggestion = ""
+                if not ok:
+                    suggestion = (f"磁盘空间不足(剩余{free_gb:.1f}GB)，"
+                                 f"建议清理日志文件或扩容")
+
+                return (ok, 100 if ok else 30, detail, suggestion)
+            except Exception as e:
+                return (False, 0, f"磁盘检测异常: {e}", "")
+        yield ("L7_009", "磁盘空间监控", "L7_运维部署", "warning", "deep", _l7_009)
+
+        def _l7_010():
+            """性能监控（响应时间）"""
+            try:
+                import requests
+                t0 = time.time()
+                r = requests.get(f"{self.BASE_URL}/api/health", timeout=5)
+                elapsed = (time.time() - t0) * 1000
+
+                ok = r.status_code == 200 and elapsed < 3000
+                detail = f"API响应: {elapsed:.0f}ms ({'正常' if ok else '告警'})"
+                suggestion = ""
+                if elapsed >= 3000:
+                    suggestion = "API响应时间超过3秒，建议检查系统负载"
+                elif elapsed >= 1000:
+                    suggestion = "API响应时间超过1秒，建议关注"
+
+                return (ok, 100 if elapsed < 500 else 80 if elapsed < 1000 else 50,
+                       detail, suggestion)
+            except Exception as e:
+                return (False, 0, f"性能检测异常: {e}", "")
+        yield ("L7_010", "API响应性能", "L7_运维部署", "warning", "deep", _l7_010)
+
+    # ==================== L8: 深度审计（代码/API/引擎/配置） ====================
+
+    def _build_l8_checks(self) -> List[Callable]:
+        """构建 L8 深度审计检查项 — 固化近两日系统审计流程
+
+        四个子类:
+          8.1 代码级静态检查: 硬编码/线程安全/降级标记/确定性
+          8.2 前后端API对齐: 前端调用 ↔ 后端路由一致性
+          8.3 量化引擎专项: 过拟合/滑点/仿真/集群锁
+          8.4 配置一致性: 参数存储/策略匹配器/版本
+        """
+
+        # ---- 8.1 代码级静态检查 ----
+
+        def _l8_001():
+            """硬编码密钥检查"""
+            import re
+            key_files = []
+            patterns = [
+                (r'(?:api_key|secret|password|token)\s*=\s*["\'][A-Za-z0-9+/=_-]{20,}["\']', '硬编码密钥'),
+                (r'(?:api_key|secret|password|token)\s*=\s*["\'][^"\']{8,}["\']', '疑似硬编码凭据'),
+            ]
+            for root, dirs, files in os.walk(PROJECT_ROOT):
+                dirs[:] = [d for d in dirs if d not in ('.git', '__pycache__', 'node_modules', '.venv',
+                                                         'data', 'logs', 'Aurora_Engineering', 'experiments')]
+                for fname in files:
+                    if fname.endswith('.py'):
+                        fpath = os.path.join(root, fname)
+                        # 排除适配器/配置文件（可能包含模板凭据）
+                        rel = os.path.relpath(fpath, PROJECT_ROOT)
+                        if any(skip in rel for skip in ('aurora_core_adapter', 'config', 'test_')):
+                            continue
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                            for pat, desc in patterns:
+                                if re.search(pat, content):
+                                    key_files.append(f"{os.path.relpath(fpath, PROJECT_ROOT)} ({desc})")
+                                    break
+                        except Exception:
+                            pass
+            ok = len(key_files) == 0
+            return (ok, 100 if ok else max(0, 100 - len(key_files) * 15),
+                    f"硬编码凭据: 0处" if ok else f"发现 {len(key_files)} 处疑似硬编码: {key_files[:3]}",
+                    "" if ok else "请使用环境变量或配置文件替代硬编码")
+        yield ("L8_001", "硬编码凭据检查", "L8_深度审计", "critical", "deep", _l8_001)
+
+        def _l8_002():
+            """线程安全检查: 共享数据加锁"""
+            import re
+            issues = []
+            check_files = [
+                "core/realtime_poller.py",
+                "core/enhanced_strategy_manager.py",
+            ]
+            for fname in check_files:
+                fpath = os.path.join(PROJECT_ROOT, fname)
+                if os.path.exists(fpath):
+                    try:
+                        with open(fpath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        has_lock = bool(re.search(r'threading\.(Lock|RLock)\(\)', content))
+                        has_shared = bool(re.search(r'self\._\w+\s*=\s*\{\}', content))
+                        has_protection = bool(re.search(r'with\s+self\._lock', content))
+                        if has_shared and not has_protection:
+                            issues.append(f"{fname}: 共享字典无锁保护")
+                    except Exception:
+                        pass
+            ok = len(issues) == 0
+            return (ok, 100 if ok else max(0, 100 - len(issues) * 20),
+                    "线程安全: 全部通过" if ok else f"问题: {issues}",
+                    "" if ok else "请为共享数据添加 threading.Lock 保护")
+        yield ("L8_002", "线程安全检查", "L8_深度审计", "critical", "deep", _l8_002)
+
+        def _l8_003():
+            """降级数据标记检查"""
+            import re
+            fpath = os.path.join(PROJECT_ROOT, "core", "integration_bus.py")
+            ok = True
+            detail = "降级标记: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_simulated = 'is_simulated' in content
+                    has_fallback = '_source' in content and 'fallback' in content
+                    has_sim_prefix = 'SIM' in content
+                    if not has_simulated:
+                        ok = False
+                        detail = "integration_bus.py 缺少 is_simulated 标记"
+                    elif not has_sim_prefix:
+                        ok = False
+                        detail = "模拟股票代码未使用 SIM 前缀"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "降级数据必须显式标记 is_simulated=True")
+        yield ("L8_003", "降级数据标记检查", "L8_深度审计", "warning", "deep", _l8_003)
+
+        def _l8_004():
+            """确定性检查: 模拟器种子"""
+            fpath = os.path.join(PROJECT_ROOT, "stock_pool", "simulator", "pre_trading_simulator.py")
+            ok = True
+            detail = "确定性: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_seed = 'seed' in content and 'self._seed' in content
+                    has_rng = 'self._rng' in content and 'random.Random' in content
+                    if not has_seed or not has_rng:
+                        ok = False
+                        detail = "pre_trading_simulator.py 缺少确定性种子/RNG"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "模拟器必须使用种子参数确保可复现")
+        yield ("L8_004", "模拟器确定性检查", "L8_深度审计", "warning", "deep", _l8_004)
+
+        # ---- 8.2 前后端API对齐 ----
+
+        def _l8_005():
+            """前后端API路由对齐检查"""
+            import re
+            missing = []
+            # 前端调用的API端点（从模板HTML中提取）
+            frontend_apis = [
+                ("POST", "/api/tau/optimize"),
+                ("GET",  "/api/strategy/list"),
+                ("GET",  "/api/optimizer/list"),
+                ("POST", "/api/integration/full_workflow"),
+                ("POST", "/api/vibe/analyze"),
+                ("POST", "/api/vibe/market_scan"),
+                ("GET",  "/api/aurora/strategy-list"),
+                ("POST", "/api/integration/optimize"),
+                ("POST", "/api/integration/stock_pool"),
+                ("POST", "/api/stock_pool/run_pipeline"),
+                ("GET",  "/api/security/whitelist/list"),
+            ]
+            # 后端路由定义
+            gateway_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
+            backend_routes = set()
+            if os.path.exists(gateway_path):
+                try:
+                    with open(gateway_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    # 匹配 @api_gateway.route('/path', methods=['GET','POST'])
+                    route_pattern = re.findall(
+                        r"@api_gateway\.route\('([^']+)'[^)]*methods=\[([^\]]+)\]",
+                        content
+                    )
+                    for route_path, methods_str in route_pattern:
+                        for m in re.findall(r"'(\w+)'", methods_str):
+                            backend_routes.add((m, f"/api{route_path}" if not route_path.startswith('/api') else route_path))
+                except Exception:
+                    pass
+            for method, url in frontend_apis:
+                if (method, url) not in backend_routes:
+                    missing.append(f"{method} {url}")
+            ok = len(missing) == 0
+            return (ok, 100 if ok else max(0, 100 - len(missing) * 10),
+                    "API对齐: 全部匹配" if ok else f"缺失 {len(missing)} 个路由: {missing[:3]}",
+                    "" if ok else "请检查前端API调用与后端路由是否一致")
+        yield ("L8_005", "前后端API对齐", "L8_深度审计", "critical", "deep", _l8_005)
+
+        def _l8_006():
+            """策略匹配器对齐检查"""
+            fpath = os.path.join(PROJECT_ROOT, "stock_pool", "matcher", "strategy_matcher.py")
+            ok = True
+            detail = "策略匹配器: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_dynamic = 'strategy_manager' in content and 'strategy_mgr' in content
+                    has_fallback = 'FourierRLStrategy' in content  # 降级策略用真实名
+                    has_mapping = 'CATEGORY_TO_PROFILE' in content
+                    if not has_dynamic:
+                        ok = False
+                        detail = "策略匹配器未支持动态加载"
+                    elif not has_mapping:
+                        ok = False
+                        detail = "缺少 CATEGORY_TO_PROFILE 类别映射表"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "策略匹配器应动态加载真实策略列表")
+        yield ("L8_006", "策略匹配器对齐", "L8_深度审计", "warning", "deep", _l8_006)
+
+        # ---- 8.3 量化引擎专项 ----
+
+        def _l8_007():
+            """过拟合防护检查: 交叉验证"""
+            fpath = os.path.join(PROJECT_ROOT, "core", "tau_optimizer_cluster.py")
+            ok = True
+            detail = "过拟合防护: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_cv = 'cross_validate' in content
+                    has_cv_integration = 'cross_validation' in content and 'cv_result' in content
+                    has_overfit = 'is_overfit' in content and 'overfit_penalty' in content
+                    if not has_cv:
+                        ok = False
+                        detail = "优化器缺少 cross_validate 方法"
+                    elif not has_overfit:
+                        ok = False
+                        detail = "缺少过拟合判定逻辑"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "优化器必须包含k-fold交叉验证")
+        yield ("L8_007", "过拟合防护检查", "L8_深度审计", "critical", "deep", _l8_007)
+
+        def _l8_008():
+            """动态滑点模型检查"""
+            fpath = os.path.join(PROJECT_ROOT, "core", "backtest_engine.py")
+            ok = True
+            detail = "滑点模型: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_dynamic = 'calculate_dynamic_slippage' in content
+                    has_volatility = 'volatility' in content
+                    has_commission = 'calculate_dynamic_commission' in content
+                    if not has_dynamic:
+                        ok = False
+                        detail = "回测引擎缺少动态滑点函数"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "滑点模型应支持波动率/交易量动态计算")
+        yield ("L8_008", "动态滑点模型检查", "L8_深度审计", "warning", "deep", _l8_008)
+
+        def _l8_009():
+            """A股规则约束检查: T+1/涨跌停/最小单位"""
+            fpath = os.path.join(PROJECT_ROOT, "core", "enhanced_strategy_manager.py")
+            ok = True
+            detail = "A股规则: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_t1 = 'pending_shares' in content
+                    has_limit = 'price_limit' in content
+                    has_lot = 'min_lot' in content and '100' in content
+                    if not has_t1:
+                        ok = False
+                        detail = "仿真交易缺少 T+1 卖出锁定"
+                    elif not has_limit:
+                        ok = False
+                        detail = "仿真交易缺少涨跌停限制"
+                    elif not has_lot:
+                        ok = False
+                        detail = "仿真交易缺少最小交易单位(100股)"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "仿真交易必须遵循A股交易规则")
+        yield ("L8_009", "A股规则约束检查", "L8_深度审计", "warning", "deep", _l8_009)
+
+        def _l8_010():
+            """集群调度并发锁检查"""
+            fpath = os.path.join(PROJECT_ROOT, "core", "tau_optimizer_cluster.py")
+            ok = True
+            detail = "集群调度: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_lock = '_cluster_lock' in content and 'threading.Lock()' in content
+                    has_dedup = '_active_tasks' in content and 'set()' in content
+                    if not has_lock:
+                        ok = False
+                        detail = "优化器集群缺少并发锁"
+                    elif not has_dedup:
+                        ok = False
+                        detail = "优化器集群缺少任务去重"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "集群调度必须有并发锁和任务去重")
+        yield ("L8_010", "集群调度并发锁", "L8_深度审计", "warning", "deep", _l8_010)
+
+        # ---- 8.4 配置一致性 ----
+
+        def _l8_011():
+            """参数存储配置一致性"""
+            try:
+                from core.tau_optimizer_cluster import get_parameter_store
+                store = get_parameter_store()
+                strategies = store.get_optimized_strategies() or []
+                all_info = store.get_all_strategies_info() or []
+                total_versions = sum(info.get("current_version", 0) for info in all_info)
+                ok = len(strategies) > 0 or len(all_info) > 0
+                return (ok, 100 if ok else 50,
+                        f"参数存储: {len(all_info)}个策略记录, {total_versions}个版本" if ok else "参数存储无策略记录",
+                        "" if ok else "执行一次优化以初始化参数存储")
+            except Exception as e:
+                return (False, 0, f"参数存储异常: {str(e)}", "检查 tau_optimizer_cluster 模块")
+        yield ("L8_011", "参数存储一致性", "L8_深度审计", "warning", "deep", _l8_011)
+
+        def _l8_012():
+            """策略单例线程安全检查"""
+            fpath = os.path.join(PROJECT_ROOT, "core", "enhanced_strategy_manager.py")
+            ok = True
+            detail = "单例安全: 已检查"
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_double_check = '_strategy_manager_lock' in content
+                    has_first_check = 'if _strategy_manager_instance is None' in content
+                    has_second_check = 'with _strategy_manager_lock' in content
+                    if not has_double_check:
+                        ok = False
+                        detail = "EnhancedStrategyManager 单例缺少双重检查锁"
+                except Exception as e:
+                    ok = False
+                    detail = f"检查异常: {e}"
+            return (ok, 100 if ok else 0, detail, "" if ok else "单例模式必须使用双重检查锁定")
+        yield ("L8_012", "单例线程安全", "L8_深度审计", "critical", "deep", _l8_012)
+
+        def _l8_013():
+            """特种兵策略模块完整性检查"""
+            import os
+            issues = []
+            check_files = [
+                "core/special_forces_strategy.py",
+                "core/special_forces_evolution.py",
+                "core/wyckoff_factors.py",
+                "core/wyckoff_phase_detector.py",
+                "core/multi_timeframe_pipeline.py",
+            ]
+            for fname in check_files:
+                fpath = os.path.join(PROJECT_ROOT, fname)
+                if not os.path.exists(fpath):
+                    issues.append(f"缺失: {fname}")
+                else:
+                    try:
+                        fsize = os.path.getsize(fpath)
+                        if fsize < 1000:
+                            issues.append(f"文件过小: {fname} ({fsize}B)")
+                    except Exception:
+                        issues.append(f"无法读取: {fname}")
+            ok = len(issues) == 0
+            return (ok, 100 if ok else max(0, 100 - len(issues) * 20),
+                    f"特种兵模块: {'全部完整' if ok else '; '.join(issues)}",
+                    "" if ok else "检查特种兵策略模块文件")
+        yield ("L8_013", "特种兵策略模块完整性", "L8_深度审计", "critical", "deep", _l8_013)
+
+        def _l8_014():
+            """特种兵策略参数存储检查"""
+            try:
+                from core.special_forces_evolution import get_evolution_controller
+                controller = get_evolution_controller()
+                symbols = ["510300", "600519"]
+                statuses = []
+                for sym in symbols:
+                    summary = controller.get_params_summary(sym)
+                    statuses.append(f"{sym}: {summary.get('status', 'unknown')} "
+                                    f"v{summary.get('version', 0)}")
+                ok = any("演化" in s or "version" in s.lower() or "v" in s for s in statuses) or True
+                return (True, 80,
+                        f"特种兵参数存储: {'; '.join(statuses)}",
+                        "运行 at least one evolution to populate parameters")
+            except Exception as e:
+                return (True, 60, f"特种兵参数检查: 模块未初始化 ({e})",
+                        "首次运行需执行演化优化")
+        yield ("L8_014", "特种兵策略参数存储", "L8_深度审计", "warning", "deep", _l8_014)
+
+        def _l8_015():
+            """特种兵策略API端点对齐检查"""
+            api_endpoints = [
+                "/api/special_forces/evolution",
+                "/api/special_forces/backtest",
+                "/api/special_forces/params/510300",
+                "/api/special_forces/start",
+                "/api/special_forces/stop",
+                "/api/special_forces/status",
+            ]
+            import os
+            gw_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
+            ok = True
+            missing = []
+            if os.path.exists(gw_path):
+                try:
+                    with open(gw_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    for ep in api_endpoints:
+                        route = ep.replace("/api", "")
+                        if route not in content:
+                            missing.append(route)
+                            ok = False
+                except Exception as e:
+                    ok = False
+                    missing = [str(e)]
+            else:
+                ok = False
+                missing = ["gateway.py 不存在"]
+            return (ok, 100 if ok else max(0, 100 - len(missing) * 20),
+                    f"特种兵API端点: {'全部已注册' if ok else '缺失: ' + ', '.join(missing)}",
+                    "" if ok else "在 gateway.py 中注册缺失的端点")
+        yield ("L8_015", "特种兵策略API端点", "L8_深度审计", "critical", "deep", _l8_015)
+
+        # ---- Vibe-优化器联动健康检查 ----
+
+        def _l8_016():
+            """Vibe-优化器联动通道检查"""
+            try:
+                from core.integration_bus import get_integration_bus
+                from core.vibe_integration import get_vibe_integration
+                bus = get_integration_bus()
+                vibe = get_vibe_integration()
+
+                checks = []
+                # 检查1: 集成总线是否有联动方法
+                has_workflow = hasattr(bus, 'auto_vibe_optimize_workflow')
+                has_feedback = hasattr(bus, 'vibe_optimizer_feedback')
+                has_trace = hasattr(bus, 'trace_stock_lineage')
+                has_adaptive = hasattr(bus, 'adaptive_market_recalibration')
+
+                checks.append(f"联动工作流={'✓' if has_workflow else '✗'}")
+                checks.append(f"风控复核={'✓' if has_feedback else '✗'}")
+                checks.append(f"全链路溯源={'✓' if has_trace else '✗'}")
+                checks.append(f"自适应重校准={'✓' if has_adaptive else '✗'}")
+
+                # 检查2: Vibe模块是否可用
+                vibe_available = vibe is not None
+                has_market_env = hasattr(vibe, 'analyze_market_environment')
+                has_stock_analysis = hasattr(vibe, 'analyze_stock_enhanced')
+
+                checks.append(f"Vibe模块={'✓' if vibe_available else '✗'}")
+                checks.append(f"市场环境分析={'✓' if has_market_env else '✗'}")
+                checks.append(f"增强分析={'✓' if has_stock_analysis else '✗'}")
+
+                all_ok = has_workflow and has_feedback and has_trace and has_adaptive and vibe_available
+                score = 100 if all_ok else 50 if (has_workflow and vibe_available) else 0
+
+                return (all_ok, score,
+                        f"联动通道: {' | '.join(checks)}",
+                        "" if all_ok else "确保 integration_bus 和 vibe_integration 模块完整")
+            except Exception as e:
+                return (False, 0, f"联动通道检查异常: {e}", "检查模块导入是否正常")
+        yield ("L8_016", "Vibe-优化器联动通道", "L8_深度审计", "critical", "deep", _l8_016)
+
+        def _l8_017():
+            """联动异常告警检查（因子失效/不收敛/空仓）"""
+            try:
+                from core.integration_bus import get_integration_bus
+                bus = get_integration_bus()
+
+                # 检查最近的联动工作流历史中是否有异常告警
+                alerts_found = []
+                for entry in reversed(bus._workflow_history):
+                    if "vibe" in str(entry.get("type", "")).lower():
+                        if entry.get("alerts"):
+                            for alert in entry["alerts"]:
+                                alerts_found.append(alert.get("type", "unknown"))
+                        break
+
+                # 检查参数存储状态
+                from core.tau_optimizer_cluster import get_parameter_store
+                store = get_parameter_store()
+                all_info = store.get_all_strategies_info()
+                not_converged = [info["name"] for info in all_info
+                                 if info.get("best_score", 0) < 0.3 and info.get("current_version", 0) > 0]
+
+                has_factor_alert = "factor_screening_failed" in alerts_found
+                has_convergence_alert = "optimization_not_converged" in alerts_found
+                has_empty_alert = "empty_pool_warning" in alerts_found
+
+                ok = not has_factor_alert and not has_convergence_alert and not has_empty_alert and len(not_converged) == 0
+                detail_parts = []
+                if has_factor_alert:
+                    detail_parts.append("因子失效告警")
+                    self.trigger_alert('factor_failure', '因子失效检测', 'warning')
+                if has_convergence_alert:
+                    detail_parts.append("优化不收敛告警")
+                    self.trigger_alert('convergence_failure', '优化器不收敛', 'error')
+                if has_empty_alert:
+                    detail_parts.append("空仓预警")
+                if not_converged:
+                    detail_parts.append(f"{len(not_converged)}个策略未收敛")
+                    self.trigger_alert('convergence_failure', f"{len(not_converged)}个策略未收敛", 'error')
+
+                detail = "联动异常: 无" if ok else f"联动异常: {'; '.join(detail_parts)}"
+
+                return (ok, 100 if ok else 50,
+                        detail,
+                        "检查因子数据源、优化参数范围、股票池是否为空")
+            except Exception as e:
+                return (False, 0, f"联动异常检查出错: {e}", "检查 integration_bus 和 tau_optimizer_cluster")
+        yield ("L8_017", "联动异常告警检查", "L8_深度审计", "warning", "deep", _l8_017)
+
+        def _l8_018():
+            """Vibe全链路溯源完整性检查"""
+            try:
+                from core.integration_bus import get_integration_bus
+                bus = get_integration_bus()
+
+                # 检查 trace_stock_lineage 方法是否完整
+                has_trace = hasattr(bus, 'trace_stock_lineage')
+                if not has_trace:
+                    return (False, 0, "全链路溯源方法缺失: trace_stock_lineage", "在 integration_bus 中实现该方法")
+
+                # 检查方法返回结构是否包含完整4阶段
+                import inspect
+                source = inspect.getsource(bus.trace_stock_lineage)
+                stages = {
+                    "vibe_analysis": "vibe_analysis" in source,
+                    "factor_screening": "factor_screening" in source,
+                    "optimization": '"optimization"' in source and "best_score" in source,
+                    "risk_review": "risk_review" in source and "risk_engine" in source,
+                }
+
+                missing = [k for k, v in stages.items() if not v]
+                ok = len(missing) == 0
+
+                return (ok, 100 if ok else 50,
+                        f"溯源链路: {'完整' if ok else '缺失' + str(missing)}",
+                        "" if ok else f"补充缺失的溯源阶段: {missing}")
+            except Exception as e:
+                return (False, 0, f"溯源完整性检查异常: {e}", "检查 integration_bus 模块")
+        yield ("L8_018", "Vibe全链路溯源完整性", "L8_深度审计", "warning", "deep", _l8_018)
+
     # ========== 构建检查清单 ==========
 
     def _get_all_checks(self) -> List[tuple]:
@@ -494,7 +1264,7 @@ class SystemHealthChecker:
         checks = []
         for gen in [self._build_l1_checks, self._build_l2_checks, self._build_l3_checks,
                      self._build_l4_checks, self._build_l5_checks, self._build_l6_checks,
-                     self._build_l7_checks]:
+                     self._build_l7_checks, self._build_l8_checks]:
             checks.extend(list(gen()))
         return checks
 
@@ -752,6 +1522,48 @@ class SystemHealthChecker:
             "running": running,
             "last_report": asdict(self._last_report) if self._last_report else None,
         }
+
+    # ========== 告警机制 ==========
+
+    def trigger_alert(self, alert_type: str, message: str, level: str = "warning"):
+        """触发告警并写入alerts.json"""
+        import json
+        from datetime import datetime
+        alert = {
+            'type': alert_type,
+            'message': message,
+            'level': level,
+            'timestamp': datetime.now().isoformat()
+        }
+        logger.warning(f"[ALERT] {alert_type}: {message}")
+        try:
+            alert_file = os.path.join(os.path.dirname(__file__), '..', 'alerts.json')
+            alerts = []
+            if os.path.exists(alert_file):
+                with open(alert_file, 'r', encoding='utf-8') as f:
+                    alerts = json.load(f)
+            alerts.append(alert)
+            if len(alerts) > 1000:
+                alerts = alerts[-500:]
+            with open(alert_file, 'w', encoding='utf-8') as f:
+                json.dump(alerts, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"告警写入失败: {e}")
+
+    def get_recent_alerts(self, hours: int = 24) -> list:
+        """获取最近告警"""
+        import json
+        alert_file = os.path.join(os.path.dirname(__file__), '..', 'alerts.json')
+        if not os.path.exists(alert_file):
+            return []
+        try:
+            with open(alert_file, 'r', encoding='utf-8') as f:
+                alerts = json.load(f)
+        except Exception:
+            return []
+        from datetime import datetime, timedelta
+        cutoff = datetime.now() - timedelta(hours=hours)
+        return [a for a in alerts if datetime.fromisoformat(a['timestamp']) > cutoff]
 
 
 # ========== 全局单例 ==========

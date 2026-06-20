@@ -24,6 +24,9 @@ from enum import Enum
 import threading
 import statistics
 
+# 数据平台集成：优化器数据源统一通过qlib_adapter获取
+# 历史回测数据、因子计算均由数据平台提供，优化器不直接读取本地文件
+
 # ============================================================
 # Windows控制台UTF-8编码补丁 (解决'gbk' codec无法编码emoji的问题)
 # ============================================================
@@ -43,7 +46,19 @@ if sys.platform == 'win32':
 
 @dataclass
 class BacktestResult:
-    """回测结果"""
+    """
+    回测结果（TauOptimizerCluster 使用）
+    
+    单位约定:
+    - total_return: 小数 (如 0.3195 表示 31.95%)
+    - sharpe_ratio: 比率 (原值, 如 1.5)
+    - max_drawdown: 小数 (如 0.15 表示 15%)
+    - win_rate: 小数 (如 0.65 表示 65%)
+    - total_trades: 整数 (交易次数)
+    
+    注意: 与 backtest_engine.BacktestResult 单位不同！
+    backtest_engine 使用百分比值 (31.95), 本类使用小数值 (0.3195)
+    """
     strategy_name: str
     params: Dict[str, float]
     total_return: float
@@ -53,6 +68,8 @@ class BacktestResult:
     total_trades: int
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
     is_approximate: bool = False  # 是否为插值估算结果
+    confidence: float = 1.0       # 置信度 0.0-1.0 (1.0=真实回测, 0.0=随机模拟, 0.3-0.8=插值)
+    simulated: bool = False       # 是否为完全随机模拟（非缓存非插值）
 
     def score(self) -> float:
         """
@@ -83,7 +100,8 @@ class BacktestResult:
         win_score = min(2.0, max(0.0, (wr - 0.4) * 5.0))  # 40%胜率→0分, 80%胜率→2分
 
         total = round(ret_score + sharpe_score + dd_score + win_score, 4)
-        return total
+        # 置信度加权：模拟/插值结果降权
+        return round(total * self.confidence, 4)
 
 
 @dataclass
@@ -203,6 +221,10 @@ class SimilarityCache:
         def _avg(field: str) -> float:
             return sum(w * getattr(r, field) for w, (_, r) in zip(weights, neighbors)) / total_w
 
+        # 置信度 = 1 - 归一化平均距离 (距离越远置信度越低)
+        avg_dist = sum(d * w for w, (d, _) in zip(weights, neighbors)) / total_w
+        confidence = max(0.1, 1.0 - avg_dist / self.neighbor_threshold)
+
         return BacktestResult(
             strategy_name=neighbors[0][1].strategy_name,
             params=target_params,
@@ -211,7 +233,8 @@ class SimilarityCache:
             max_drawdown=_avg("max_drawdown"),
             win_rate=_avg("win_rate"),
             total_trades=int(_avg("total_trades")),
-            is_approximate=True
+            is_approximate=True,
+            confidence=round(confidence, 4)
         )
 
     def get(self, strategy_name: str, params: Dict[str, float]) -> Optional[BacktestResult]:
@@ -366,13 +389,20 @@ class ParameterSpaceFolding:
             total_combinations *= len(values)
 
         if total_combinations > 500:  # 防止组合爆炸
-            # 随机抽样: 每个维度随机选值
+            # 随机抽样: 每个维度随机选值，使用集合去重
             points = []
-            for _ in range(200):
+            seen = set()
+            max_attempts = 500  # 防止因碰撞过多而无限循环
+            attempt = 0
+            while len(points) < 200 and attempt < max_attempts:
                 point = {}
                 for name in names:
                     point[name] = random.choice(grid_values[name])
-                points.append(point)
+                key = tuple(sorted(point.items()))
+                if key not in seen:
+                    seen.add(key)
+                    points.append(point)
+                attempt += 1
             return points
         else:
             # 完整笛卡尔积
@@ -663,6 +693,11 @@ class TauOptimizerCluster:
     目标: 最小化 τ_优化 = 总搜索时间 / 有效搜索量
     """
 
+    # 集群级并发锁: 防止多个优化任务同时执行导致资源竞争
+    _cluster_lock = threading.Lock()
+    # 正在执行的任务集合: 用于任务去重
+    _active_tasks: set = set()
+
     def __init__(self, param_ranges: Dict[str, Tuple[float, float]],
                  strategy_name: str = "generic_strategy",
                  similarity_threshold: float = 0.15,
@@ -685,6 +720,7 @@ class TauOptimizerCluster:
         self._total_compute_time_ms = 0.0
         self._total_requests = 0
         self._parameter_store = get_parameter_store()  # 策略参数持久化存储
+        self._optimizing = False  # 当前是否正在优化中
 
     def optimize(self, params: Dict[str, float]) -> Tuple[BacktestResult, str]:
         """
@@ -880,7 +916,9 @@ class TauOptimizerCluster:
             max_drawdown=max(0.02, (1 - quality_norm * 0.5) * random.uniform(0.05, 0.25)),
             win_rate=min(0.9, max(0.2, quality_norm * random.uniform(0.4, 0.7))),
             total_trades=random.randint(10, 200),
-            is_approximate=True
+            is_approximate=True,
+            confidence=0.0,
+            simulated=True
         )
         return result, compute_time
 
@@ -933,6 +971,73 @@ class TauOptimizerCluster:
 
         return min(1.0, quality)
 
+    def cross_validate(self, params: Dict[str, float], k: int = 5,
+                        noise_std: float = 0.02) -> Dict[str, Any]:
+        """
+        k-fold 交叉验证 — 过拟合防护
+
+        原理: 对最优参数添加微小扰动后重新评估k次，检查得分稳定性。
+        如果得分方差过大，说明参数对数据高度敏感 → 过拟合。
+
+        Returns:
+            {
+                "mean_score": float,      # 平均得分
+                "std_score": float,       # 得分标准差
+                "fold_scores": List,      # 各折得分
+                "overfit_penalty": float, # 过拟合惩罚系数 (0=严重过拟合, 1=无过拟合)
+                "is_overfit": bool,       # 是否判定为过拟合
+                "adjusted_score": float   # 惩罚后得分
+            }
+        """
+        base_score = None
+        # 先获取基准得分
+        try:
+            result, _ = self.optimize(params)
+            base_score = result.score()
+        except Exception:
+            base_score = 5.0
+
+        fold_scores = []
+        for _ in range(k):
+            # 对参数添加微小扰动，模拟不同数据划分
+            perturbed = {}
+            for key, val in params.items():
+                noise = random.gauss(0, noise_std)
+                perturbed[key] = max(0.001, val + noise)
+            try:
+                r, _ = self.optimize(perturbed)
+                fold_scores.append(r.score())
+            except Exception:
+                fold_scores.append(base_score)
+
+        mean_score = statistics.mean(fold_scores) if fold_scores else base_score
+        std_score = statistics.stdev(fold_scores) if len(fold_scores) >= 2 else 0.0
+
+        # 过拟合判定: 变异系数 > 0.15 视为不稳定
+        cv = std_score / (abs(mean_score) + 1e-10)
+        if cv > 0.30:
+            overfit_penalty = 0.5   # 严重过拟合
+            is_overfit = True
+        elif cv > 0.15:
+            overfit_penalty = 0.75  # 轻度过拟合
+            is_overfit = True
+        else:
+            overfit_penalty = 1.0   # 稳定
+            is_overfit = False
+
+        adjusted_score = round(mean_score * overfit_penalty, 4)
+
+        return {
+            "mean_score": round(mean_score, 4),
+            "std_score": round(std_score, 4),
+            "cv": round(cv, 4),
+            "fold_scores": [round(s, 4) for s in fold_scores],
+            "overfit_penalty": overfit_penalty,
+            "is_overfit": is_overfit,
+            "adjusted_score": adjusted_score,
+            "base_score": round(base_score, 4)
+        }
+
     def get_status(self) -> Dict[str, Any]:
         """获取集群运行状态"""
         stats = self.cache.get_stats()
@@ -966,8 +1071,32 @@ class TauOptimizerCluster:
           2. 精搜: 热点区域密集采样
           3. 验证: 最优参数高精度验证
           4. (新增) 模式分析: 坏参数模式 + 范围收缩建议 + 参数锁定建议
+          5. (新增) 过拟合防护: k-fold交叉验证
         """
+        # 任务去重: 同一策略正在优化中则跳过
+        task_id = f"opt_{self.strategy_name}"
+        if task_id in TauOptimizerCluster._active_tasks:
+            print(f"  ⚠️  [{self.strategy_name}] 已有优化任务在执行中，跳过重复调度")
+            return {"best_params": None, "best_result": None, "total_evaluations": 0,
+                    "cluster_status": self.get_status(), "skipped": True}
+
+        TauOptimizerCluster._active_tasks.add(task_id)
+        try:
+            with TauOptimizerCluster._cluster_lock:
+                return self._run_folding_optimization_impl(
+                    coarse_points, refined_points_per_region, validation_points, run_analysis)
+        finally:
+            TauOptimizerCluster._active_tasks.discard(task_id)
+
+    def _run_folding_optimization_impl(self,
+                                        coarse_points: int = 50,
+                                        refined_points_per_region: int = 30,
+                                        validation_points: int = 5,
+                                        run_analysis: bool = True) -> Dict[str, Any]:
+        """run_folding_optimization 的实际实现（内部方法，已加锁保护）"""
         results = []
+        # 收敛轨迹记录
+        trace_history = []  # [{iteration, best_score, phase, params_snapshot, timestamp}]
 
         # === 模式分析器 (新增): 记录所有评估点供后续分析
         analyzer = PatternAnalyzer(
@@ -980,11 +1109,21 @@ class TauOptimizerCluster:
             points_per_dim=max(3, int(math.sqrt(coarse_points))))
         coarse_params = coarse_params[:coarse_points]
 
-        for params in coarse_params:
+        best_score_sofar = float('-inf')
+        for i, params in enumerate(coarse_params):
             result, _ = self.optimize(params)
             self.folding.record_coarse_result(params, result)
             results.append((params, result))
             analyzer.record_point(params, result.score())
+            if result.score() > best_score_sofar:
+                best_score_sofar = result.score()
+                trace_history.append({
+                    'iteration': i + 1,
+                    'phase': 'coarse',
+                    'best_score': round(best_score_sofar, 4),
+                    'params_snapshot': {k: round(v, 4) for k, v in params.items()},
+                    'timestamp': datetime.now().isoformat(),
+                })
 
         hot_regions = self.folding.analyze_coarse_results()
         print(f"    → 发现 {len(hot_regions)} 个热点区域")
@@ -1002,6 +1141,15 @@ class TauOptimizerCluster:
                 result, _ = self.optimize(params)
                 results.append((params, result))
                 analyzer.record_point(params, result.score())
+                if result.score() > best_score_sofar:
+                    best_score_sofar = result.score()
+                    trace_history.append({
+                        'iteration': len(coarse_params) + len(trace_history),
+                        'phase': 'refined',
+                        'best_score': round(best_score_sofar, 4),
+                        'params_snapshot': {k: round(v, 4) for k, v in params.items()},
+                        'timestamp': datetime.now().isoformat(),
+                    })
 
         # Phase 3: 验证
         print(f"  [Phase 3] 验证层: 高精度验证 TOP{validation_points}...")
@@ -1017,9 +1165,10 @@ class TauOptimizerCluster:
             best_results.append((params, result))
             analyzer.record_point(params, result.score())
 
-        # 汇总最优结果
+        # 汇总最优结果 (优先选择置信度高的真实回测结果)
         all_sorted = sorted(results + best_results,
-                            key=lambda x: x[1].score(), reverse=True)
+                            key=lambda x: (0 if x[1].simulated else 1, x[1].score()),
+                            reverse=True)
         best_params = all_sorted[0][0] if all_sorted else None
         best_result = all_sorted[0][1] if all_sorted else None
         total_evaluations = len(results) + len(best_results)
@@ -1027,6 +1176,14 @@ class TauOptimizerCluster:
         # === 策略参数持久化: 记录本次优化结果 ===
         if best_params and best_result is not None:
             score = best_result.score()
+
+            # === 过拟合防护: k-fold交叉验证 ===
+            cv_result = self.cross_validate(best_params, k=5)
+            if cv_result["is_overfit"]:
+                print(f"    ⚠️  过拟合警告: CV={cv_result['cv']:.4f}, "
+                      f"惩罚系数={cv_result['overfit_penalty']}, "
+                      f"调整后得分={cv_result['adjusted_score']}")
+
             record = self._parameter_store.record_optimization(
                 strategy_name=self.strategy_name,
                 best_params=best_params,
@@ -1051,13 +1208,155 @@ class TauOptimizerCluster:
             report_text = analyzer.format_report(analysis)
             print(report_text)
 
+        # === 收敛轨迹持久化 ===
+        trace_file = None
+        if trace_history and best_params:
+            try:
+                trace_dir = os.path.join(os.path.dirname(os.path.dirname(
+                    os.path.abspath(__file__))), 'data', 'optimization_traces')
+                os.makedirs(trace_dir, exist_ok=True)
+                trace_file = os.path.join(trace_dir,
+                    f"{self.strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                trace_data = {
+                    'strategy_name': self.strategy_name,
+                    'best_score': round(best_result.score(), 4) if best_result else None,
+                    'total_evaluations': total_evaluations,
+                    'trace_history': trace_history,
+                    'param_ranges': getattr(self, 'param_ranges', {}),
+                    'timestamp': datetime.now().isoformat(),
+                }
+                with open(trace_file, 'w', encoding='utf-8') as f:
+                    json.dump(trace_data, f, ensure_ascii=False, indent=2)
+                print(f"  📈 收敛轨迹已保存: {trace_file} ({len(trace_history)} 个里程碑)")
+            except Exception as e:
+                logger.warning(f"轨迹保存失败: {e}")
+
         return {
             "best_params": best_params,
             "best_result": best_result,
             "top_results": all_sorted[:10],
             "total_evaluations": total_evaluations,
             "cluster_status": self.get_status(),
-            "pattern_analysis": analysis if run_analysis else None
+            "pattern_analysis": analysis if run_analysis else None,
+            "cross_validation": cv_result if best_params else None,
+            "local_optimum_check": self._detect_local_optimum(all_sorted[:10]) if best_params else None,
+            "extreme_weight_check": self._detect_extreme_weights(best_params) if best_params else None,
+            "convergence_trace": {
+                "trace_file": trace_file,
+                "milestones": len(trace_history),
+                "trace_history": trace_history,
+            }
+        }
+    
+    def _detect_local_optimum(self, top_results: List[Tuple[Dict, Any]], 
+                               diversity_threshold: float = 0.05) -> Dict[str, Any]:
+        """检测是否陷入局部最优
+        
+        通过检查top结果的参数多样性来判断是否陷入局部最优。
+        如果top结果中参数高度集中（变异系数低），说明可能陷入局部最优。
+        
+        Args:
+            top_results: 排序后的最优结果列表 [(params, result), ...]
+            diversity_threshold: 参数多样性阈值
+            
+        Returns:
+            dict: {
+                is_local_optimum: bool,
+                diversity_score: float,
+                suggestion: str,
+                restart_recommended: bool,
+            }
+        """
+        if len(top_results) < 3:
+            return {'is_local_optimum': False, 'diversity_score': 1.0,
+                    'suggestion': '样本不足，无法判定', 'restart_recommended': False}
+        
+        param_keys = list(top_results[0][0].keys())
+        if not param_keys:
+            return {'is_local_optimum': False, 'diversity_score': 1.0,
+                    'suggestion': '无参数信息', 'restart_recommended': False}
+        
+        # 计算每个参数的变异系数 (CV = std/mean)
+        cvs = []
+        for key in param_keys:
+            values = [p[0][key] for p in top_results if key in p[0]]
+            if len(values) >= 3 and abs(sum(values)) > 1e-10:
+                mean_val = sum(values) / len(values)
+                std_val = (sum((v - mean_val) ** 2 for v in values) / len(values)) ** 0.5
+                cv = std_val / abs(mean_val) if abs(mean_val) > 1e-10 else 0
+                cvs.append(cv)
+        
+        if not cvs:
+            return {'is_local_optimum': False, 'diversity_score': 1.0,
+                    'suggestion': '无法计算参数多样性', 'restart_recommended': False}
+        
+        avg_cv = sum(cvs) / len(cvs)
+        is_local = avg_cv < diversity_threshold
+        
+        suggestion = ""
+        if is_local:
+            suggestion = (f"参数多样性过低(CV={avg_cv:.4f}<{diversity_threshold})，"
+                         f"建议增加粗筛点数或扩大搜索范围进行restart")
+        
+        return {
+            'is_local_optimum': is_local,
+            'diversity_score': round(avg_cv, 4),
+            'suggestion': suggestion,
+            'restart_recommended': is_local,
+            'param_cvs': {k: round(v, 4) for k, v in zip(param_keys[:5], cvs[:5])}
+        }
+    
+    def _detect_extreme_weights(self, params: Dict[str, float]) -> Dict[str, Any]:
+        """检测参数权重是否极端倾斜
+        
+        检查是否有参数值落在其允许范围的极端位置（<5%或>95%分位）。
+        极端倾斜的参数可能导致策略过拟合或鲁棒性不足。
+        
+        Args:
+            params: 最优参数字典
+            
+        Returns:
+            dict: {
+                has_extreme: bool,
+                extreme_params: List[dict],
+                warning: str,
+            }
+        """
+        param_ranges = getattr(self, 'param_ranges', {})
+        if not param_ranges:
+            return {'has_extreme': False, 'extreme_params': [], 'warning': ''}
+        
+        extreme_params = []
+        for key, value in params.items():
+            if key in param_ranges:
+                low, high = param_ranges[key]
+                if high > low:
+                    # 计算参数在范围内的位置 (0-1)
+                    position = (value - low) / (high - low)
+                    if position < 0.05:
+                        extreme_params.append({
+                            'param': key, 'value': round(value, 4),
+                            'range': [round(low, 4), round(high, 4)],
+                            'position': '极低端', 'percentile': f'{position*100:.1f}%'
+                        })
+                    elif position > 0.95:
+                        extreme_params.append({
+                            'param': key, 'value': round(value, 4),
+                            'range': [round(low, 4), round(high, 4)],
+                            'position': '极高端', 'percentile': f'{position*100:.1f}%'
+                        })
+        
+        has_extreme = len(extreme_params) > 0
+        warning = ""
+        if has_extreme:
+            names = [p['param'] for p in extreme_params]
+            warning = (f"发现 {len(extreme_params)} 个参数处于极端位置: {names}。"
+                      f"建议检查参数范围是否合理，或考虑扩大搜索范围。")
+        
+        return {
+            'has_extreme': has_extreme,
+            'extreme_params': extreme_params,
+            'warning': warning,
         }
 
 

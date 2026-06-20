@@ -2372,7 +2372,7 @@ EPS:      0.85
     def _open_aurora(self):
         """打开Aurora Web界面"""
         import webbrowser
-        webbrowser.open("http://localhost:5000")
+        webbrowser.open("http://localhost:5003")
         self._log("已打开Aurora Web界面")
 
     def _open_web_system(self, system_type: str):
@@ -2383,7 +2383,7 @@ EPS:      0.85
             'stock_pool': '/stock_pool',
             'technical_analysis': '/technical_analysis',
         }
-        url = f"http://localhost:5000{paths.get(system_type, '/')}"
+        url = f"http://localhost:5003{paths.get(system_type, '/')}"
         webbrowser.open(url)
         self._log(f"已打开Web系统: {system_type} -> {url}")
 
@@ -2451,7 +2451,7 @@ EPS:      0.85
                         'batch': '/api/integration/batch_optimize',
                     }
                     endpoint = endpoints.get(flow_type, '/api/integration/full_workflow')
-                    url = f"http://localhost:5000{endpoint}"
+                    url = f"http://localhost:5003{endpoint}"
 
                     try:
                         resp = requests.post(url, json={'strategy': strategy, 'strategy_name': strategy},

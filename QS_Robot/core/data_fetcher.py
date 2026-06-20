@@ -2,6 +2,10 @@
 """
 统一数据获取器（Unified Data Fetcher）
 
+⚠️ 弃用通知: 本模块已弃用，数据获取统一路由到 data_bus.py。
+   请使用 from core.data_bus import get_data_bus 替代。
+   本模块保留仅用于向后兼容，将通过 data_bus 代理所有请求。
+
 核心职责：
   1. 统一接口：对上层屏蔽不同数据源的差异
   2. 多源融合：AKShare + 备选数据源自动fallback
@@ -20,6 +24,7 @@ import os
 import json
 import time
 import hashlib
+import warnings
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
@@ -136,9 +141,10 @@ class UnifiedDataFetcher:
         if self._akshare:
             data = self._fetch_kline_akshare(symbol, period, days, adjust)
         
-        # fallback到模拟数据
+        # fallback到模拟数据（使用基类适配器统一实现）
         if data is None:
-            data = self._generate_mock_kline(symbol, days)
+            from core.data_sources.base_adapter import BaseDataSourceAdapter
+            data = BaseDataSourceAdapter()._generate_mock_kline(symbol, days, period)
         
         # 写入缓存
         if data:
@@ -237,50 +243,6 @@ class UnifiedDataFetcher:
         
         return result
 
-    def _generate_mock_kline(self, symbol: str, days: int) -> Dict:
-        """生成模拟K线数据（备用）"""
-        import random
-        dates = []
-        opens = []
-        highs = []
-        lows = []
-        closes = []
-        volumes = []
-        
-        price = 10.0 + random.uniform(-2, 2)
-        today = datetime.now()
-        
-        for i in range(days):
-            date_str = (today - timedelta(days=days - i - 1)).strftime("%Y-%m-%d")
-            dates.append(date_str)
-            
-            open_p = price + random.uniform(-0.2, 0.2)
-            close_p = open_p + random.uniform(-0.3, 0.3)
-            high_p = max(open_p, close_p) + random.uniform(0, 0.15)
-            low_p = min(open_p, close_p) - random.uniform(0, 0.15)
-            
-            opens.append(round(open_p, 2))
-            closes.append(round(close_p, 2))
-            highs.append(round(high_p, 2))
-            lows.append(round(low_p, 2))
-            volumes.append(random.randint(10000, 50000))
-            
-            price = close_p
-        
-        return {
-            "dates": dates,
-            "opens": opens,
-            "highs": highs,
-            "lows": lows,
-            "closes": closes,
-            "volumes": volumes,
-            "symbol": symbol,
-            "count": days,
-            "start_date": dates[0],
-            "end_date": dates[-1],
-            "_mock": True
-        }
-
     # ---------- 财务指标 ----------
 
     def get_financials(self, symbol: str) -> Optional[Dict]:
@@ -294,7 +256,8 @@ class UnifiedDataFetcher:
             data = self._fetch_financials_akshare(symbol)
         
         if data is None:
-            data = self._generate_mock_financials(symbol)
+            from core.data_sources.base_adapter import BaseDataSourceAdapter
+            data = BaseDataSourceAdapter()._generate_mock_financial(symbol)
         
         if data:
             self._write_cache(symbol, "financial", 0, "financials", data)
@@ -321,19 +284,6 @@ class UnifiedDataFetcher:
             print(f"[DataFetcher] 获取财务数据失败 {symbol}: {e}")
             return None
 
-    def _generate_mock_financials(self, symbol: str) -> Dict:
-        """生成模拟财务数据"""
-        import random
-        return {
-            "pe": round(8 + random.uniform(-3, 12), 2),
-            "pb": round(1 + random.uniform(-0.5, 3), 2),
-            "market_cap": round(50 + random.uniform(-30, 950), 2),  # 亿
-            "industry": random.choice(["金融", "科技", "消费", "医药", "制造"]),
-            "eps": round(0.2 + random.uniform(-0.1, 1.5), 2),
-            "roe": round(5 + random.uniform(-3, 15), 2),
-            "_mock": True
-        }
-
     # ---------- 股票列表 ----------
 
     def get_stock_list(self, market: str = "zh_a") -> List[Dict]:
@@ -350,48 +300,80 @@ class UnifiedDataFetcher:
         if self._akshare:
             try:
                 if market == "zh_a":
-                    df = self._akshare.stock_zh_a_spot_em()
-                    # AKShare spot 常见列：代码,名称,最新价,涨跌幅,涨跌额,成交量,成交额,振幅,最高,最低,今开,昨收,量比,换手率,市盈率-动态,市净率 ...
-                    col_map = {
-                        "symbol": "代码",
-                        "name": "名称",
-                        "price": "最新价",
-                        "change_pct": "涨跌幅",
-                        "change_amount": "涨跌额",
-                        "volume": "成交量",
-                        "amount": "成交额",
-                        "amplitude": "振幅",
-                        "high": "最高",
-                        "low": "最低",
-                        "open": "今开",
-                        "preclose": "昨收",
-                        "volume_ratio": "量比",
-                        "turnover": "换手率",
-                        "pe": "市盈率-动态",
-                        "pb": "市净率",
-                    }
-                    for _, row in df.iterrows():
-                        item = {}
-                        for k, col in col_map.items():
-                            val = row.get(col)
-                            if val is None:
-                                # 兼容不同版本的字段命名
-                                alt = None
-                                if col == "市盈率-动态":
-                                    alt = row.get("动态市盈率") or row.get("市盈率")
-                                elif col == "市净率":
-                                    alt = row.get("市净率")
-                                if alt is not None:
-                                    val = alt
-                            try:
-                                if k in ("symbol", "name"):
-                                    item[k] = str(val) if val is not None else ""
-                                else:
-                                    fv = float(val) if val not in (None, "", "-") else 0.0
-                                    item[k] = fv
-                            except (TypeError, ValueError):
-                                item[k] = "" if k in ("symbol", "name") else 0.0
-                        data.append(item)
+                    # 优先使用旧版 spot API（兼容性更好）
+                    try:
+                        df = self._akshare.stock_zh_a_spot()
+                        if df is not None and not df.empty:
+                            cols = df.columns.tolist()
+                            code_col = next((c for c in cols if '代码' in str(c)), cols[0]) if len(cols) > 0 else cols[0]
+                            name_col = next((c for c in cols if '名称' in str(c)), cols[1]) if len(cols) > 1 else cols[1]
+                            price_col = next((c for c in cols if '最新价' in str(c) or '最新' in str(c)), cols[2]) if len(cols) > 2 else cols[2]
+                            change_col = next((c for c in cols if '涨跌幅' in str(c)), cols[3]) if len(cols) > 3 else cols[3]
+                            vol_col = next((c for c in cols if '成交量' in str(c)), cols[5]) if len(cols) > 5 else cols[5]
+                            amt_col = next((c for c in cols if '成交额' in str(c)), cols[6]) if len(cols) > 6 else cols[6]
+                            for _, row in df.iterrows():
+                                try:
+                                    code = str(row.get(code_col, "")).zfill(6)
+                                    name = str(row.get(name_col, ""))
+                                    price = float(row.get(price_col, 0)) if row.get(price_col) not in (None, "", "-") else 0.0
+                                    change_pct = float(row.get(change_col, 0)) if row.get(change_col) not in (None, "", "-") else 0.0
+                                    volume = float(row.get(vol_col, 0)) if row.get(vol_col) not in (None, "", "-") else 0
+                                    amount = float(row.get(amt_col, 0)) if row.get(amt_col) not in (None, "", "-") else 0.0
+                                    data.append({
+                                        "symbol": code, "name": name, "price": price,
+                                        "change_pct": change_pct, "volume": volume, "amount": amount,
+                                    })
+                                except (ValueError, TypeError):
+                                    continue
+                    except Exception:
+                        pass
+                    # fallback to new API
+                    if not data:
+                        try:
+                            df = self._akshare.stock_zh_a_spot_em()
+                            if df is not None and not df.empty:
+                                # AKShare spot 常见列：代码,名称,最新价,涨跌幅,涨跌额,成交量,成交额,振幅,最高,最低,今开,昨收,量比,换手率,市盈率-动态,市净率 ...
+                                col_map = {
+                                    "symbol": "代码",
+                                    "name": "名称",
+                                    "price": "最新价",
+                                    "change_pct": "涨跌幅",
+                                    "change_amount": "涨跌额",
+                                    "volume": "成交量",
+                                    "amount": "成交额",
+                                    "amplitude": "振幅",
+                                    "high": "最高",
+                                    "low": "最低",
+                                    "open": "今开",
+                                    "preclose": "昨收",
+                                    "volume_ratio": "量比",
+                                    "turnover": "换手率",
+                                    "pe": "市盈率-动态",
+                                    "pb": "市净率",
+                                }
+                                for _, row in df.iterrows():
+                                    item = {}
+                                    for k, col in col_map.items():
+                                        val = row.get(col)
+                                        if val is None:
+                                            alt = None
+                                            if col == "市盈率-动态":
+                                                alt = row.get("动态市盈率") or row.get("市盈率")
+                                            elif col == "市净率":
+                                                alt = row.get("市净率")
+                                            if alt is not None:
+                                                val = alt
+                                        try:
+                                            if k in ("symbol", "name"):
+                                                item[k] = str(val) if val is not None else ""
+                                            else:
+                                                fv = float(val) if val not in (None, "", "-") else 0.0
+                                                item[k] = fv
+                                        except (TypeError, ValueError):
+                                            item[k] = "" if k in ("symbol", "name") else 0.0
+                                    data.append(item)
+                        except Exception:
+                            pass
             except Exception as e:
                 print(f"[DataFetcher] 获取股票列表失败: {e}")
 
@@ -465,6 +447,10 @@ class UnifiedDataFetcher:
 _data_fetcher = None
 
 def get_data_fetcher() -> UnifiedDataFetcher:
+    warnings.warn(
+        "data_fetcher 已弃用，请使用 data_bus。参见: from core.data_bus import get_data_bus",
+        DeprecationWarning, stacklevel=2
+    )
     global _data_fetcher
     if _data_fetcher is None:
         _data_fetcher = UnifiedDataFetcher()

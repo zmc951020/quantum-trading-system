@@ -39,6 +39,10 @@ if AURORA_PATH not in sys.path:
 # 5002 Aurora 后端地址（fallback代理）
 AURORA_BACKEND = os.environ.get('AURORA_BACKEND', 'http://127.0.0.1:5002')
 
+# 5002内部API共享密钥（与visualization.py中SHARED_SECRET一致）
+AURORA_SHARED_SECRET = os.environ.get('AURORA_SHARED_SECRET', 'aurora-5002-internal-key-2026')
+AURORA_PROXY_HEADERS = {'X-Internal-Key': AURORA_SHARED_SECRET}
+
 # ========== 模块导入状态 ==========
 _import_status = {}
 
@@ -158,7 +162,8 @@ class AuroraCoreAdapter:
         self._ip_whitelist: set = self._load_ip_whitelist()  # IP白名单持久化
         self._fund_mode: str = "paper"  # 资金模式: paper/live/only-trading
         self._blacklist: set = self._load_blacklist()  # 黑名单持久化
-        self._trades: List[Dict] = []  # 交易记录
+        self._trades: List[Dict] = []  # 交易记录（向后兼容，主要使用SQLite）
+        self._executor = ThreadPoolExecutor(max_workers=4)  # 线程池用于超时控制
 
         try:
             from core.enhanced_strategy_manager import get_strategy_manager
@@ -200,66 +205,132 @@ class AuroraCoreAdapter:
 
     # ========== 反向代理 fallback ==========
 
-    def _proxy_get(self, path: str, timeout: int = 30) -> Dict:
-        """反向代理GET请求到5002 Aurora后端"""
-        try:
-            url = f"{AURORA_BACKEND}{path}"
-            r = requests.get(url, timeout=timeout)
-            return {"success": True, "data": r.json() if r.headers.get('content-type', '').startswith('application/json') else r.text, "proxy": True}
-        except Exception as e:
-            return {"success": False, "error": f"Aurora后端不可用: {e}", "proxy": True}
+    # P1-修复: 使用Session连接池复用TCP连接
+    _proxy_session = None
 
-    def _proxy_post(self, path: str, data: dict = None, timeout: int = 60) -> Dict:
-        """反向代理POST请求到5002 Aurora后端"""
-        try:
-            url = f"{AURORA_BACKEND}{path}"
-            r = requests.post(url, json=data, timeout=timeout)
-            return {"success": True, "data": r.json(), "proxy": True}
-        except Exception as e:
-            return {"success": False, "error": f"Aurora后端不可用: {e}", "proxy": True}
+    def _get_proxy_session(self):
+        if self._proxy_session is None:
+            import requests as _req
+            self._proxy_session = _req.Session()
+            self._proxy_session.headers.update(AURORA_PROXY_HEADERS)
+        return self._proxy_session
 
-    def _proxy_delete(self, path: str, timeout: int = 10) -> Dict:
-        """反向代理DELETE请求到5002 Aurora后端"""
-        try:
-            url = f"{AURORA_BACKEND}{path}"
-            r = requests.delete(url, timeout=timeout)
-            return {"success": True, "data": r.json() if r.text else {}}
-        except Exception as e:
-            return {"success": False, "error": f"Aurora后端不可用: {e}"}
+    def _proxy_get(self, path: str, timeout: int = 30, retries: int = 3) -> Dict:
+        """反向代理GET请求到5002 Aurora后端 — 带重试和状态码检查"""
+        import time as _time
+        last_error = None
+        for attempt in range(retries):
+            try:
+                url = f"{AURORA_BACKEND}{path}"
+                session = self._get_proxy_session()
+                r = session.get(url, timeout=timeout)
+                if r.status_code == 200:
+                    return {"success": True, "data": r.json() if r.headers.get('content-type', '').startswith('application/json') else r.text, "proxy": True}
+                else:
+                    logger.warning(f"[Proxy] GET {path} -> HTTP {r.status_code}")
+                    if r.status_code in (502, 503, 504):
+                        # 临时故障，可重试
+                        last_error = f"HTTP {r.status_code}"
+                        _time.sleep(0.5 * (attempt + 1))
+                        continue
+                    return {"success": False, "error": f"Aurora后端返回错误: HTTP {r.status_code}", "proxy": True}
+            except Exception as e:
+                last_error = str(e)
+                if attempt < retries - 1:
+                    _time.sleep(0.5 * (attempt + 1))
+                continue
+        return {"success": False, "error": f"Aurora后端不可用(重试{retries}次): {last_error}", "proxy": True}
+
+    def _proxy_post(self, path: str, data: dict = None, timeout: int = 60, retries: int = 3) -> Dict:
+        """反向代理POST请求到5002 Aurora后端 — 带重试和状态码检查"""
+        import time as _time
+        last_error = None
+        for attempt in range(retries):
+            try:
+                url = f"{AURORA_BACKEND}{path}"
+                session = self._get_proxy_session()
+                r = session.post(url, json=data, timeout=timeout)
+                if r.status_code == 200:
+                    return {"success": True, "data": r.json(), "proxy": True}
+                else:
+                    logger.warning(f"[Proxy] POST {path} -> HTTP {r.status_code}")
+                    if r.status_code in (502, 503, 504):
+                        last_error = f"HTTP {r.status_code}"
+                        _time.sleep(0.5 * (attempt + 1))
+                        continue
+                    return {"success": False, "error": f"Aurora后端返回错误: HTTP {r.status_code}", "proxy": True}
+            except Exception as e:
+                last_error = str(e)
+                if attempt < retries - 1:
+                    _time.sleep(0.5 * (attempt + 1))
+                continue
+        return {"success": False, "error": f"Aurora后端不可用(重试{retries}次): {last_error}", "proxy": True}
+
+    def _proxy_delete(self, path: str, timeout: int = 10, retries: int = 2) -> Dict:
+        """反向代理DELETE请求到5002 Aurora后端 — 带重试和状态码检查"""
+        import time as _time
+        last_error = None
+        for attempt in range(retries):
+            try:
+                url = f"{AURORA_BACKEND}{path}"
+                session = self._get_proxy_session()
+                r = session.delete(url, timeout=timeout)
+                if r.status_code in (200, 204):
+                    return {"success": True, "data": r.json() if r.text else {}}
+                else:
+                    if r.status_code in (502, 503, 504):
+                        last_error = f"HTTP {r.status_code}"
+                        _time.sleep(0.5 * (attempt + 1))
+                        continue
+                    return {"success": False, "error": f"Aurora后端返回错误: HTTP {r.status_code}"}
+            except Exception as e:
+                last_error = str(e)
+                if attempt < retries - 1:
+                    _time.sleep(0.5 * (attempt + 1))
+                continue
+        return {"success": False, "error": f"Aurora后端不可用(重试{retries}次): {last_error}"}
 
     # ========== 策略相关 ==========
 
     def get_strategy_list(self, core_only: bool = True) -> List[Dict]:
-        """获取策略列表 — 使用StrategyRegistry + 过滤非策略文件"""
-        if not self._registry:
-            return []
-
+        """获取策略列表 — 使用StrategyRegistry + 5002代理fallback"""
+        if self._registry:
+            try:
+                all_strategies = self._registry.to_dict_list()
+            except Exception as e:
+                logger.warning(f"[AuroraAdapter] 策略列表获取失败: {e}")
+                all_strategies = []
+            
+            if all_strategies:
+                if not core_only:
+                    return all_strategies
+                filtered = []
+                seen_canonical = set()
+                for s in all_strategies:
+                    name = s.get("name", "")
+                    if not _is_core_strategy(name):
+                        continue
+                    canonical = _get_canonical_name(name)
+                    if canonical in seen_canonical:
+                        continue
+                    seen_canonical.add(canonical)
+                    filtered.append(s)
+                filtered.sort(key=lambda s: _STRATEGY_TYPE_PRIORITY.get(
+                    s.get("strategy_type", "general"), 9))
+                return filtered
+        
+        # 降级：代理到5002获取真实策略列表
         try:
-            all_strategies = self._registry.to_dict_list()
+            r = requests.get(f"{AURORA_BACKEND}/api/strategy/library", timeout=5, headers=AURORA_PROXY_HEADERS)
+            if r.status_code == 200:
+                data = r.json()
+                strategies = data.get('strategies', [])
+                logger.info(f"[AuroraAdapter] 从5002获取到 {len(strategies)} 个策略")
+                return strategies
         except Exception as e:
-            logger.warning(f"[AuroraAdapter] 策略列表获取失败: {e}")
-            return []
-
-        if not core_only:
-            return all_strategies
-
-        filtered = []
-        seen_canonical = set()
-
-        for s in all_strategies:
-            name = s.get("name", "")
-            if not _is_core_strategy(name):
-                continue
-            canonical = _get_canonical_name(name)
-            if canonical in seen_canonical:
-                continue
-            seen_canonical.add(canonical)
-            filtered.append(s)
-
-        filtered.sort(key=lambda s: _STRATEGY_TYPE_PRIORITY.get(
-            s.get("strategy_type", "general"), 9))
-
-        return filtered
+            logger.warning(f"[AuroraAdapter] 5002策略列表代理失败: {e}")
+        
+        return []
 
     def get_strategy_info(self, name: str) -> Optional[Dict]:
         if self._registry:
@@ -414,14 +485,26 @@ class AuroraCoreAdapter:
     # ========== 风控相关 ==========
 
     def get_risk_status(self) -> Dict:
-        """风控状态 — 5003本地风控引擎"""
+        """风控状态 — 优先代理5002，失败则本地"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/risk-control/status", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return {"success": True, "data": data, "source": "Aurora(5002)"}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002风控代理失败: {e}")
+        
         try:
             if self._risk_engine:
-                assess = self._risk_engine.assess("system", {}, "check")
+                assess = self._risk_engine.assess("system", "system_check", {}, {})
                 return {"success": True, "data": {
-                    "status": "active" if assess.get("passed", True) else "warning",
-                    "checks": assess,
-                    "source": "QS_Robot本地",
+                    "status": "active" if assess.passed else "warning",
+                    "checks": {
+                        "overall_score": assess.overall_score,
+                        "risk_level": assess.risk_level.value,
+                        "passed": assess.passed,
+                    },
+                    "source": "QS_Robot本地(降级)",
                 }}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 本地风控检查失败: {e}")
@@ -464,16 +547,37 @@ class AuroraCoreAdapter:
         }}
 
     def get_positions(self) -> List[Dict]:
-        """持仓列表 — 5003本地"""
+        """持仓列表 — 优先代理5002，失败则返回空"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/positions", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return data.get('data', [])
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002持仓代理失败: {e}")
         return []
 
     def get_orders(self) -> List[Dict]:
-        """订单列表 — 5003本地"""
+        """订单列表 — 优先代理5002，失败则返回空"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/orders", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return data.get('data', [])
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002订单代理失败: {e}")
         return []
 
     def get_account_info(self) -> Dict:
-        """账户信息 — 5003本地"""
-        return {"success": True, "data": {"balance": 100000.0, "mode": "paper", "source": "QS_Robot本地"}}
+        """账户信息 — 优先代理5002，失败则本地"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/accounts", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return {"success": True, "data": data, "source": "Aurora(5002)"}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002账户代理失败: {e}")
+        return {"success": True, "data": {"balance": 100000.0, "mode": "paper", "source": "QS_Robot本地(降级)"}}
 
     # ========== 交易安全（5002无此模块，5003本地实现） ==========
 
@@ -494,13 +598,17 @@ class AuroraCoreAdapter:
             return {"success": False, "error": f"交易验证异常: {e}"}
 
     def execute_trade(self, trade_data: dict) -> Dict:
-        """执行交易 — 5003本地"""
+        """执行交易 — 5003本地，持久化到SQLite"""
         validate = self.validate_trade(trade_data)
         if not validate.get("success"):
             return validate
         symbol = trade_data.get("symbol", "")
         strategy = trade_data.get("strategy", "final_market_adaptive")
-        # 风控检查（传递回测和持仓数据以准确评估）
+        direction = trade_data.get("direction", "buy")
+        price = float(trade_data.get("price", 0))
+        quantity = int(trade_data.get("quantity", 0))
+        amount = float(trade_data.get("amount", price * quantity))
+        # 风控检查
         risk_params = {
             "symbol": symbol,
             "strategy_name": strategy,
@@ -510,28 +618,38 @@ class AuroraCoreAdapter:
         risk_result = self.check_risk(risk_params)
         if not risk_result.get("data", {}).get("passed", True):
             return {"success": False, "error": f"风控未通过: {risk_result.get('data', {}).get('level')}"}
-        # 使用本地策略管理器启动
-        self.start_strategy(strategy, {
-            "symbol": symbol,
-            "initial_balance": float(trade_data.get("amount", 100000)),
-        })
-        # 记录交易
-        trade_record = {
-            "symbol": symbol, "strategy": strategy,
-            "status": "executed", "source": "QS_Robot本地",
-            "time": __import__('datetime').datetime.now().isoformat(),
-            "amount": float(trade_data.get("amount", 100000)),
-        }
-        self._trades.append(trade_record)
-        return {"success": True, "data": trade_record}
+        # 持久化到SQLite
+        try:
+            from core.database import get_db
+            db = get_db()
+            trade_id = db.add_trade(symbol, direction, price, quantity, strategy, "paper")
+            db.add_audit_log(trade_data.get('_operator', 'system'), 'execute_trade', symbol,
+                             f"交易: {direction} {symbol} x{quantity} @{price}")
+            trade_record = {
+                "id": trade_id, "symbol": symbol, "strategy": strategy,
+                "direction": direction, "price": price, "quantity": quantity,
+                "status": "executed", "source": "SQLite数据库",
+                "amount": amount,
+            }
+            return {"success": True, "data": trade_record}
+        except Exception as e:
+            logger.error(f"[AuroraAdapter] 交易记录持久化失败: {e}")
+            return {"success": False, "error": f"交易记录失败: {e}"}
 
     def get_trade_report(self) -> Dict:
-        """交易报告 — 5003本地"""
-        return {"success": True, "data": {
-            "trades": self._trades[-20:],  # 最近20条
-            "total": len(self._trades),
-            "source": "QS_Robot本地",
-        }}
+        """交易报告 — 从SQLite数据库"""
+        try:
+            from core.database import get_db
+            db = get_db()
+            trades = db.get_trades(limit=50)
+            return {"success": True, "data": {
+                "trades": trades,
+                "total": len(trades),
+                "source": "SQLite数据库",
+            }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取交易报告失败: {e}")
+            return {"success": True, "data": {"trades": [], "total": 0, "source": "QS_Robot本地"}}
 
     def get_trade_security_config(self) -> Dict:
         """交易安全配置 — 5003本地"""
@@ -569,47 +687,103 @@ class AuroraCoreAdapter:
             logger.error(f"[AuroraAdapter] IP白名单保存失败: {e}")
 
     def add_ip_whitelist(self, ip: str) -> Dict:
-        """添加IP到白名单（持久化）"""
+        """添加IP到白名单（持久化到SQLite）"""
         ip = ip.strip()
         if not ip:
             return {"success": False, "error": "IP地址不能为空"}
-        if ip in self._ip_whitelist:
-            return {"success": True, "message": f"IP {ip} 已在白名单中"}
-        self._ip_whitelist.add(ip)
-        self._save_ip_whitelist()
-        logger.info(f"[AuroraAdapter] IP白名单添加: {ip}")
-        return {"success": True, "message": f"IP {ip} 已加入白名单", "data": {"ip": ip, "total": len(self._ip_whitelist)}}
+        try:
+            from core.database import get_db
+            db = get_db()
+            if db.add_ip_whitelist(ip):
+                logger.info(f"[AuroraAdapter] IP白名单添加: {ip}")
+                return {"success": True, "message": f"IP {ip} 已加入白名单", "data": {"ip": ip, "total": len(db.get_ip_whitelist())}}
+            return {"success": False, "error": f"IP {ip} 已存在或添加失败"}
+        except Exception as e:
+            logger.error(f"[AuroraAdapter] IP白名单添加失败: {e}")
+            return {"success": False, "error": str(e)}
 
     def remove_ip_whitelist(self, ip: str) -> Dict:
         """从白名单移除IP（持久化）"""
         ip = ip.strip()
-        if ip not in self._ip_whitelist:
-            return {"success": False, "error": f"IP {ip} 不在白名单中"}
         if ip in ('127.0.0.1', '::1'):
             return {"success": False, "error": "不允许移除本地回环地址"}
-        self._ip_whitelist.discard(ip)
-        self._save_ip_whitelist()
-        logger.info(f"[AuroraAdapter] IP白名单移除: {ip}")
-        return {"success": True, "message": f"IP {ip} 已从白名单移除", "data": {"total": len(self._ip_whitelist)}}
+        try:
+            from core.database import get_db
+            db = get_db()
+            if db.remove_ip_whitelist(ip):
+                logger.info(f"[AuroraAdapter] IP白名单移除: {ip}")
+                return {"success": True, "message": f"IP {ip} 已从白名单移除"}
+            return {"success": False, "error": f"IP {ip} 不在白名单中"}
+        except Exception as e:
+            logger.error(f"[AuroraAdapter] IP白名单移除失败: {e}")
+            return {"success": False, "error": str(e)}
 
     def is_ip_whitelisted(self, ip: str) -> bool:
         """检查IP是否在白名单中"""
-        return ip in self._ip_whitelist
+        try:
+            from core.database import get_db
+            db = get_db()
+            return db.is_ip_whitelisted(ip)
+        except Exception:
+            # 默认本地回环地址放行
+            return ip in ('127.0.0.1', '::1', 'localhost')
 
     def get_ip_whitelist(self) -> Dict:
         """获取白名单IP列表"""
-        return {"success": True, "data": {
-            "ips": list(self._ip_whitelist),
-            "total": len(self._ip_whitelist),
-            "source": "QS_Robot本地",
-        }}
+        try:
+            from core.database import get_db
+            db = get_db()
+            ips = db.get_ip_whitelist()
+            return {"success": True, "data": {
+                "ips": [{"ip": i["ip"], "label": i.get("label", ""), "created_at": i.get("created_at", "")} for i in ips],
+                "total": len(ips),
+                "source": "SQLite数据库",
+            }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取IP白名单失败: {e}")
+            return {"success": True, "data": {"ips": [], "total": 0, "source": "QS_Robot本地"}}
 
     def add_api_key(self, key_data: dict) -> Dict:
         return {"success": True, "message": "API Key已保存（本地模式）"}
 
     def critical_validate(self) -> Dict:
-        """关键操作验证"""
-        return {"success": True, "data": {"valid": True, "checks": {"auth": True, "ip": True, "session": True}}}
+        """关键操作验证 — 多重安全检查"""
+        checks = {
+            "auth": True,  # 由装饰器保证
+            "session": True,
+            "risk_engine": True,
+            "data_source": True,
+            "fund_safety": True,
+        }
+        details = {}
+        # 检查风控引擎
+        try:
+            from core.risk_control import get_risk_control_engine
+            engine = get_risk_control_engine()
+            checks["risk_engine"] = engine is not None
+            details["risk_engine"] = "正常" if engine else "不可用"
+        except Exception as e:
+            checks["risk_engine"] = False
+            details["risk_engine"] = f"异常: {e}"
+        # 检查数据源
+        try:
+            from core.data_fetcher import get_data_fetcher
+            fetcher = get_data_fetcher()
+            stocks = fetcher.get_stock_list()
+            is_mock = any(s.get("_mock", False) for s in stocks[:5]) if stocks else True
+            checks["data_source"] = not is_mock
+            details["data_source"] = f"真实数据({len(stocks)}只)" if not is_mock else f"模拟数据({len(stocks)}只)"
+        except Exception as e:
+            checks["data_source"] = False
+            details["data_source"] = f"异常: {e}"
+        # 检查资金安全
+        checks["fund_safety"] = self._fund_mode != "blocked"
+        details["fund_safety"] = "正常" if checks["fund_safety"] else "已冻结"
+        all_valid = all(checks.values())
+        return {"success": True, "data": {
+            "valid": all_valid, "checks": checks, "details": details,
+            "fund_mode": self._fund_mode,
+        }}
 
     def critical_refresh(self) -> Dict:
         return {"success": True, "message": "安全凭证已刷新"}
@@ -730,7 +904,24 @@ class AuroraCoreAdapter:
     # ========== 用户管理 ==========
 
     def get_users(self) -> List[Dict]:
-        """用户列表 — 从主模块USERS获取完整数据（含最后登录IP和时间）"""
+        """用户列表 — 从SQLite数据库获取完整数据"""
+        try:
+            from core.database import get_db
+            db = get_db()
+            db_users = db.get_all_users()
+            if db_users:
+                return [{
+                    'username': u['username'],
+                    'role': u.get('role', 'user'),
+                    'status': u.get('status', 'active'),
+                    'last_login': u.get('last_login_time', '-')[:19] if u.get('last_login_time') else '-',
+                    'last_ip': u.get('last_login_ip', '-'),
+                    'created_at': u.get('created_at', '-')[:19] if u.get('created_at') else '-',
+                } for u in db_users]
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 数据库用户列表获取失败: {e}")
+
+        # fallback：内存用户
         try:
             import sys
             main_module = sys.modules.get('__main__')
@@ -738,117 +929,151 @@ class AuroraCoreAdapter:
                 users_dict = main_module.USERS
             else:
                 from ui.server import USERS as users_dict
-
-            # 从审计日志获取最后登录信息
-            last_login_map = self._get_last_login_from_audit()
-
-            users = []
-            for username, info in users_dict.items():
-                login_info = last_login_map.get(username, {})
-                users.append({
-                    'username': username,
-                    'name': info.get('name', username),
-                    'role': info.get('role', 'user'),
-                    'tier': info.get('tier', 99),
-                    'status': 'active',
-                    'last_login': login_info.get('time', '-'),
-                    'last_ip': login_info.get('ip', '-'),
-                })
-            return users
-        except Exception as e:
-            logger.warning(f"[AuroraAdapter] 获取用户列表失败: {e}")
-            return [{"username": "admin", "role": "admin", "name": "管理员", "status": "active", "last_login": "-", "last_ip": "-"}]
+            return [{'username': u, 'role': info.get('role', 'user'), 'status': 'active',
+                     'last_login': '-', 'last_ip': '-'} for u, info in users_dict.items()]
+        except Exception:
+            return [{"username": "admin", "role": "admin", "status": "active", "last_login": "-", "last_ip": "-"}]
 
     def _get_last_login_from_audit(self) -> Dict[str, Dict]:
-        """从审计日志提取每个用户最后登录时间和IP"""
+        """从SQLite审计日志提取每个用户最后登录时间和IP"""
         result = {}
         try:
-            audit_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'audit.log')
-            if not os.path.exists(audit_file):
-                audit_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'security.log')
-            if not os.path.exists(audit_file):
-                return result
-            import json
-            with open(audit_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                        if entry.get('operation') == 'login' and entry.get('result') == 'success':
-                            username = entry.get('user', '')
-                            timestamp = entry.get('timestamp', '')
-                            ip = entry.get('ip_address', '')
-                            result[username] = {'time': timestamp[:19] if len(timestamp) > 19 else timestamp, 'ip': ip}
-                    except (json.JSONDecodeError, KeyError):
-                        continue
+            from core.database import get_db
+            db = get_db()
+            rows = db.get_audit_logs(limit=500)
+            for row in rows:
+                if row.get('action') == 'login' and row.get('result') == 'success':
+                    username = row.get('user', '')
+                    if username and username not in result:
+                        result[username] = {
+                            'time': row.get('created_at', '')[:19] if row.get('created_at') else '',
+                            'ip': row.get('ip', '')
+                        }
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 读取审计日志失败: {e}")
         return result
 
     def get_audit_logs(self, limit: int = 50) -> Dict:
-        """获取审计日志列表"""
-        logs = []
+        """获取审计日志列表 — 从SQLite数据库"""
         try:
-            audit_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'audit.log')
-            if not os.path.exists(audit_file):
-                audit_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'security.log')
-            if not os.path.exists(audit_file):
-                return {"success": True, "data": {"logs": [], "total": 0, "source": "QS_Robot本地"}}
-
-            import json
-            with open(audit_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-
-            # 取最近limit条
-            for line in lines[-limit:]:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    logs.append({
-                        'time': entry.get('timestamp', '')[:19] if entry.get('timestamp') else '',
-                        'user': entry.get('user', ''),
-                        'operation': entry.get('operation', ''),
-                        'target': entry.get('target', ''),
-                        'result': entry.get('result', ''),
-                        'ip': entry.get('ip_address', ''),
-                        'details': entry.get('details', {}),
-                    })
-                except (json.JSONDecodeError, KeyError):
-                    continue
-
-            logs.reverse()  # 最新的在前
-            return {"success": True, "data": {"logs": logs, "total": len(logs), "source": "QS_Robot本地"}}
+            from core.database import get_db
+            db = get_db()
+            rows = db.get_audit_logs(limit=limit)
+            logs = [{
+                'time': r.get('created_at', '')[:19] if r.get('created_at') else '',
+                'user': r.get('user', ''),
+                'operation': r.get('action', ''),
+                'target': r.get('target', ''),
+                'result': r.get('result', ''),
+                'ip': r.get('ip', ''),
+                'details': r.get('detail', ''),
+            } for r in rows]
+            return {"success": True, "data": {"logs": logs, "total": len(logs), "source": "SQLite数据库"}}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 读取审计日志失败: {e}")
             return {"success": True, "data": {"logs": [], "total": 0, "source": "QS_Robot本地"}}
 
     def create_user(self, user_data: dict) -> Dict:
-        """创建用户 — 5003本地"""
-        return {"success": True, "data": {"message": f"用户 {user_data.get('username', '')} 已创建（本地模式）", "source": "QS_Robot本地"}}
+        """创建用户 — 持久化到SQLite"""
+        username = user_data.get('username', '').strip()
+        if not username:
+            return {"success": False, "error": "用户名不能为空"}
+        password = user_data.get('password', '')
+        if not password or len(password) < 6:
+            return {"success": False, "error": "密码至少需要6位"}
+        role = user_data.get('role', 'user')
+        try:
+            import bcrypt
+            from core.database import get_db
+            db = get_db()
+            password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+            if db.create_user(username, password_hash, role):
+                db.add_audit_log(user_data.get('_operator', 'system'), 'create_user', username, f"创建用户 {username}，角色: {role}")
+                logger.info(f"[AuroraAdapter] 用户创建成功: {username}")
+                return {"success": True, "data": {"message": f"用户 {username} 已创建", "username": username, "source": "SQLite数据库"}}
+            return {"success": False, "error": f"用户名 {username} 已存在"}
+        except Exception as e:
+            logger.error(f"[AuroraAdapter] 创建用户失败: {e}")
+            return {"success": False, "error": str(e)}
 
     def update_user(self, username: str, data: dict) -> Dict:
-        """更新用户 — 5003本地"""
-        return {"success": True, "data": {"message": f"用户 {username} 已更新（本地模式）", "source": "QS_Robot本地"}}
+        """更新用户 — 持久化到SQLite"""
+        try:
+            from core.database import get_db
+            db = get_db()
+            updates = {}
+            if 'role' in data:
+                updates['role'] = data['role']
+            if 'status' in data:
+                updates['status'] = data['status']
+            if 'password' in data:
+                import bcrypt
+                updates['password_hash'] = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt()).decode()
+            if not updates:
+                return {"success": False, "error": "没有可更新的字段"}
+            if db.update_user(username, **updates):
+                db.add_audit_log(data.get('_operator', 'system'), 'update_user', username, f"更新用户: {list(updates.keys())}")
+                return {"success": True, "data": {"message": f"用户 {username} 已更新", "source": "SQLite数据库"}}
+            return {"success": False, "error": f"用户 {username} 不存在"}
+        except Exception as e:
+            logger.error(f"[AuroraAdapter] 更新用户失败: {e}")
+            return {"success": False, "error": str(e)}
 
     def delete_user(self, username: str) -> Dict:
-        """删除用户 — 5003本地"""
-        return {"success": True, "message": f"用户 {username} 已删除（本地模式）"}
+        """删除用户 — 持久化到SQLite"""
+        if username == 'admin':
+            return {"success": False, "error": "不允许删除admin用户"}
+        try:
+            from core.database import get_db
+            db = get_db()
+            if db.delete_user(username):
+                db.add_audit_log('system', 'delete_user', username, f"删除用户 {username}")
+                logger.info(f"[AuroraAdapter] 用户已删除: {username}")
+                return {"success": True, "message": f"用户 {username} 已删除", "source": "SQLite数据库"}
+            return {"success": False, "error": f"用户 {username} 不存在"}
+        except Exception as e:
+            logger.error(f"[AuroraAdapter] 删除用户失败: {e}")
+            return {"success": False, "error": str(e)}
 
     def disable_user(self, username: str) -> Dict:
-        """禁用用户 — 5003本地"""
-        return {"success": True, "data": {"message": f"用户 {username} 已禁用（本地模式）"}}
+        """禁用用户 — 持久化到SQLite"""
+        try:
+            from core.database import get_db
+            db = get_db()
+            if db.update_user(username, status='disabled'):
+                db.add_audit_log('system', 'disable_user', username, f"禁用用户 {username}")
+                return {"success": True, "data": {"message": f"用户 {username} 已禁用", "source": "SQLite数据库"}}
+            return {"success": False, "error": f"用户 {username} 不存在"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def enable_user(self, username: str) -> Dict:
-        """启用用户 — 5003本地"""
-        return {"success": True, "data": {"message": f"用户 {username} 已启用（本地模式）"}}
+        """启用用户 — 持久化到SQLite"""
+        try:
+            from core.database import get_db
+            db = get_db()
+            if db.update_user(username, status='active'):
+                db.add_audit_log('system', 'enable_user', username, f"启用用户 {username}")
+                return {"success": True, "data": {"message": f"用户 {username} 已启用", "source": "SQLite数据库"}}
+            return {"success": False, "error": f"用户 {username} 不存在"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def reset_user_password(self, username: str, password: str = None) -> Dict:
-        """重置密码 — 5003本地"""
-        return {"success": True, "data": {"message": f"用户 {username} 密码已重置（本地模式）"}}
+        """重置密码 — 持久化到SQLite"""
+        if not password:
+            password = 'reset123456'  # 默认重置密码
+        try:
+            import bcrypt
+            from core.database import get_db
+            db = get_db()
+            password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+            if db.update_user(username, password_hash=password_hash):
+                db.add_audit_log('system', 'reset_password', username, f"重置用户 {username} 密码")
+                return {"success": True, "data": {"message": f"用户 {username} 密码已重置", "source": "SQLite数据库"}}
+            return {"success": False, "error": f"用户 {username} 不存在"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     # ========== 告警系统 ==========
 
@@ -926,11 +1151,23 @@ class AuroraCoreAdapter:
         }}
 
     def get_database_stats(self) -> Dict:
-        """数据库统计 — 5003本地"""
-        return {"success": True, "data": {
-            "strategies_count": len(self.get_strategy_list()),
-            "optimizations_count": 0, "trades_count": 0,
-        }}
+        """数据库统计 — 从SQLite查询真实数据"""
+        try:
+            from core.database import get_db
+            db = get_db()
+            stats = db.get_stats()
+            return {"success": True, "data": {
+                **stats,
+                "strategies_count": len(self.get_strategy_list()),
+                "source": "SQLite数据库",
+            }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取数据库统计失败: {e}")
+            return {"success": True, "data": {
+                "strategies_count": len(self.get_strategy_list()),
+                "optimizations_count": 0, "trades_count": 0,
+                "source": "QS_Robot本地",
+            }}
 
     def sync_params_to_aurora(self) -> Dict:
         """将5003优化参数同步到5002 Aurora
@@ -1108,6 +1345,9 @@ class AuroraCoreAdapter:
                 {"name": "gyro", "display": "陀螺仪动力学优化", "source": "QS_Robot",
                  "type": "tau", "category": "韬定律",
                  "description": "陀螺仪刚体动力学+SAC强化学习策略优化"},
+                {"name": "special_forces", "display": "特种兵自演进优化", "source": "QS_Robot",
+                 "type": "tau", "category": "韬定律",
+                 "description": "特种兵威科夫量价自适应策略自演进优化"},
             ]
             optimizers.extend(fallback_modules)
 
@@ -1141,19 +1381,80 @@ class AuroraCoreAdapter:
     # ========== DeepSeek AI ==========
 
     def _get_llm_manager(self):
-        """获取服务器LLM管理器（同进程访问）"""
+        """获取服务器LLM管理器（同进程访问，多路径尝试）"""
         try:
             import sys
+            # 路径1: 从主模块获取（server.py运行时）
             main_module = sys.modules.get('__main__')
             if main_module and hasattr(main_module, 'llm_manager'):
                 return main_module.llm_manager
         except Exception:
             pass
+        try:
+            # 路径2: 直接导入llm_manager模块
+            from llm_manager import llm_manager as mgr
+            if mgr is not None:
+                return mgr
+        except Exception:
+            pass
+        try:
+            # 路径3: 从ui.server模块获取
+            from ui.server import llm_manager as mgr
+            if mgr is not None:
+                return mgr
+        except Exception:
+            pass
         return None
 
     def deepseek_chat(self, message: str, history: list = None) -> Dict:
-        """AI对话 — 直接返回本地模式（不阻塞）"""
-        return {"success": True, "data": {"reply": f"[本地模式] 收到消息: {message[:50]}...", "source": "QS_Robot本地"}}
+        """AI对话 — 调用真实LLM管理器，超时保护"""
+        if not message or not message.strip():
+            return {"success": False, "error": "消息不能为空"}
+
+        try:
+            llm = self._get_llm_manager()
+            if llm and llm.active_provider and llm.active_provider.is_available():
+                system_prompt = "你是一个专业的量化交易助手，帮助用户分析股票、策略和市场。请用中文回答。"
+                # 构建消息列表（含历史记录）
+                messages = [{"role": "system", "content": system_prompt}]
+                if history:
+                    for h in history[-10:]:  # 最多保留10条历史
+                        role = h.get("role", "user")
+                        content = h.get("content", "")
+                        if role in ("user", "assistant") and content:
+                            messages.append({"role": role, "content": content})
+                messages.append({"role": "user", "content": message})
+
+                # 使用线程池超时保护（30秒）
+                future = self._executor.submit(lambda: llm.chat(messages, stream=False, auto_switch=True))
+                try:
+                    reply = future.result(timeout=30)
+                    if reply and not str(reply).startswith("[错误]"):
+                        return {"success": True, "data": {
+                            "reply": str(reply),
+                            "source": f"LLM({llm.active_provider.name})",
+                        }}
+                except FutureTimeoutError:
+                    return {"success": True, "data": {
+                        "reply": f"[LLM超时] 模型响应超过30秒，请稍后重试。您的消息: {message[:100]}",
+                        "source": "QS_Robot本地(超时)",
+                    }}
+
+            # LLM不可用时的降级响应
+            return {"success": True, "data": {
+                "reply": f"[离线模式] LLM服务暂不可用，无法处理: {message[:100]}...\n\n"
+                         f"当前可用的命令功能：\n"
+                         f"- 系统状态 / 策略列表 / 优化器列表\n"
+                         f"- 回测 [策略名] / 优化 [策略名]\n"
+                         f"- 风控状态 / 健康检查 / 帮助",
+                "source": "QS_Robot本地(离线)",
+            }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] LLM对话失败: {e}")
+            return {"success": True, "data": {
+                "reply": f"[本地模式] LLM调用异常: {str(e)[:100]}",
+                "source": "QS_Robot本地(异常)",
+            }}
 
     # ========== 账户管理 ==========
 
@@ -1209,7 +1510,7 @@ class AuroraCoreAdapter:
     # ========== 优化器执行 ==========
 
     # 5003本地优化器ID集合（直接调用tau_optimizer_cluster）
-    _LOCAL_OPTIMIZER_IDS = {"tau_cluster", "fourier_rl", "bernoulli_coanda", "shepherd_rotation", "gyro"}
+    _LOCAL_OPTIMIZER_IDS = {"tau_cluster", "fourier_rl", "bernoulli_coanda", "shepherd_rotation", "gyro", "special_forces"}
 
     # 5002牧羊人优化器（代理到 /api/shepherd/run — 真实优化）
     _SHEPHERD_OPTIMIZER_IDS = {"shepherd_v5", "shepherd_v6"}
@@ -1220,16 +1521,15 @@ class AuroraCoreAdapter:
 
     def _run_tau_optimizer_local(self, strategy_name: str, optimizer_id: str,
                                    params: dict = None) -> Dict:
-        """使用5003本地tau_optimizer_cluster执行真实优化"""
+        """使用5003本地熵韬收敛优化器执行真实优化"""
         try:
-            from core.tau_optimizer_cluster import (
-                TauOptimizerCluster, StrategyOptimizerBus,
-            )
+            from core.tau_enhanced_optimizer import EntropyTauOptimizer
+            from core.tau_optimizer_cluster import StrategyOptimizerBus
 
             # 获取各策略感知模块的默认参数范围
             param_ranges = self._get_param_ranges_for_optimizer(optimizer_id)
 
-            cluster = TauOptimizerCluster(
+            cluster = EntropyTauOptimizer(
                 param_ranges=param_ranges,
                 strategy_name=strategy_name,
                 similarity_threshold=0.15,
@@ -1240,11 +1540,12 @@ class AuroraCoreAdapter:
             coarse = int((params or {}).get("coarse_points", 50))
             fine = int((params or {}).get("fine_points", 30))
 
-            result = cluster.run_folding_optimization(
+            result = cluster.run_enhanced_optimization(
                 coarse_points=coarse,
                 refined_points_per_region=fine,
                 validation_points=5,
                 run_analysis=True,
+                entropy_decay=True,
             )
 
             best_result = result["best_result"]
@@ -1358,6 +1659,76 @@ class AuroraCoreAdapter:
             "message": f"请选择优化器对 {strategy_name} 执行优化",
         }}
 
+    # ========== 特种兵策略 ==========
+
+    def run_special_forces_evolution(self, data: dict = None) -> Dict:
+        """特种兵策略自演进优化 — 5003本地"""
+        data = data or {}
+        try:
+            if self._strategy_mgr:
+                result = self._strategy_mgr.run_special_forces_evolution(
+                    symbol=data.get("symbol", "510300"),
+                    population_size=data.get("population_size", 20),
+                    max_generations=data.get("max_generations", 30),
+                    force_refresh=data.get("force_refresh", False),
+                    incremental=data.get("incremental", False),
+                )
+                return result
+            return {"success": False, "error": "策略管理器不可用"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def run_special_forces_backtest(self, data: dict = None) -> Dict:
+        """特种兵策略回测 — 5003本地"""
+        data = data or {}
+        try:
+            if self._strategy_mgr:
+                result = self._strategy_mgr.run_special_forces_backtest(
+                    symbol=data.get("symbol", "510300"),
+                    params=data.get("params"),
+                    initial_capital=data.get("initial_capital", 100000.0),
+                    use_optimized=data.get("use_optimized", True),
+                )
+                return result
+            return {"success": False, "error": "策略管理器不可用"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_special_forces_params(self, symbol: str = "510300") -> Dict:
+        """获取特种兵策略参数"""
+        try:
+            if self._strategy_mgr:
+                return self._strategy_mgr.get_special_forces_params(symbol)
+            return {"success": False, "error": "策略管理器不可用"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def start_special_forces(self, data: dict = None) -> Dict:
+        """启动特种兵策略"""
+        data = data or {}
+        try:
+            if self._strategy_mgr:
+                success, message = self._strategy_mgr.start_special_forces(
+                    symbol=data.get("symbol", "510300"),
+                    balance=data.get("balance", 100000.0),
+                    use_optimized_params=data.get("use_optimized_params", True),
+                )
+                return {"success": success, "message": message}
+            return {"success": False, "error": "策略管理器不可用"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def stop_special_forces(self, symbol: str = "510300") -> Dict:
+        """停止特种兵策略"""
+        try:
+            if self._strategy_mgr:
+                strategy_name = f"special_forces_{symbol}"
+                self._strategy_mgr._active_strategies.pop(strategy_name, None)
+                return {"success": True, "message": f"特种兵策略 {symbol} 已停止"}
+            return {"success": False, "error": "策略管理器不可用"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     # ========== 技术分析 ==========
 
     def get_technical_analysis(self, symbol: str, days: int = 100) -> Dict:
@@ -1419,15 +1790,23 @@ class AuroraCoreAdapter:
     # ========== 行情数据 ==========
 
     def get_market_data(self) -> Dict:
-        """市场行情 — 5003本地UnifiedDataFetcher"""
+        """市场行情 — 优先代理5002，失败则本地"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/market-data", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return {"success": True, "data": data, "source": "Aurora(5002)"}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002行情代理失败: {e}")
+        
         try:
             from core.data_fetcher import get_data_fetcher
             fetcher = get_data_fetcher()
             stocks = fetcher.get_stock_list()
             return {"success": True, "data": {
-                "stocks": stocks[:50],  # 前50只
+                "stocks": stocks[:50],
                 "total": len(stocks),
-                "source": "QS_Robot本地",
+                "source": "QS_Robot本地(降级)",
             }}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 市场行情获取失败: {e}")
@@ -1437,25 +1816,180 @@ class AuroraCoreAdapter:
             }}
 
     def get_performance_data(self) -> Dict:
-        """绩效数据 — 5003本地"""
+        """绩效数据 — 优先代理5002，失败则本地"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/performance-data", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return {"success": True, "data": data, "source": "Aurora(5002)"}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002绩效代理失败: {e}")
+        
         return {"success": True, "data": {
             "active_strategies": len(self._running_strategies),
-            "total_optimizations": 0,  # 后续可从优化器历史中获取
-            "source": "QS_Robot本地",
+            "total_optimizations": 0,
+            "source": "QS_Robot本地(降级)",
         }}
 
     def get_strategy_status(self) -> Dict:
-        """策略运行状态 — 5003本地"""
+        """策略运行状态 — 优先代理5002，失败则本地"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/strategy-status", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return {"success": True, "data": data, "source": "Aurora(5002)"}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002策略状态代理失败: {e}")
+        
         return {"success": True, "data": {
             "running": list(self._running_strategies.keys()),
             "count": len(self._running_strategies),
-            "source": "QS_Robot本地",
+            "source": "QS_Robot本地(降级)",
         }}
 
     def get_technical_indicators(self, symbol: str = "000001.SZ") -> Dict:
-        """技术指标 — 5003本地TechnicalAnalysisEngine"""
+        """技术指标 — 优先代理5002，失败则本地"""
+        try:
+            r = requests.get(f"{AURORA_BACKEND}/api/technical-indicators?symbol={symbol}", timeout=8)
+            if r.status_code == 200:
+                data = r.json()
+                return {"success": True, "data": data, "source": "Aurora(5002)"}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 5002技术指标代理失败: {e}")
+        
         symbol_clean = symbol.replace(".SZ", "").replace(".SH", "")
         return self.get_technical_analysis(symbol_clean, days=100)
+
+    # ========== 数据源状态 ==========
+
+    def get_data_source_status(self) -> Dict:
+        """检查所有数据源连接状态"""
+        sources = {}
+        # 检查 AKShare
+        try:
+            import akshare
+            sources["akshare"] = {"installed": True, "version": getattr(akshare, "__version__", "unknown")}
+            # 实际测试连接
+            try:
+                _future = self._executor.submit(lambda: akshare.stock_zh_a_spot())
+                df = _future.result(timeout=10)
+                sources["akshare"]["connected"] = df is not None and not df.empty
+                sources["akshare"]["stock_count"] = len(df) if df is not None else 0
+            except Exception:
+                sources["akshare"]["connected"] = False
+                sources["akshare"]["error"] = "连接超时或不可达"
+        except ImportError:
+            sources["akshare"] = {"installed": False, "connected": False}
+        # 检查 Tushare（仅做能力检测，非数据源依赖）
+        try:
+            import tushare
+            sources["tushare"] = {"installed": True, "version": getattr(tushare, "__version__", "unknown")}
+        except ImportError:
+            sources["tushare"] = {"installed": False}
+        # 检查数据总线
+        try:
+            from core.data_bus import get_data_bus
+            bus = get_data_bus()
+            sources["data_bus"] = {"available": True, "adapters": bus.list_adapters()}
+        except Exception:
+            sources["data_bus"] = {"available": False}
+        return {"success": True, "data": {"sources": sources, "source": "QS_Robot本地"}}
+
+    # ========== K线数据 ==========
+
+    def get_kline(self, symbol: str, period: str = "daily", days: int = 500, adjust: str = "qfq") -> Dict:
+        """获取K线数据 — 5003本地UnifiedDataFetcher→数据总线"""
+        try:
+            from core.data_fetcher import get_data_fetcher
+            fetcher = get_data_fetcher()
+            kline = fetcher.get_kline(symbol, period, days, adjust)
+            if kline and kline.get("count", 0) > 0:
+                is_mock = kline.get("_mock", False)
+                return {"success": True, "data": {
+                    "symbol": symbol, "period": period,
+                    "count": kline["count"],
+                    "dates": kline.get("dates", [])[-10:],  # 最近10条
+                    "opens": kline.get("opens", [])[-10:],
+                    "highs": kline.get("highs", [])[-10:],
+                    "lows": kline.get("lows", [])[-10:],
+                    "closes": kline.get("closes", [])[-10:],
+                    "volumes": kline.get("volumes", [])[-10:],
+                    "start_date": kline.get("start_date", ""),
+                    "end_date": kline.get("end_date", ""),
+                    "source": "AKShare" if not is_mock else "QS_Robot本地(模拟数据)",
+                    "is_mock": is_mock,
+                }}
+            return {"success": True, "data": {
+                "symbol": symbol, "count": 0, "source": "QS_Robot本地",
+                "message": "未获取到K线数据",
+            }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取K线失败 {symbol}: {e}")
+            return {"success": False, "error": f"获取K线失败: {e}"}
+
+    def get_realtime(self, symbol: str) -> Dict:
+        """获取实时行情 — 5003本地"""
+        try:
+            from core.data_bus import get_data_bus
+            bus = get_data_bus()
+            result = bus.get_realtime(symbol)
+            if result:
+                return {"success": True, "data": {**result, "source": "AKShare"}}
+            # fallback to data_fetcher
+            from core.data_fetcher import get_data_fetcher
+            fetcher = get_data_fetcher()
+            stocks = fetcher.get_stock_list()
+            match = next((s for s in stocks if s.get("symbol") == symbol), None)
+            if match:
+                return {"success": True, "data": {**match, "source": "AKShare"}}
+            return {"success": True, "data": {"symbol": symbol, "message": "未找到实时行情", "source": "QS_Robot本地"}}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取实时行情失败 {symbol}: {e}")
+            return {"success": False, "error": f"获取实时行情失败: {e}"}
+
+    def get_financial(self, symbol: str) -> Dict:
+        """获取财务数据 — 5003本地"""
+        try:
+            from core.data_fetcher import get_data_fetcher
+            fetcher = get_data_fetcher()
+            financials = fetcher.get_financials(symbol)
+            if financials:
+                is_mock = financials.get("_mock", False)
+                return {"success": True, "data": {
+                    **financials, "source": "AKShare" if not is_mock else "QS_Robot本地(模拟数据)",
+                    "is_mock": is_mock,
+                }}
+            return {"success": True, "data": {"symbol": symbol, "source": "QS_Robot本地", "message": "未获取到财务数据"}}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取财务数据失败 {symbol}: {e}")
+            return {"success": False, "error": f"获取财务数据失败: {e}"}
+
+    # ========== 风险控制 ==========
+
+    def risk_assess(self, symbol: str, strategy_name: str, backtest_result: dict = None, position_info: dict = None) -> Dict:
+        """风险评估 — 使用5003本地RiskControlEngine"""
+        try:
+            from core.risk_control import get_risk_control_engine
+            engine = get_risk_control_engine()
+            backtest_result = backtest_result or {}
+            position_info = position_info or {}
+            assessment = engine.assess(symbol, strategy_name, backtest_result, position_info)
+            return {"success": True, "data": {
+                "symbol": symbol,
+                "strategy": strategy_name,
+                "overall_score": assessment.overall_score,
+                "risk_level": assessment.risk_level.value,
+                "passed": assessment.passed,
+                "strategy_risk": assessment.strategy_risk,
+                "market_risk": assessment.market_risk,
+                "position_risk": assessment.position_risk,
+                "operational_risk": assessment.operational_risk,
+                "recommendations": assessment.recommendations,
+                "source": "QS_Robot本地(RiskControlEngine)",
+            }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 风险评估失败 {symbol}: {e}")
+            return {"success": False, "error": f"风险评估失败: {e}"}
 
     # ========== 股票池管理 ==========
 
@@ -1601,14 +2135,49 @@ class AuroraCoreAdapter:
     # ========== LLM管理 ==========
 
     def get_llm_models(self) -> Dict:
-        """LLM模型列表 — 直接返回（不阻塞）"""
+        """LLM模型列表 — 从真实LLM管理器获取"""
+        try:
+            llm = self._get_llm_manager()
+            if llm and llm.providers:
+                models = []
+                for name, provider in llm.providers.items():
+                    try:
+                        available = provider.get_available_models() if hasattr(provider, 'get_available_models') else []
+                    except Exception:
+                        available = []
+                    if available:
+                        for m in available:
+                            models.append({
+                                "id": m,
+                                "name": m,
+                                "provider": name,
+                                "status": "available" if provider.is_available() else "unavailable",
+                            })
+                    else:
+                        # 至少显示provider名称
+                        models.append({
+                            "id": name,
+                            "name": provider.name if hasattr(provider, 'name') else name,
+                            "provider": name,
+                            "status": "available" if provider.is_available() else "unavailable",
+                        })
+                active = llm.active_provider.name if llm.active_provider else "none"
+                return {"success": True, "data": {
+                    "models": models,
+                    "active_provider": active,
+                    "source": "LLM管理器",
+                }}
+        except Exception as e:
+            logger.warning(f"[AuroraAdapter] 获取LLM模型列表失败: {e}")
+
+        # fallback: 硬编码列表
         return {"success": True, "data": {
             "models": [
                 {"id": "gpt-4o", "name": "GPT-4o", "provider": "OpenAI", "status": "available"},
                 {"id": "deepseek-v3", "name": "DeepSeek V3", "provider": "DeepSeek", "status": "available"},
                 {"id": "qwen-2.5", "name": "Qwen 2.5 Coder", "provider": "Ollama", "status": "available"},
             ],
-            "source": "QS_Robot本地",
+            "source": "QS_Robot本地(离线)",
         }}
 
     def switch_llm(self, model: str) -> Dict:

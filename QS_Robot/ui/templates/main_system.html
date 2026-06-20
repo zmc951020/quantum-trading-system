@@ -938,6 +938,7 @@
                             <option value="震荡">震荡类</option>
                             <option value="套利">套利类</option>
                             <option value="均值回归">均值回归</option>
+                            <option value="特种兵">特种兵</option>
                         </select>
                         <button class="btn btn-primary" onclick="refreshStrategyList()">🔄 刷新策略列表</button>
                         <button class="btn btn-success" onclick="createNewStrategy()">+ 新建策略</button>
@@ -983,6 +984,7 @@
                             <option value="布林带策略">布林带策略</option>
                             <option value="动量策略">动量策略 (Momentum)</option>
                             <option value="均值回归策略">均值回归策略</option>
+                            <option value="special_forces_wyckoff">特种兵・威科夫量价自适应</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -1055,6 +1057,7 @@
                             <option value="RSI策略">RSI 策略</option>
                             <option value="布林带策略">布林带策略</option>
                             <option value="动量策略">动量策略</option>
+                            <option value="special_forces_wyckoff">特种兵・威科夫量价自适应</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -1067,6 +1070,7 @@
                             <option value="gyro">陀螺仪动力学优化</option>
                             <option value="shepherd_v5">牧羊人V5优化器</option>
                             <option value="shepherd_v6">牧羊人V6综合优化器</option>
+                            <option value="special_forces_evolution">特种兵・自演进优化器</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -1573,7 +1577,7 @@
                 if (data.success && data.data && data.data.strategies) {
                     STRATEGIES = data.data.strategies.map(s => ({
                         name: s.name,
-                        category: s.strategy_type || s.type || '通用',
+                        category: s.category || s.strategy_type || s.type || '通用',
                         status: s.enabled ? 'running' : 'stopped',
                         score: s.score || 0,
                         return: s.return_pct || 0,
@@ -1720,9 +1724,14 @@
                 const stars = Math.round(s.score / 20);
                 const starStr = '★'.repeat(stars) + '☆'.repeat(5 - stars);
                 const btns = btnMap(s);
+                const isSF = s.name.toLowerCase().includes('special_forces');
+                const sfButtons = isSF ? `
+                    <button class="btn btn-warning btn-sm" onclick="runSpecialForcesEvolution('${s.name}')" style="padding:4px 8px;font-size:10px;" title="自演进优化">🧬 演进</button>
+                    <button class="btn btn-info btn-sm" onclick="runSpecialForcesBacktest('${s.name}')" style="padding:4px 8px;font-size:10px;" title="威科夫回测">📊 SF回测</button>
+                ` : '';
                 return `<tr>
                     <td>${i + 1}</td>
-                    <td><b>${s.name}</b></td>
+                    <td><b>${s.name}</b>${isSF ? ' <span style="font-size:10px;color:#f59e0b;">⚡特种兵</span>' : ''}</td>
                     <td>${s.category}</td>
                     <td><span class="badge ${badgeMap[s.status][0]}">${badgeMap[s.status][1]}</span></td>
                     <td><span style="color:#f59e0b;">${starStr}</span> <span style="color:#8ba3c7;font-size:12px;">${s.score}</span></td>
@@ -1730,7 +1739,7 @@
                     <td>${s.winrate}%</td>
                     <td>${s.sharpe.toFixed(2)}</td>
                     <td style="color:#8ba3c7;font-size:12px;">${s.lastRun}</td>
-                    <td>${btns[s.status]} <button class="btn btn-info btn-sm" onclick="runStrategyBacktest('${s.name}')" style="padding:4px 10px;font-size:11px;">🔬 回测</button></td>
+                    <td>${btns[s.status]} <button class="btn btn-info btn-sm" onclick="runStrategyBacktest('${s.name}')" style="padding:4px 10px;font-size:11px;">🔬 回测</button>${sfButtons}</td>
                 </tr>`;
             }).join('');
         }
@@ -1784,6 +1793,53 @@
             } catch (e) {
                 showMessage(`❌ 回测异常: ${e.message}`);
             }
+        }
+
+        // ========== 特种兵策略专用操作 ==========
+        async function runSpecialForcesEvolution(name) {
+            try {
+                showMessage(`🧬 正在启动特种兵自演进优化: ${name}...`);
+                const resp = await fetch('/api/special_forces/evolution', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_name: name, symbol: '510300', population_size: 20, max_generations: 30 })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showMessage(`✅ 特种兵演进完成 | 最佳评分: ${data.best_score || '--'} | 耗时: ${data.elapsed_seconds || '--'}s`);
+                    setTimeout(() => fetchStrategies(), 1000);
+                } else {
+                    showMessage(`⚠️ 特种兵演进失败: ${data.error || data.message || '请检查策略与数据源'}`);
+                }
+            } catch (e) {
+                showMessage(`❌ 特种兵演进异常: ${e.message}`);
+            }
+        }
+
+        async function runSpecialForcesBacktest(name) {
+            try {
+                showMessage(`📊 正在执行特种兵回测: ${name}...`);
+                const resp = await fetch('/api/special_forces/backtest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_name: name, symbol: '510300', use_optimized: true })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    const r = data.result || data;
+                    showMessage(`✅ 特种兵回测完成 | 收益: ${r.total_return_pct || '--'}% | 夏普: ${r.sharpe_ratio || '--'} | 胜率: ${r.win_rate || '--'}%`);
+                    setTimeout(() => fetchStrategies(), 1000);
+                } else {
+                    showMessage(`⚠️ 特种兵回测失败: ${data.error || data.message || '请检查数据源'}`);
+                }
+            } catch (e) {
+                showMessage(`❌ 特种兵回测异常: ${e.message}`);
+            }
+        }
+
+        async function refreshStrategyList() {
+            await fetchStrategies();
+            showMessage('🔄 策略列表已刷新');
         }
 
         function createNewStrategy() {

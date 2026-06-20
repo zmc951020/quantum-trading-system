@@ -39,7 +39,7 @@ AURORA_PATH = r"d:\Gupiao\量化交易测试设备方案\攒机\最后评估01\D
 class AuroraSystemIntegration:
     """Aurora系统集成模块"""
 
-    def __init__(self, api_base: str = "http://127.0.0.1:5000"):
+    def __init__(self, api_base: str = "http://127.0.0.1:5003"):
         self.api_base = api_base
         self.session = requests.Session()
         self.session_id = None

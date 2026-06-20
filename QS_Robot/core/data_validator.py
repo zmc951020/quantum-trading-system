@@ -165,12 +165,17 @@ class DataValidator:
 # 单例模式
 # ============================================================
 
+import threading
+
 _global_validator: Optional[DataValidator] = None
+_global_validator_lock = threading.Lock()
 
 
 def get_validator() -> DataValidator:
     """获取数据校验器单例"""
     global _global_validator
     if _global_validator is None:
-        _global_validator = DataValidator()
+        with _global_validator_lock:
+            if _global_validator is None:
+                _global_validator = DataValidator()
     return _global_validator

@@ -161,8 +161,32 @@ class DataCache:
             print(f"[DataCache] 缓存写入失败: {e}")
             return False
 
+    def delete(self, data_type: str, params: Dict[str, Any] = None) -> bool:
+        """删除缓存项（内存+文件）"""
+        key = self._make_key(data_type, params or {})
+        try:
+            with self._lock:
+                if key in self._memory_cache:
+                    del self._memory_cache[key]
+            self._delete_from_file(key)
+            return True
+        except Exception as e:
+            print(f"[DataCache] 缓存删除失败: {e}")
+            return False
+
+    def _delete_from_file(self, key: str):
+        """从文件缓存中删除"""
+        if not self._file_cache_dir:
+            return
+        filepath = os.path.join(self._file_cache_dir, f"{key}.json")
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass
+
     def clear(self, data_type: str = None):
-        """清空缓存"""
+        """清空缓存（内存+文件）"""
         with self._lock:
             if data_type:
                 # 只清空指定类型（需要遍历）
@@ -174,6 +198,22 @@ class DataCache:
                     del self._memory_cache[k]
             else:
                 self._memory_cache.clear()
+        
+        # 同时清理文件缓存
+        if self._file_cache_dir and os.path.exists(self._file_cache_dir):
+            try:
+                import shutil
+                if data_type:
+                    # 清理指定类型的文件缓存
+                    prefix = hashlib.md5(data_type.encode()).hexdigest()[:8]
+                    for fname in os.listdir(self._file_cache_dir):
+                        if fname.startswith(prefix):
+                            os.remove(os.path.join(self._file_cache_dir, fname))
+                else:
+                    shutil.rmtree(self._file_cache_dir)
+                    os.makedirs(self._file_cache_dir, exist_ok=True)
+            except Exception as e:
+                print(f"[DataCache] 清理文件缓存失败: {e}")
 
     def get_hit_count(self) -> int:
         return self._hit_count

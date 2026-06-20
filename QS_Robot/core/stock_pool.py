@@ -116,9 +116,20 @@ class StockPoolManager:
             if os.path.exists(self._data_path):
                 with open(self._data_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    for symbol, record in data.items():
-                        record["level"] = PoolLevel(record["level"])
-                        self._pools[symbol] = StockRecord(**record)
+                # StockRecord 期望的字段列表
+                valid_fields = {"symbol", "name", "level", "added_at", "last_updated",
+                                "metadata", "history", "backtest_results", "risk_score", "strategy_params"}
+                for symbol, record in data.items():
+                    # 过滤未知字段，防止旧版本JSON中的废弃字段导致错误
+                    record = {k: v for k, v in record.items() if k in valid_fields}
+                    # 补充缺失字段的默认值
+                    record.setdefault("metadata", {})
+                    record.setdefault("history", [])
+                    record.setdefault("backtest_results", [])
+                    record.setdefault("risk_score", 0.0)
+                    record.setdefault("strategy_params", {})
+                    record["level"] = PoolLevel(record["level"])
+                    self._pools[symbol] = StockRecord(**record)
         except Exception as e:
             print(f"[StockPool] 加载数据失败，使用空池: {e}")
 
@@ -126,14 +137,17 @@ class StockPoolManager:
         """保存到文件"""
         try:
             os.makedirs(os.path.dirname(self._data_path), exist_ok=True)
-            data = {k: vars(v) for k, v in self._pools.items()}
-            # 转换枚举为字符串
+            data = {k: vars(v).copy() for k, v in self._pools.items()}
+            # 转换枚举为字符串（兼容已保存为字符串的情况）
             for v in data.values():
-                v["level"] = v["level"].value
+                if hasattr(v["level"], 'value'):
+                    v["level"] = v["level"].value
             with open(self._data_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
+            import traceback
             print(f"[StockPool] 保存失败: {e}")
+            traceback.print_exc()
 
     # ---------- 基础操作 ----------
 
@@ -200,11 +214,21 @@ class StockPoolManager:
                     return False
                 continue
             
-            # 类型转换
-            if isinstance(cond.value, int):
-                value = float(value)
-            elif isinstance(cond.value, float):
-                value = float(value)
+            # 类型转换：确保 value 与 cond.value 类型一致
+            if isinstance(value, str) and isinstance(cond.value, (int, float)):
+                try:
+                    value = float(value)
+                except (ValueError, TypeError):
+                    if cond.required:
+                        return False
+                    continue
+            elif isinstance(value, (int, float)) and isinstance(cond.value, str):
+                try:
+                    cond.value = float(cond.value)
+                except (ValueError, TypeError):
+                    if cond.required:
+                        return False
+                    continue
             
             # 条件判断
             if cond.operator == "<":
@@ -226,6 +250,10 @@ class StockPoolManager:
                 if value not in cond.value:
                     return False
             elif cond.operator == "between":
+                if not isinstance(cond.value, (list, tuple)) or len(cond.value) != 2:
+                    if cond.required:
+                        return False
+                    continue
                 if not (cond.value[0] <= value <= cond.value[1]):
                     return False
         
@@ -361,12 +389,17 @@ class StockPoolManager:
 # 全局单例
 # ============================================================
 
+import threading
+
 _pool_manager = None
+_pool_manager_lock = threading.Lock()
 
 def get_stock_pool_manager() -> StockPoolManager:
     global _pool_manager
     if _pool_manager is None:
-        _pool_manager = StockPoolManager()
+        with _pool_manager_lock:
+            if _pool_manager is None:
+                _pool_manager = StockPoolManager()
     return _pool_manager
 
 # ============================================================

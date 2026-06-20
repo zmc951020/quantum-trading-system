@@ -440,6 +440,38 @@
                 </div>
             </div>
 
+            <div class="sidebar-section" style="flex: 1; overflow-y: auto;">
+                <div class="section-title">🤖 Agent自由调度</div>
+                <div style="margin-bottom: 8px;">
+                    <input type="text" id="symbolInput" placeholder="股票代码 (如600519)" 
+                           style="width: 100%; padding: 8px 10px; background: #0d1526; border: 1px solid #2a3f5f; 
+                                  border-radius: 6px; color: #e8e8e8; font-size: 13px; margin-bottom: 6px;">
+                </div>
+                <div style="margin-bottom: 8px;">
+                    <select id="groupSelect" onchange="onGroupSelect()"
+                            style="width: 100%; padding: 8px 10px; background: #0d1526; border: 1px solid #2a3f5f;
+                                   border-radius: 6px; color: #e8e8e8; font-size: 13px;">
+                        <option value="">-- 选择Agent组 --</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 8px; max-height: 200px; overflow-y: auto;" id="agentCheckboxes">
+                    <div style="color: #5a6a85; font-size: 12px; padding: 4px;">加载中...</div>
+                </div>
+                <div style="margin-bottom: 8px;">
+                    <label style="display: flex; align-items: center; gap: 6px; color: #8ba3c7; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="debateMode" onchange="onDebateToggle()">
+                        ⚔️ 辩论模式（多方vs空方）
+                    </label>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+                    <button class="quick-btn" onclick="dispatchAgents()" style="background: #667eea; color: white; border-color: #667eea;">▶ 调度Agent</button>
+                    <button class="quick-btn" onclick="orchestrateAgents()" style="background: #10b981; color: white; border-color: #10b981;">🤖 智能编排</button>
+                    <button class="quick-btn" onclick="dispatchAllAgents()">全量投票</button>
+                    <button class="quick-btn" onclick="dispatchDebate()">⚔️ 辩论</button>
+                </div>
+                <div id="agentStatus" style="color: #5a6a85; font-size: 11px; margin-top: 4px;"></div>
+            </div>
+
             <div class="sidebar-section">
                 <div class="section-title">快捷命令</div>
                 <div class="quick-actions">
@@ -447,6 +479,45 @@
                     <button class="quick-btn" onclick="sendQuickMessage('策略列表')">策略列表</button>
                     <button class="quick-btn" onclick="sendQuickMessage('优化策略')">优化策略</button>
                     <button class="quick-btn" onclick="sendQuickMessage('股票池')">股票池</button>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <div class="section-title">🤖 智能编排</div>
+                <div class="quick-actions">
+                    <button class="quick-btn" onclick="orchestrateWithMessage('全面分析股票的市场风险')" style="font-size: 11px;">市场风险评估</button>
+                    <button class="quick-btn" onclick="orchestrateWithMessage('评估策略的优化空间')" style="font-size: 11px;">策略优化评估</button>
+                    <button class="quick-btn" onclick="orchestrateWithMessage('对系统进行架构审查')" style="font-size: 11px;">系统架构审查</button>
+                    <button class="quick-btn" onclick="orchestrateWithMessage('对系统进行综合诊断')" style="font-size: 11px;">综合系统诊断</button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-title">🔒 运行环境</div>
+                <div style="margin-bottom: 6px;">
+                    <select id="envSelect" onchange="switchEnvironment()"
+                            style="width: 100%; padding: 8px 10px; background: #0d1526; border: 1px solid #2a3f5f;
+                                   border-radius: 6px; color: #e8e8e8; font-size: 13px;">
+                        <option value="simulation">🟢 模拟环境</option>
+                        <option value="live">🔴 实盘环境</option>
+                    </select>
+                </div>
+                <div id="envStatus" style="font-size: 11px; color: #10b981; padding: 4px 8px;">
+                    模拟环境 - 全功能开放
+                </div>
+                <div id="envRestrictions" style="font-size: 10px; color: #5a6a85; margin-top: 4px;"></div>
+            </div>
+
+            <div class="sidebar-section" style="flex: 1; overflow-y: auto; min-height: 120px;">
+                <div class="section-title">📋 任务进度</div>
+                <div id="taskProgressStats" style="font-size: 11px; color: #8ba3c7; margin-bottom: 6px;">
+                    运行中: 0 | 排队: 0 | 已完成: 0
+                </div>
+                <div id="taskProgressList" style="max-height: 200px; overflow-y: auto; font-size: 11px;">
+                    <div style="color: #5a6a85;">无活跃任务</div>
+                </div>
+                <div style="margin-top: 6px;">
+                    <button class="quick-btn" onclick="refreshTaskProgress()" style="font-size: 10px;">🔄 刷新</button>
+                    <button class="quick-btn" onclick="window.open('/api/cline/audit?limit=20', '_blank')" style="font-size: 10px;">📋 审计日志</button>
                 </div>
             </div>
         </div>
@@ -458,6 +529,7 @@
                     <div class="chat-subtitle">通过EchoBird实现大模型切换</div>
                 </div>
                 <div class="chat-controls">
+                    <button class="btn btn-secondary" onclick="toggleCodePanel()">💻 代码预览</button>
                     <button class="btn btn-secondary" onclick="clearChat()">🗑️ 清空对话</button>
                     <button class="btn btn-primary" onclick="window.location.href='/model-switch'">🔄 模型配置</button>
                 </div>
@@ -504,13 +576,394 @@
         </div>
     </div>
 
+        <!-- 代码预览面板（右侧可展开） -->
+        <div id="codePreviewPanel" style="display: none; width: 420px; background: #0d1526; border-left: 1px solid #2a3f5f; 
+                 flex-direction: column; overflow: hidden;">
+            <div style="padding: 12px 16px; background: #1a2744; border-bottom: 1px solid #2a3f5f; 
+                     display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #e8e8e8; font-size: 14px; font-weight: 600;">💻 代码预览</span>
+                <div style="display: flex; gap: 8px;">
+                    <select id="codeFileSelect" onchange="loadCodeFile()"
+                            style="padding: 4px 8px; background: #0d1526; border: 1px solid #2a3f5f; 
+                                   border-radius: 4px; color: #e8e8e8; font-size: 12px;">
+                        <option value="">-- 选择文件 --</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="saveCodeFile()" style="padding: 4px 10px; font-size: 12px;">💾 保存</button>
+                    <button class="btn btn-secondary" onclick="toggleCodePanel()" style="padding: 4px 10px; font-size: 12px;">✕</button>
+                </div>
+            </div>
+            <textarea id="codeEditor" 
+                      style="flex: 1; width: 100%; padding: 12px; background: #0a0e1a; border: none; 
+                             color: #00ff88; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; 
+                             resize: none; outline: none; line-height: 1.5;"
+                      placeholder="Cline修改的代码将实时显示在此处..."></textarea>
+            <div id="codeStatus" style="padding: 8px 16px; background: #1a2744; border-top: 1px solid #2a3f5f; 
+                     font-size: 11px; color: #5a6a85;">
+                就绪 - 等待Cline代码输出
+            </div>
+        </div>
+    </div>
+
     <script>
         let messages = [];
         let isTyping = false;
 
         document.addEventListener('DOMContentLoaded', () => {
             loadModels();
+            loadAgentRegistry();
         });
+
+        // ==================== Agent自由调度 ====================
+        let agentRegistry = null;
+        let selectedAgents = new Set();
+
+        async function loadAgentRegistry() {
+            try {
+                const resp = await fetch('/api/agent/registry');
+                const data = await resp.json();
+                if (data.success && data.registry) {
+                    agentRegistry = data.registry;
+                    renderAgentGroups();
+                    renderAgentCheckboxes();
+                    document.getElementById('agentStatus').textContent = 
+                        `已加载 ${data.registry.stats.total_agents}个Agent | ${data.registry.stats.total_skills}项技能`;
+                }
+            } catch (e) {
+                console.error('Agent注册表加载失败:', e);
+            }
+        }
+
+        function renderAgentGroups() {
+            if (!agentRegistry) return;
+            const select = document.getElementById('groupSelect');
+            agentRegistry.groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                select.appendChild(opt);
+            });
+        }
+
+        function renderAgentCheckboxes(groupFilter = null) {
+            if (!agentRegistry) return;
+            const container = document.getElementById('agentCheckboxes');
+            let html = '';
+            const agents = groupFilter
+                ? agentRegistry.agents.filter(a => a.group === groupFilter)
+                : agentRegistry.agents;
+            
+            agents.forEach(a => {
+                const checked = selectedAgents.has(a.id) ? 'checked' : '';
+                html += `
+                    <label style="display: flex; align-items: center; gap: 4px; padding: 3px 4px;
+                                  color: #8ba3c7; font-size: 11px; cursor: pointer; border-radius: 4px;"
+                           onmouseover="this.style.background='#1a2744'" onmouseout="this.style.background=''">
+                        <input type="checkbox" value="${a.id}" ${checked} onchange="onAgentCheck('${a.id}', this.checked)">
+                        <span title="${a.description}">${a.name}</span>
+                    </label>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function onGroupSelect() {
+            const g = document.getElementById('groupSelect').value;
+            renderAgentCheckboxes(g || null);
+            if (g) {
+                // 选中整组
+                agentRegistry.agents.filter(a => a.group === g).forEach(a => selectedAgents.add(a.id));
+            }
+        }
+
+        function onAgentCheck(id, checked) {
+            if (checked) selectedAgents.add(id);
+            else selectedAgents.delete(id);
+        }
+
+        function onDebateToggle() {
+            const checked = document.getElementById('debateMode').checked;
+            if (checked) {
+                selectedAgents.clear();
+                document.getElementById('agentCheckboxes').querySelectorAll('input').forEach(cb => cb.checked = false);
+            }
+        }
+
+        function getDispatchMessage() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            const debate = document.getElementById('debateMode').checked;
+            
+            if (!symbol) {
+                alert('请输入股票代码');
+                return null;
+            }
+            if (!/^\d{6}$/.test(symbol)) {
+                alert('请输入6位数字股票代码');
+                return null;
+            }
+            
+            if (debate) {
+                return `让技术分析组和风控组对${symbol}进行辩论分析`;
+            }
+            
+            if (selectedAgents.size === 0) {
+                return `分析${symbol}`;
+            }
+            
+            const names = Array.from(selectedAgents).map(id => {
+                const a = agentRegistry.agents.find(x => x.id === id);
+                return a ? a.name : id;
+            });
+            return `用${names.join('、')}分析${symbol}`;
+        }
+
+        async function orchestrateWithMessage(template) {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol || !/^\d{6}$/.test(symbol)) {
+                alert('请先在股票代码输入框中填入6位数字代码');
+                return;
+            }
+            const msg = template.replace('股票', symbol);
+            document.getElementById('agentStatus').textContent = '🤖 智能编排中...';
+            addMessage('user', msg);
+            
+            try {
+                showTyping();
+                const resp = await fetch('/api/agent/orchestrate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+                const data = await resp.json();
+                hideTyping();
+                
+                if (data.success) {
+                    const summary = data.summary || {};
+                    let content = `**🤖 ${data.symbol || ''} 智能编排分析结果**\n\n`;
+                    content += `📋 **任务类型**: ${data.task_type || 'N/A'} (置信度: ${data.confidence || 0}%)\n`;
+                    content += `📊 **综合评分**: ${summary.avg_score || 'N/A'}\n`;
+                    content += `⏱️ **耗时**: ${data.elapsed_ms || 0}ms\n\n`;
+                    
+                    content += `**📝 子任务执行报告:**\n`;
+                    const subTasks = data.sub_tasks || [];
+                    subTasks.forEach((st, i) => {
+                        const status = st.result && !st.result.error ? '✅' : '❌';
+                        content += `\n${status} **${i+1}. ${st.name}** (优先级: ${st.priority})\n`;
+                        content += `   ${st.description}\n`;
+                        content += `   分配Agent: ${(st.assigned_agents || []).join(', ') || '无'}\n`;
+                    });
+                    
+                    content += `\n---\n**🏁 编排摘要**: 完成 ${summary.completed}/${summary.total_sub_tasks} 个子任务`;
+                    addMessage('assistant', content);
+                } else {
+                    addMessage('assistant', `❌ ${data.error || '智能编排失败'}`);
+                }
+                
+                document.getElementById('agentStatus').textContent = 
+                    `编排完成 | ${data.summary?.total_sub_tasks || 0}个子任务`;
+            } catch (e) {
+                hideTyping();
+                addMessage('assistant', '❌ 智能编排请求失败: ' + e.message);
+                document.getElementById('agentStatus').textContent = '请求失败';
+            }
+        }
+
+        async function dispatchAgents() {
+            const msg = getDispatchMessage();
+            if (!msg) return;
+            
+            document.getElementById('agentStatus').textContent = '调度中...';
+            addMessage('user', msg);
+            
+            try {
+                showTyping();
+                const resp = await fetch('/api/agent/dispatch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+                const data = await resp.json();
+                hideTyping();
+                
+                if (data.success) {
+                    const summary = data.summary || {};
+                    const content = `**${data.symbol} Agent分析结果** (${data.mode}模式)\n\n` +
+                        `📊 综合评分: **${summary.avg_score || 'N/A'}**\n` +
+                        `🗳️ 投票: 买入 ${summary.votes?.买入||0} | 卖出 ${summary.votes?.卖出||0} | 观望 ${summary.votes?.观望||0}\n` +
+                        `🏁 最终决策: **${summary.final_verdict || 'N/A'}**\n` +
+                        `⏱️ 耗时: ${data.elapsed_ms}ms | ${data.agents_count}个Agent`;
+                    addMessage('assistant', content);
+                } else {
+                    addMessage('assistant', `❌ ${data.error || '调度失败'}`);
+                }
+                
+                document.getElementById('agentStatus').textContent = 
+                    `完成 | ${data.agents_count || 0}个Agent | ${data.elapsed_ms || 0}ms`;
+            } catch (e) {
+                hideTyping();
+                addMessage('assistant', '❌ 调度请求失败: ' + e.message);
+                document.getElementById('agentStatus').textContent = '请求失败';
+            }
+        }
+
+        async function dispatchAllAgents() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol || !/^\d{6}$/.test(symbol)) {
+                alert('请输入6位数字股票代码');
+                return;
+            }
+            selectedAgents.clear();
+            document.getElementById('debateMode').checked = false;
+            document.getElementById('agentStatus').textContent = '全量调度中...';
+            addMessage('user', `全量分析${symbol}`);
+            
+            try {
+                showTyping();
+                const resp = await fetch('/api/agent/dispatch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: `分析${symbol}`})
+                });
+                const data = await resp.json();
+                hideTyping();
+                
+                if (data.success) {
+                    const summary = data.summary || {};
+                    let content = `**${data.symbol} 全量Agent分析**\n\n` +
+                        `📊 综合评分: **${summary.avg_score || 'N/A'}**\n` +
+                        `🗳️ 投票: 买入 ${summary.votes?.买入||0} | 卖出 ${summary.votes?.卖出||0} | 观望 ${summary.votes?.观望||0}\n`;
+                    
+                    if (data.group_summary) {
+                        content += '\n**分组汇总:**\n';
+                        for (const [g, gs] of Object.entries(data.group_summary)) {
+                            content += `- ${g}: 均分${gs.avg_score} | 买${gs.buy} 卖${gs.sell} 持${gs.hold}\n`;
+                        }
+                    }
+                    content += `\n🏁 最终决策: **${summary.final_verdict || 'N/A'}**\n` +
+                        `⏱️ ${data.elapsed_ms}ms | ${data.agents_count}个Agent`;
+                    addMessage('assistant', content);
+                } else {
+                    addMessage('assistant', `❌ ${data.error || '分析失败'}`);
+                }
+                document.getElementById('agentStatus').textContent = 
+                    `完成 | ${data.agents_count || 0}个Agent | ${data.elapsed_ms || 0}ms`;
+            } catch (e) {
+                hideTyping();
+                addMessage('assistant', '❌ 请求失败: ' + e.message);
+                document.getElementById('agentStatus').textContent = '请求失败';
+            }
+        }
+
+        async function dispatchDebate() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol || !/^\d{6}$/.test(symbol)) {
+                alert('请输入6位数字股票代码');
+                return;
+            }
+            document.getElementById('debateMode').checked = true;
+            document.getElementById('agentStatus').textContent = '辩论中...';
+            addMessage('user', `⚔️ 辩论分析${symbol}`);
+            
+            try {
+                showTyping();
+                const resp = await fetch('/api/agent/dispatch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: `让技术分析组和风控组对${symbol}进行辩论分析`})
+                });
+                const data = await resp.json();
+                hideTyping();
+                
+                if (data.success && data.debate) {
+                    const d = data.debate;
+                    let content = `**⚔️ ${data.symbol} Agent辩论结果**\n\n`;
+                    if (d.bull_side) {
+                        content += `📈 **多方 (技术分析组)**: ${d.bull_side.avg_score?.toFixed(1) || 'N/A'}分\n`;
+                    }
+                    if (d.bear_side) {
+                        content += `📉 **空方 (风控组)**: ${d.bear_side.avg_score?.toFixed(1) || 'N/A'}分\n`;
+                    }
+                    if (d.debate_points) {
+                        content += '\n**分歧点:**\n';
+                        d.debate_points.forEach(p => {
+                            content += `- [${p.severity}] ${p.type}: ${p.analysis}\n`;
+                        });
+                    }
+                    content += `\n🏁 **辩论结论**: ${data.verdict || 'N/A'}\n` +
+                        `加权评分: ${data.weighted_score?.toFixed(1) || 'N/A'}`;
+                    addMessage('assistant', content);
+                } else {
+                    addMessage('assistant', `❌ ${data.error || '辩论失败'}`);
+                }
+                document.getElementById('agentStatus').textContent = '辩论完成';
+            } catch (e) {
+                hideTyping();
+                addMessage('assistant', '❌ 辩论请求失败: ' + e.message);
+                document.getElementById('agentStatus').textContent = '请求失败';
+            }
+        }
+
+        async function orchestrateAgents() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            const msg = getDispatchMessage();
+            if (!msg) return;
+            
+            document.getElementById('agentStatus').textContent = '🤖 智能编排中...';
+            addMessage('user', msg);
+            
+            try {
+                showTyping();
+                const resp = await fetch('/api/agent/orchestrate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+                const data = await resp.json();
+                hideTyping();
+                
+                if (data.success) {
+                    const summary = data.summary || {};
+                    let content = `**🤖 ${data.symbol || ''} 智能编排分析结果**\n\n`;
+                    content += `📋 **任务类型**: ${data.task_type || 'N/A'} (置信度: ${data.confidence || 0}%)\n`;
+                    content += `📊 **综合评分**: ${summary.avg_score || 'N/A'}\n`;
+                    content += `⏱️ **耗时**: ${data.elapsed_ms || 0}ms\n\n`;
+                    
+                    content += `**📝 子任务执行报告:**\n`;
+                    const subTasks = data.sub_tasks || [];
+                    subTasks.forEach((st, i) => {
+                        const status = st.result && !st.result.error ? '✅' : '❌';
+                        content += `\n${status} **${i+1}. ${st.name}** (优先级: ${st.priority})\n`;
+                        content += `   ${st.description}\n`;
+                        content += `   分配Agent: ${(st.assigned_agents || []).join(', ') || '无'}\n`;
+                        if (st.assigned_skills && st.assigned_skills.length > 0) {
+                            content += `   分配技能: ${st.assigned_skills.join(', ')}\n`;
+                        }
+                        if (st.result && st.result.results) {
+                            const results = st.result.results;
+                            Object.entries(results).forEach(([rid, rdata]) => {
+                                const res = rdata.result || {};
+                                const score = res.score !== undefined ? ` [${res.score}分]` : '';
+                                const vote = res.vote ? ` ${res.vote}` : '';
+                                content += `   - ${rdata.agent_name || rdata.skill_name || rid}${score}${vote}\n`;
+                                if (res.analysis) {
+                                    content += `     ${res.analysis}\n`;
+                                }
+                            });
+                        }
+                    });
+                    
+                    content += `\n---\n**🏁 编排摘要**: 完成 ${summary.completed}/${summary.total_sub_tasks} 个子任务`;
+                    addMessage('assistant', content);
+                } else {
+                    addMessage('assistant', `❌ ${data.error || '智能编排失败'}`);
+                }
+                
+                document.getElementById('agentStatus').textContent = 
+                    `编排完成 | ${data.summary?.total_sub_tasks || 0}个子任务 | ${data.elapsed_ms || 0}ms`;
+            } catch (e) {
+                hideTyping();
+                addMessage('assistant', '❌ 智能编排请求失败: ' + e.message);
+                document.getElementById('agentStatus').textContent = '请求失败';
+            }
+        }
 
         async function loadModels() {
             try {
@@ -692,6 +1145,191 @@
                 messages = [];
             }
         }
+
+        // ==================== 环境切换 ====================
+        async function switchEnvironment() {
+            const env = document.getElementById('envSelect').value;
+            try {
+                const resp = await fetch('/api/cline/environment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ environment: env })
+                });
+                const data = await resp.json();
+                const statusEl = document.getElementById('envStatus');
+                const restrEl = document.getElementById('envRestrictions');
+                if (data.success) {
+                    if (env === 'live') {
+                        statusEl.textContent = '实盘环境 - 高风险操作受限';
+                        statusEl.style.color = '#ef4444';
+                        restrEl.innerHTML = data.restrictions.map(r => '⚠ ' + r).join('<br>');
+                    } else {
+                        statusEl.textContent = '模拟环境 - 全功能开放';
+                        statusEl.style.color = '#10b981';
+                        restrEl.innerHTML = '';
+                    }
+                }
+            } catch (e) {
+                console.error('环境切换失败:', e);
+            }
+        }
+
+        // ==================== 任务进度 ====================
+        async function refreshTaskProgress() {
+            try {
+                const resp = await fetch('/api/cline/task/status');
+                const data = await resp.json();
+                if (data.success && data.data) {
+                    const d = data.data;
+                    const statsEl = document.getElementById('taskProgressStats');
+                    const listEl = document.getElementById('taskProgressList');
+
+                    const running = d.running || [];
+                    const queued = d.queued || [];
+                    const completed = (d.completed || []).slice(-5);
+
+                    statsEl.textContent = `运行中: ${running.length} | 排队: ${queued.length} | 已完成: ${d.stats?.total_completed || 0}`;
+
+                    let html = '';
+                    running.forEach(t => {
+                        html += `<div style="padding: 3px 6px; margin: 2px 0; background: rgba(102,126,234,0.2); 
+                                border-radius: 3px; color: #667eea; font-size: 10px;" 
+                                title="${t.message}">
+                            ▶ ${t.symbol || ''} ${t.message.slice(0, 30)}...
+                            <span style="float: right; cursor: pointer; color: #ef4444;" 
+                                  onclick="cancelTask('${t.task_id}')">✕</span>
+                        </div>`;
+                    });
+                    queued.forEach(t => {
+                        html += `<div style="padding: 3px 6px; margin: 2px 0; background: rgba(245,158,11,0.1); 
+                                border-radius: 3px; color: #f59e0b; font-size: 10px;"
+                                title="${t.message}">
+                            ⏳ ${t.symbol || ''} ${t.message.slice(0, 30)}...
+                            <span style="float: right; cursor: pointer; color: #ef4444;"
+                                  onclick="cancelTask('${t.task_id}')">✕</span>
+                        </div>`;
+                    });
+                    completed.forEach(t => {
+                        const color = t.status === 'completed' ? '#10b981' : '#ef4444';
+                        const icon = t.status === 'completed' ? '✅' : '❌';
+                        html += `<div style="padding: 3px 6px; margin: 2px 0; border-radius: 3px; color: ${color}; font-size: 10px;">
+                            ${icon} ${t.symbol || ''} ${t.message.slice(0, 25)}... (${t.elapsed_ms || 0}ms)
+                        </div>`;
+                    });
+                    listEl.innerHTML = html || '<div style="color: #5a6a85; font-size: 10px;">无活跃任务</div>';
+                }
+            } catch (e) {
+                console.error('任务进度刷新失败:', e);
+            }
+        }
+
+        async function cancelTask(taskId) {
+            if (!confirm('确认取消此任务？')) return;
+            try {
+                const resp = await fetch('/api/cline/task/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    refreshTaskProgress();
+                }
+            } catch (e) {
+                console.error('取消任务失败:', e);
+            }
+        }
+
+        // ==================== 代码预览面板 ====================
+        function toggleCodePanel() {
+            const panel = document.getElementById('codePreviewPanel');
+            if (panel.style.display === 'flex') {
+                panel.style.display = 'none';
+            } else {
+                panel.style.display = 'flex';
+                loadProjectFiles();
+            }
+        }
+
+        async function loadProjectFiles() {
+            try {
+                const resp = await fetch('/api/cline/files');
+                const data = await resp.json();
+                const select = document.getElementById('codeFileSelect');
+                select.innerHTML = '<option value="">-- 选择文件 --</option>';
+                if (data.success && data.files) {
+                    data.files.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f.path;
+                        opt.textContent = f.name;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                console.error('加载文件列表失败:', e);
+            }
+        }
+
+        async function loadCodeFile() {
+            const path = document.getElementById('codeFileSelect').value;
+            if (!path) return;
+            try {
+                const resp = await fetch(`/api/cline/file?path=${encodeURIComponent(path)}`);
+                const data = await resp.json();
+                if (data.success) {
+                    document.getElementById('codeEditor').value = data.content;
+                    document.getElementById('codeStatus').textContent = 
+                        `${path} (${data.lines || 0}行) - ${data.size || 0}字节`;
+                    document.getElementById('codeStatus').style.color = '#10b981';
+                }
+            } catch (e) {
+                console.error('加载文件失败:', e);
+            }
+        }
+
+        async function saveCodeFile() {
+            const path = document.getElementById('codeFileSelect').value;
+            const content = document.getElementById('codeEditor').value;
+            if (!path) {
+                alert('请先选择文件');
+                return;
+            }
+            try {
+                const resp = await fetch('/api/cline/file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path, content })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    document.getElementById('codeStatus').textContent = '已保存: ' + path;
+                    document.getElementById('codeStatus').style.color = '#10b981';
+                } else {
+                    document.getElementById('codeStatus').textContent = '保存失败: ' + (data.error || '');
+                    document.getElementById('codeStatus').style.color = '#ef4444';
+                }
+            } catch (e) {
+                console.error('保存文件失败:', e);
+            }
+        }
+
+        // 定时刷新任务进度
+        setInterval(refreshTaskProgress, 5000);
+        // 初始加载环境状态
+        fetch('/api/cline/environment')
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('envSelect').value = data.environment;
+                    const statusEl = document.getElementById('envStatus');
+                    if (data.is_live) {
+                        statusEl.textContent = '实盘环境 - 高风险操作受限';
+                        statusEl.style.color = '#ef4444';
+                        document.getElementById('envRestrictions').innerHTML = 
+                            data.restrictions.map(r => '⚠ ' + r).join('<br>');
+                    }
+                }
+            });
     </script>
     <script src="/static/robot-widget.js"></script>
 </body>

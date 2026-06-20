@@ -15,7 +15,7 @@ class AuroraDataSource(BaseDataSource):
         """初始化Aurora数据源"""
         self.config = config_dict or {}
         self.base_path = self.config.get("base_path", config.get("aurora_system.base_path"))
-        self.api_base = self.config.get("web_api_base", config.get("aurora_system.web_api_base", "http://localhost:5000"))
+        self.api_base = self.config.get("web_api_base", config.get("aurora_system.web_api_base", "http://localhost:5003"))
         self.session = requests.Session()
         self._connected = False
     

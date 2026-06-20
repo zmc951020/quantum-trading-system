@@ -15,9 +15,9 @@ from stock_pool import (
 class StockPoolSystem:
     """股票池智能管理系统主类"""
     
-    def __init__(self):
+    def __init__(self, strategy_manager=None):
         self.filter = SmartStockFilter()
-        self.matcher = StrategyStockMatcher()
+        self.matcher = StrategyStockMatcher(strategy_manager=strategy_manager)
         self.simulator = PreTradingSimulator()
         self.expert_system = ExpertAgentSystem()
         self.voting_system = VotingSystem()

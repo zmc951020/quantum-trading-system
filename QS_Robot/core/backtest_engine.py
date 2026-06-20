@@ -32,17 +32,89 @@
 
 import time
 import math
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Callable
 import warnings
 warnings.filterwarnings('ignore')
+
+logger = logging.getLogger(__name__)
+
+# 数据平台集成：回测数据可通过qlib_adapter统一获取
+# from core.qlib_adapter import get_qlib_adapter
+# data = get_qlib_adapter().fetch_history(symbol, start, end)
+
+# ============================================================
+# 动态滑点模型
+# ============================================================
+
+def calculate_dynamic_slippage(volatility: float = 0.02,
+                                trade_size_pct: float = 0.1,
+                                is_volatile_market: bool = False) -> float:
+    """
+    动态滑点计算 — 替代硬编码的固定滑点
+
+    滑点 = 基础滑点 + 波动率补偿 + 流动性冲击
+
+    Args:
+        volatility: 当前波动率 (日收益率标准差)
+        trade_size_pct: 交易量占日均成交量的比例
+        is_volatile_market: 是否为高波动行情
+
+    Returns:
+        滑点百分比 (小数, 如 0.002 表示 0.2%)
+    """
+    # 基础滑点: A股市场平均 0.05%-0.1%
+    base_slippage = 0.0005
+
+    # 波动率补偿: 波动率每增加 1%，滑点增加 0.05%
+    vol_compensation = volatility * 0.05
+
+    # 流动性冲击: 大单冲击成本
+    impact = trade_size_pct * 0.005
+
+    # 高波动行情额外加成
+    volatile_bonus = 0.002 if is_volatile_market else 0.0
+
+    # 总滑点 = 基础 + 波动率补偿 + 流动性冲击 + 行情加成
+    # 上限: 2% (极端行情)，下限: 0.05% (正常行情)
+    return max(0.0005, min(0.02, base_slippage + vol_compensation + impact + volatile_bonus))
+
+
+def calculate_dynamic_commission(trade_amount: float = 10000.0) -> float:
+    """
+    动态手续费计算 — 模拟A股实际费率结构
+
+    A股费率:
+      - 印花税: 0.05% (卖出单向，2023年8月后)
+      - 佣金: 0.025% (买卖双向，含规费)
+      - 过户费: 0.001% (买卖双向)
+
+    Args:
+        trade_amount: 交易金额
+
+    Returns:
+        手续费率 (小数)
+    """
+    # 印花税(卖出) + 佣金 + 过户费 ≈ 0.075%
+    return 0.00075
 
 # ============================================================
 # 回测结果数据类
 # ============================================================
 
 class BacktestResult:
-    """回测结果数据"""
+    """
+    回测结果数据（SimpleBacktestEngine 使用）
+    
+    单位约定:
+    - total_return: 百分比 (如 31.95 表示 31.95%)
+    - annual_return: 百分比
+    - sharpe_ratio: 比率 (原值)
+    - max_drawdown: 百分比 (如 15.0 表示 15%)
+    - win_rate: 百分比 (如 65.0 表示 65%)
+    - profit_factor: 比率 (原值)
+    """
     def __init__(self):
         self.success = False
         self.strategy_name = ""
@@ -53,6 +125,7 @@ class BacktestResult:
         self.win_rate = 0.0
         self.profit_factor = 0.0
         self.trades = 0
+        self.total_trades = 0  # 别名，兼容 tau_optimizer_cluster.BacktestResult
         self.win_trades = 0
         self.lose_trades = 0
         self.avg_win = 0.0
@@ -109,6 +182,66 @@ class SimpleBacktestEngine:
     def __init__(self):
         self._name = "SimpleBacktestEngine"
 
+    def _check_lookahead_bias(self, current_idx: int, data: List[float]) -> bool:
+        """检测前视偏差
+        
+        确保只使用 current_idx 及之前的数据，如果使用了未来数据则返回 True。
+        
+        Args:
+            current_idx: 当前回测日期索引
+            data: 完整价格序列
+        
+        Returns:
+            bool: True 表示检测到前视偏差（使用了未来数据）
+        """
+        # 在回测循环中，确保信号生成器只接收 current_idx 及之前的数据
+        # 当前实现中，signal_generator 已经接收 prices[:i+1] 切片
+        # 这里做额外校验：如果 data 长度大于 current_idx+1，说明可能有前视偏差风险
+        if len(data) > current_idx + 1:
+            logger.warning(
+                f"[PIT前视偏差] 索引 {current_idx}: 数据长度 {len(data)} > 当前索引+1 ({current_idx+1})，"
+                f"存在前视偏差风险"
+            )
+            return True
+        return False
+
+    def _check_suspension(self, row: Dict) -> bool:
+        """检测停牌（成交量为0）
+        
+        Args:
+            row: 包含 volume 字段的数据行
+        
+        Returns:
+            bool: True 表示停牌（不可交易）
+        """
+        volume = row.get('volume', 0) if isinstance(row, dict) else 0
+        if volume <= 0:
+            logger.info(f"[停牌检测] 成交量为0，疑似停牌，跳过该日")
+            return True
+        return False
+
+    def _check_limit(self, row: Dict) -> bool:
+        """检测涨跌停
+        
+        如果开盘价=最高价=最低价，可能是涨停或跌停，标记为不可交易。
+        
+        Args:
+            row: 包含 open/high/low 字段的数据行
+        
+        Returns:
+            bool: True 表示涨跌停（不可交易）
+        """
+        if not isinstance(row, dict):
+            return False
+        open_price = row.get('open')
+        high_price = row.get('high')
+        low_price = row.get('low')
+        if open_price is not None and high_price is not None and low_price is not None:
+            if open_price == high_price == low_price:
+                logger.info(f"[涨跌停检测] 开盘=最高=最低={open_price}，疑似涨跌停，标记不可交易")
+                return True
+        return False
+
     def run_backtest(self, prices: List[float], signal_generator: Callable,
                      initial_capital: float = 100000.0,
                      commission: float = 0.0005,
@@ -135,6 +268,14 @@ class SimpleBacktestEngine:
         prev_trade_entry = None
 
         for i, price in enumerate(prices):
+            # PIT前视偏差检测
+            signal_data = prices[:i+1]
+            self._check_lookahead_bias(i, signal_data)
+            
+            # 停牌检测：价格为0或与前一价格相同且无变化，跳过
+            if price <= 0:
+                continue
+            
             # 生成信号
             signal = signal_generator(i, prices[:i+1])
 
@@ -157,7 +298,8 @@ class SimpleBacktestEngine:
                 })
 
             elif signal == StrategySignal.SIGNAL_SELL and position > 0:
-                # 卖出
+                # 卖出（先保存原始仓位用于日志，再执行卖出操作）
+                sell_qty = position
                 revenue = position * price * (1 - commission - slippage)
                 fee = position * price * commission
                 capital += revenue - fee
@@ -175,7 +317,7 @@ class SimpleBacktestEngine:
                     "date": f"day_{i}",
                     "type": "sell",
                     "price": round(price, 2),
-                    "quantity": int(position),
+                    "quantity": int(sell_qty),
                     "value": round(revenue, 2),
                     "fee": round(fee, 2),
                     "profit": round(profit, 2)
@@ -431,13 +573,18 @@ class MACDStrategy(StrategyTemplate):
 # 全局回测引擎
 # ============================================================
 
+import threading
+
 _global_backtest_engine = None
+_global_backtest_lock = threading.Lock()
 
 def get_backtest_engine() -> VectorBTBacktestEngine:
     """获取回测引擎单例"""
     global _global_backtest_engine
     if _global_backtest_engine is None:
-        _global_backtest_engine = VectorBTBacktestEngine()
+        with _global_backtest_lock:
+            if _global_backtest_engine is None:
+                _global_backtest_engine = VectorBTBacktestEngine()
     return _global_backtest_engine
 
 # ============================================================

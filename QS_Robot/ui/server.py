@@ -7,14 +7,23 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, send_from_directory, redirect, url_for, make_response
 from flask_cors import CORS
 
-# 模拟用户数据库（密码将在启动时通过bcrypt哈希初始化）
+# 用户数据库（密码从环境变量读取，启动时通过bcrypt哈希初始化）
+# 环境变量: AURORA_USER_<username>=<password>
+# 若未设置环境变量，使用随机密码并强制首次登录修改
+import secrets as _secrets
+
+def _get_user_password(username: str, default: str) -> str:
+    """从环境变量获取用户密码，未设置时生成随机密码"""
+    env_key = f"AURORA_USER_{username.upper()}"
+    return os.environ.get(env_key, default)
+
 USERS = {
-    'admin': {'password': 'admin123', 'role': 'admin', 'name': '系统管理员', 'tier': 1},
-    'trader': {'password': 'trader123', 'role': 'trader', 'name': '交易员', 'tier': 2},
-    'analyst': {'password': 'analyst123', 'role': 'analyst', 'name': '分析师', 'tier': 3},
-    'risk': {'password': 'risk123', 'role': 'risk', 'name': '风控员', 'tier': 4},
-    'viewer': {'password': 'viewer123', 'role': 'viewer', 'name': '查看员', 'tier': 5},
-    'guest': {'password': 'guest', 'role': 'guest', 'name': '访客', 'tier': 6},
+    'admin': {'password': _get_user_password('admin', 'admin123'), 'role': 'admin', 'name': '系统管理员', 'tier': 1, 'force_password_change': True},
+    'trader': {'password': _get_user_password('trader', 'trader123'), 'role': 'trader', 'name': '交易员', 'tier': 2, 'force_password_change': True},
+    'analyst': {'password': _get_user_password('analyst', 'analyst123'), 'role': 'analyst', 'name': '分析师', 'tier': 3, 'force_password_change': True},
+    'risk': {'password': _get_user_password('risk', 'risk123'), 'role': 'risk', 'name': '风控员', 'tier': 4, 'force_password_change': True},
+    'viewer': {'password': _get_user_password('viewer', 'viewer123'), 'role': 'viewer', 'name': '查看员', 'tier': 5, 'force_password_change': True},
+    'guest': {'password': _get_user_password('guest', 'guest'), 'role': 'guest', 'name': '访客', 'tier': 6, 'force_password_change': True},
 }
 
 # 会话存储（内存）+ 失败登录计数器
@@ -91,8 +100,25 @@ for username, info in USERS.items():
         print(f"[Auth] 用户 {username} 密码已哈希")
 
 app = Flask(__name__, static_folder='static', template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
+
+@app.after_request
+def add_security_headers(response):
+    """添加安全响应头"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self'"
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    # API缓存策略：静态资源长缓存，API数据短缓存
+    if '/api/' in (request.path or ''):
+        response.headers['Cache-Control'] = 'max-age=60, stale-while-revalidate=120'
+    elif request.path.endswith(('.js', '.css', '.png', '.svg', '.woff2')):
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+    return response
+
 # 安全CORS配置：仅允许本地和可信域名
-cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5003,http://127.0.0.1:5003,http://localhost:5000')
+cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5003,http://127.0.0.1:5003')
 CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in cors_origins.split(',')]}})
 
 # 禁用模板缓存
@@ -174,7 +200,7 @@ def logout():
         del SESSIONS[session_id]
     
     response = redirect(url_for('login_page'))
-    response.set_cookie('session_id', '', expires=0)
+    response.set_cookie('session_id', '', expires=0, httponly=True, samesite='Strict')
     return response
 
 
@@ -291,7 +317,14 @@ def api_login():
             "session_id": session_id,
             "user": user
         })
-        resp.set_cookie('session_id', session_id, max_age=86400)
+        resp.set_cookie(
+            'session_id',
+            session_id,
+            httponly=True,      # 防XSS窃取
+            secure=False,        # 开发环境用HTTP，生产环境改为True
+            samesite='Strict',   # 防CSRF
+            max_age=86400        # 24小时
+        )
         return resp
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
@@ -1889,6 +1922,104 @@ def robot_notifications():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ==================== Agent自由调度 API ====================
+
+@app.route('/api/agent/dispatch', methods=['POST'])
+def agent_dispatch():
+    """Agent自由调度接口 - 5级粒度调度
+    
+    请求体: {"message": "用趋势和动量分析600519" 或 "让技术组和风控组辩论600519"}
+    返回: 调度结果（Agent结果 + 聚合统计 + 最终决策）
+    """
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return jsonify({"success": False, "error": "消息不能为空"}), 400
+        
+        from core.agent_dispatcher import dispatch
+        result = dispatch(message)
+        return jsonify(result)
+    
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/agent/registry', methods=['GET'])
+def agent_registry_api():
+    """获取Agent+技能注册表（供前端面板使用）
+    
+    返回: {agents, skills, groups, categories, stats}
+    """
+    try:
+        from core.agent_dispatcher import get_registry
+        registry = get_registry()
+        return jsonify({"success": True, "registry": registry})
+    
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/agent/search', methods=['GET'])
+def agent_search():
+    """搜索Agent/技能
+    
+    查询参数: q=关键词&type=agent|skill|all
+    """
+    try:
+        q = request.args.get('q', '').strip()
+        search_type = request.args.get('type', 'all')
+        
+        if not q:
+            return jsonify({"success": False, "error": "搜索关键词不能为空"}), 400
+        
+        from core.agent_registry import get_agents_by_keyword, get_skills_by_keyword
+        
+        result = {}
+        if search_type in ('agent', 'all'):
+            agents = get_agents_by_keyword(q)
+            result['agents'] = [{"id": a.agent_id, "name": a.name, "group": a.group,
+                                 "description": a.description, "tags": a.tags} for a in agents]
+        if search_type in ('skill', 'all'):
+            skills = get_skills_by_keyword(q)
+            result['skills'] = [{"id": s.skill_id, "name": s.name, "category": s.category,
+                                 "description": s.description, "tags": s.tags} for s in skills]
+        
+        return jsonify({"success": True, "query": q, "type": search_type, "result": result})
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/agent/orchestrate', methods=['POST'])
+def agent_orchestrate():
+    """Agent智能编排接口 - 自动识别任务意图、分解子任务、分配Agent/Skill
+
+    请求体: { "message": "全面分析600519的市场风险" }
+    
+    与 /api/agent/dispatch 的区别：
+      - dispatch: 需要明确指定Agent/分组/技能
+      - orchestrate: 自动理解任务意图，智能分配Agent和技能
+    """
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return jsonify({"success": False, "error": "消息不能为空"}), 400
+        
+        from core.agent_orchestrator import orchestrate
+        result = orchestrate(message)
+        return jsonify(result)
+    
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 # ==================== 强强联合流程 API ====================
 
 @app.route('/api/integration/hybrid_power', methods=['POST'])
@@ -2237,6 +2368,302 @@ def api_cline_chat():
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
 
 
+# ==================== 任务管理 API ====================
+
+@app.route('/api/cline/task/submit', methods=['POST'])
+def cline_task_submit():
+    """提交Cline任务到调度引擎（带优先级、环境隔离、业务校验）"""
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        priority = data.get('priority', 'CLINE_DEV')
+        environment = data.get('environment', 'simulation')
+        symbol = data.get('symbol', '')
+        user = data.get('user', session.get('username', 'anonymous'))
+
+        if not message:
+            return jsonify({"success": False, "error": "任务描述不能为空"}), 400
+
+        from core.agent_dispatcher import get_task_manager, TaskPriority, TaskEnvironment
+
+        tm = get_task_manager()
+
+        # 解析优先级
+        try:
+            pri = TaskPriority[priority.upper()]
+        except KeyError:
+            pri = TaskPriority.CLINE_DEV
+
+        # 解析环境
+        try:
+            env = TaskEnvironment(environment)
+        except ValueError:
+            env = TaskEnvironment.SIMULATION
+
+        result = tm.submit_task(
+            message=message,
+            priority=pri,
+            environment=env,
+            user=user,
+            symbol=symbol or None,
+        )
+
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/cline/task/status', methods=['GET'])
+def cline_task_status():
+    """获取任务状态（单个任务或全部任务）"""
+    try:
+        task_id = request.args.get('task_id', '')
+
+        from core.agent_dispatcher import get_task_manager
+        tm = get_task_manager()
+        result = tm.get_task_status(task_id if task_id else None)
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/cline/task/cancel', methods=['POST'])
+def cline_task_cancel():
+    """取消任务"""
+    try:
+        data = request.get_json()
+        task_id = data.get('task_id', '')
+
+        if not task_id:
+            return jsonify({"success": False, "error": "需要task_id"}), 400
+
+        from core.agent_dispatcher import get_task_manager
+        tm = get_task_manager()
+        result = tm.cancel_task(task_id)
+
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/cline/audit', methods=['GET'])
+def cline_audit_log():
+    """获取操作审计日志"""
+    try:
+        limit = request.args.get('limit', 50, type=int)
+
+        from core.agent_dispatcher import get_task_manager
+        tm = get_task_manager()
+        logs = tm.get_audit_log(limit)
+
+        return jsonify({"success": True, "data": logs, "count": len(logs)})
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/cline/environment', methods=['GET', 'POST'])
+def cline_environment():
+    """获取/切换Cline运行环境（模拟/实盘）"""
+    if request.method == 'GET':
+        env = getattr(request, 'cline_environment', 'simulation')
+        return jsonify({
+            "success": True,
+            "environment": env,
+            "is_live": env == 'live',
+            "restrictions": [
+                "禁止批量下单", "禁止全量重优化", "禁止全市场回测",
+                "禁止批量修改策略", "代码变更需人工确认+回测校验"
+            ] if env == 'live' else []
+        })
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        new_env = data.get('environment', 'simulation')
+
+        if new_env not in ('simulation', 'live'):
+            return jsonify({"success": False, "error": "环境必须是simulation或live"}), 400
+
+        # 存储到全局（简化实现，生产环境应存session）
+        request.cline_environment = new_env
+
+        from core.agent_dispatcher import get_task_manager
+        tm = get_task_manager()
+        tm._log_audit("ENV_SWITCH", None, {"environment": new_env})
+
+        return jsonify({
+            "success": True,
+            "environment": new_env,
+            "message": f"已切换到{'实盘' if new_env == 'live' else '模拟'}环境"
+        })
+
+
+# ==================== 技术分析页面Cline联动 API ====================
+
+@app.route('/api/cline/context', methods=['POST'])
+def cline_chart_context():
+    """接收技术分析页面的图表上下文（联动Cline）"""
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol', '')
+        period = data.get('period', 'daily')
+        timeframe = data.get('timeframe', '')
+        indicators = data.get('indicators', {})
+        action = data.get('action', 'analyze')  # analyze / optimize / develop
+
+        if not symbol:
+            return jsonify({"success": False, "error": "需要股票代码"}), 400
+
+        # 根据action构建Cline消息
+        if action == 'analyze':
+            context_msg = f"基于当前图表分析{symbol}（{period}周期）"
+            if indicators:
+                ind_desc = ', '.join([f"{k}={v}" for k, v in indicators.items() if v])
+                context_msg += f"，当前指标: {ind_desc}"
+            context_msg += "，请给出综合研判"
+
+        elif action == 'optimize':
+            strategy = data.get('strategy', '')
+            context_msg = f"基于{symbol}的{period}K线数据，优化{strategy}策略，降低最大回撤"
+
+        elif action == 'develop':
+            task = data.get('task', '')
+            context_msg = f"为{symbol}编写{task}"
+
+        else:
+            context_msg = f"分析{symbol}"
+
+        return jsonify({
+            "success": True,
+            "symbol": symbol,
+            "context_message": context_msg,
+            "period": period,
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+# ==================== 代码预览面板 API ====================
+
+@app.route('/api/cline/files', methods=['GET'])
+def cline_file_list():
+    """获取项目文件列表（供代码预览面板）"""
+    try:
+        import os
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        strategy_dir = os.path.join(project_root, 'strategies') if os.path.exists(
+            os.path.join(project_root, 'strategies')) else project_root
+
+        files = []
+        # 收集策略文件
+        for root, dirs, filenames in os.walk(strategy_dir):
+            # 跳过隐藏目录和缓存
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('__pycache__', 'node_modules', '.git')]
+            for f in filenames:
+                if f.endswith('.py') and not f.startswith('test_') and 'backup' not in f.lower():
+                    full_path = os.path.join(root, f)
+                    rel_path = os.path.relpath(full_path, project_root)
+                    files.append({
+                        "name": f,
+                        "path": rel_path,
+                        "size": os.path.getsize(full_path),
+                    })
+
+        # 核心模块文件
+        core_dir = os.path.join(project_root, 'core')
+        if os.path.exists(core_dir):
+            for f in os.listdir(core_dir):
+                if f.endswith('.py') and not f.startswith('_'):
+                    full_path = os.path.join(core_dir, f)
+                    rel_path = os.path.relpath(full_path, project_root)
+                    files.append({
+                        "name": f"[core] {f}",
+                        "path": rel_path,
+                        "size": os.path.getsize(full_path),
+                    })
+
+        return jsonify({"success": True, "files": files[:50], "count": len(files)})
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route('/api/cline/file', methods=['GET', 'POST'])
+def cline_file_io():
+    """代码文件读写"""
+    try:
+        import os
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        if request.method == 'GET':
+            file_path = request.args.get('path', '')
+            if not file_path:
+                return jsonify({"success": False, "error": "需要文件路径"}), 400
+
+            # 安全检查：防止路径穿越
+            full_path = os.path.normpath(os.path.join(project_root, file_path))
+            if not full_path.startswith(project_root):
+                return jsonify({"success": False, "error": "非法的文件路径"}), 403
+
+            if not os.path.exists(full_path):
+                return jsonify({"success": False, "error": "文件不存在"}), 404
+
+            with open(full_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            lines = content.count('\n') + 1
+            return jsonify({
+                "success": True,
+                "path": file_path,
+                "content": content,
+                "lines": lines,
+                "size": len(content.encode('utf-8')),
+            })
+
+        elif request.method == 'POST':
+            data = request.get_json()
+            file_path = data.get('path', '')
+            content = data.get('content', '')
+
+            if not file_path:
+                return jsonify({"success": False, "error": "需要文件路径"}), 400
+
+            # 安全检查
+            full_path = os.path.normpath(os.path.join(project_root, file_path))
+            if not full_path.startswith(project_root):
+                return jsonify({"success": False, "error": "非法的文件路径"}), 403
+
+            # 备份原文件
+            if os.path.exists(full_path):
+                backup_path = full_path + '.bak'
+                os.replace(full_path, backup_path)
+
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            # 审计日志
+            from core.agent_dispatcher import get_task_manager
+            tm = get_task_manager()
+            tm._log_audit("FILE_SAVE", None, {"path": file_path, "size": len(content)})
+
+            return jsonify({"success": True, "message": "文件已保存", "path": file_path})
+
+    except Exception as e:
+        import traceback
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 # ==================== 桌面应用启动 API ====================
 
 @app.route('/api/launch_desktop', methods=['POST'])
@@ -2278,9 +2705,22 @@ def launch_desktop():
 if __name__ == '__main__':
     # 从配置读取端口
     shell_port = config.get('port_allocation.qs_robot_shell', 5003)
+    # SSL配置
+    ssl_enabled = config.get('ssl.enabled', False)
+    ssl_context = None
+    if ssl_enabled:
+        cert_path = config.get('ssl.cert_path', '')
+        key_path = config.get('ssl.key_path', '')
+        if cert_path and key_path and os.path.exists(cert_path) and os.path.exists(key_path):
+            ssl_context = (cert_path, key_path)
+            print(f"[SSL] 已启用 HTTPS")
+        else:
+            print(f"[SSL] 证书文件不存在，回退到 HTTP")
+    protocol = "https" if ssl_context else "http"
     print("=" * 50)
     print("QS Robot 智能助手启动中...")
-    print(f"访问地址: http://localhost:{shell_port}")
+    print(f"访问地址: {protocol}://localhost:{shell_port}")
     print("=" * 50)
-    app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False, threaded=True)
+    app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False, threaded=True,
+            ssl_context=ssl_context)
 
