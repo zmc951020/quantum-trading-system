@@ -1062,7 +1062,13 @@ class AuroraCoreAdapter:
     def reset_user_password(self, username: str, password: str = None) -> Dict:
         """重置密码 — 持久化到SQLite"""
         if not password:
-            password = 'reset123456'  # 默认重置密码
+            password = os.environ.get('DEFAULT_RESET_PASSWORD', '')
+            if not password:
+                import secrets
+                import string
+                alphabet = string.ascii_letters + string.digits
+                password = ''.join(secrets.choice(alphabet) for _ in range(16))
+                logger.warning(f"未设置 DEFAULT_RESET_PASSWORD 环境变量，为用户 {username} 生成随机密码")
         try:
             import bcrypt
             from core.database import get_db

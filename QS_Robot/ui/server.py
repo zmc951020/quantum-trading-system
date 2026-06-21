@@ -1,6 +1,10 @@
 import os
 import sys
 import uuid
+import subprocess
+import atexit
+import signal
+import time
 import urllib.request
 import json as _json
 from datetime import datetime, timedelta
@@ -2696,13 +2700,231 @@ def launch_desktop():
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
 
 
-# ========== Aurora 原系统 API 代理（已由 api/gateway.py 统一管理） ==========
-# 注意: /api/aurora/* 和 /api/aurora/system/info 路由已迁移至 api/gateway.py
-# 通过 AuroraAPIAdapter 提供更完善的代理功能（缓存、批量请求、自动重认证）
-# 如需直接调用 Aurora，请使用 api/aurora_adapter.py 中的 AuroraAPIAdapter
+# ========== Aurora 5002 子进程管理（一键启动） ==========
+_aurora_process = None
+_AURORA_PORT = 5002
+_AURORA_HEALTH_URL = f"http://127.0.0.1:{_AURORA_PORT}/api/health"
+_AURORA_STARTUP_TIMEOUT = 60  # 最大等待时间（秒）
+
+
+def _get_aurora_path() -> str:
+    """获取 Aurora 系统根目录"""
+    # 优先从配置读取
+    aurora_path = config.get('aurora_system.base_path', '')
+    if aurora_path and os.path.isdir(aurora_path):
+        return aurora_path
+    # 降级：从环境变量读取
+    aurora_path = os.environ.get('AURORA_HOME', '')
+    if aurora_path and os.path.isdir(aurora_path):
+        return aurora_path
+    return None
+
+
+def _is_aurora_running() -> bool:
+    """检查 5002 是否健康运行（仅以 /api/health 端点响应为准）"""
+    try:
+        req = urllib.request.Request(_AURORA_HEALTH_URL, method='GET')
+        req.add_header('User-Agent', 'QS-Robot-Startup-Check')
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def _is_port_occupied(port: int) -> bool:
+    """检查端口是否被占用（不区分僵尸/正常）"""
+    try:
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(('127.0.0.1', port))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
+def _kill_zombie_on_port(port: int) -> bool:
+    """尝试清除占用指定端口的僵尸进程"""
+    try:
+        # 查找占用端口的PID
+        result = subprocess.run(
+            ['netstat', '-ano'],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.split('\n'):
+            if f':{port}' in line and 'LISTENING' in line:
+                parts = line.strip().split()
+                pid = parts[-1]
+                if pid.isdigit() and int(pid) != os.getpid():
+                    print(f"[Aurora] 端口 {port} 被僵尸进程 PID={pid} 占用，尝试清除...")
+                    # 尝试终止
+                    kill_result = subprocess.run(
+                        ['taskkill', '/F', '/PID', pid],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if kill_result.returncode == 0:
+                        print(f"[Aurora] 僵尸进程 PID={pid} 已终止")
+                        # 等待端口释放
+                        time.sleep(2)
+                        return True
+                    else:
+                        # 权限不足
+                        print(f"[Aurora] 无法终止 PID={pid}（需要管理员权限）")
+                        print(f"  请以管理员身份运行: 清除Aurora僵尸进程.bat")
+                        print(f"  或手动执行: taskkill /F /PID {pid}")
+                        return False
+        return False
+    except Exception as e:
+        print(f"[Aurora] 僵尸检测失败: {e}")
+        return False
+
+
+def _start_aurora_backend() -> bool:
+    """启动 Aurora 5002 后端服务
+
+    启动流程:
+    1. 健康检查 → 已健康则跳过
+    2. 端口被占用但健康检查失败 → 僵尸进程，尝试清除
+    3. 端口空闲 → 启动新子进程
+    """
+    global _aurora_process
+
+    aurora_path = _get_aurora_path()
+    if not aurora_path:
+        print("[Aurora] 未找到 Aurora 系统路径，跳过自动启动")
+        print("  设置方法: config.aurora_system.base_path 或 AURORA_HOME 环境变量")
+        return False
+
+    # ─ 步骤1: 健康检查（唯一可靠判断标准） ─
+    if _is_aurora_running():
+        print(f"[Aurora] 5002 服务健康运行中，无需重复启动")
+        return True
+
+    # ─ 步骤2: 端口被占用但健康检查失败 → 僵尸进程 ─
+    if _is_port_occupied(_AURORA_PORT):
+        print(f"[Aurora] 端口 {_AURORA_PORT} 被占用但健康检查失败 → 疑似僵尸进程")
+        _kill_zombie_on_port(_AURORA_PORT)
+        # 再次检查端口是否释放
+        if _is_port_occupied(_AURORA_PORT):
+            print(f"[Aurora] 端口 {_AURORA_PORT} 仍被占用，无法启动 5002")
+            print(f"  请以管理员身份运行: 清除Aurora僵尸进程.bat")
+            return False
+
+    # ─ 步骤3: 启动新 5002 子进程 ─
+    visualization_py = os.path.join(aurora_path, 'visualization.py')
+    if not os.path.isfile(visualization_py):
+        print(f"[Aurora] 未找到 visualization.py: {visualization_py}")
+        return False
+
+    print(f"[Aurora] 启动 5002 后端服务...")
+    print(f"  路径: {aurora_path}")
+    print(f"  脚本: visualization.py")
+
+    try:
+        # 启动 Aurora 子进程
+        _aurora_process = subprocess.Popen(
+            [sys.executable, 'visualization.py'],
+            cwd=aurora_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
+        )
+
+        # 等待 5002 就绪（健康检查轮询）
+        print(f"[Aurora] 等待 5002 就绪（最多 {_AURORA_STARTUP_TIMEOUT}s）...")
+        waited = 0
+        while waited < _AURORA_STARTUP_TIMEOUT:
+            if _is_aurora_running():
+                print(f"[Aurora] 5002 服务就绪 (耗时 {waited}s)")
+                return True
+
+            # 检查子进程是否异常退出
+            if _aurora_process.poll() is not None:
+                exit_code = _aurora_process.returncode
+                print(f"[Aurora] 5002 进程异常退出 (exit_code={exit_code})")
+                try:
+                    stdout, _ = _aurora_process.communicate(timeout=1)
+                    if stdout:
+                        for line in stdout.strip().split('\n')[-5:]:
+                            print(f"  {line}")
+                except Exception:
+                    pass
+                _aurora_process = None
+                return False
+
+            time.sleep(1)
+            waited += 1
+            if waited % 10 == 0:
+                print(f"  已等待 {waited}s...")
+
+        print(f"[Aurora] 5002 启动超时 ({_AURORA_STARTUP_TIMEOUT}s)，请检查日志")
+        _stop_aurora_backend()
+        return False
+
+    except Exception as e:
+        print(f"[Aurora] 启动失败: {e}")
+        import traceback as _tb
+        _tb.print_exc()
+        return False
+
+
+def _stop_aurora_backend():
+    """停止 Aurora 5002 后端子进程"""
+    global _aurora_process
+    if _aurora_process is None:
+        return
+
+    print("[Aurora] 正在停止 5002 服务...")
+    try:
+        if sys.platform == 'win32':
+            _aurora_process.terminate()
+        else:
+            _aurora_process.send_signal(signal.SIGTERM)
+
+        # 等待进程退出
+        try:
+            _aurora_process.wait(timeout=10)
+            print("[Aurora] 5002 服务已停止")
+        except subprocess.TimeoutExpired:
+            print("[Aurora] 5002 未响应，强制终止...")
+            _aurora_process.kill()
+            _aurora_process.wait(timeout=5)
+            print("[Aurora] 5002 已强制终止")
+    except Exception as e:
+        print(f"[Aurora] 停止 5002 时出错: {e}")
+    finally:
+        _aurora_process = None
+
+
+def _signal_handler(signum, frame):
+    """信号处理 - 优雅关闭"""
+    print(f"\n收到信号 {signum}，正在关闭系统...")
+    _stop_aurora_backend()
+    sys.exit(0)
 
 
 if __name__ == '__main__':
+    # ========== 一键启动：5002 Aurora + 5003 QS_Robot ==========
+
+    # 注册信号处理（Ctrl+C 优雅关闭）
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
+    # 注册 atexit 清理（确保 5002 子进程被终止）
+    atexit.register(_stop_aurora_backend)
+
+    # 检查是否跳过 Aurora 自动启动
+    skip_aurora = os.environ.get('SKIP_AURORA_START', '').lower() in ('1', 'true', 'yes')
+    if skip_aurora:
+        print("[Aurora] SKIP_AURORA_START=1，跳过自动启动 5002")
+        print("  请确保 5002 已手动启动: python visualization.py")
+    else:
+        _start_aurora_backend()
+
     # 从配置读取端口
     shell_port = config.get('port_allocation.qs_robot_shell', 5003)
     # SSL配置
@@ -2717,10 +2939,17 @@ if __name__ == '__main__':
         else:
             print(f"[SSL] 证书文件不存在，回退到 HTTP")
     protocol = "https" if ssl_context else "http"
-    print("=" * 50)
-    print("QS Robot 智能助手启动中...")
-    print(f"访问地址: {protocol}://localhost:{shell_port}")
-    print("=" * 50)
-    app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False, threaded=True,
-            ssl_context=ssl_context)
+
+    print("=" * 55)
+    print("  QS Robot 智能助手 (5003) - 系统总控总线")
+    print(f"  主控面板: {protocol}://localhost:{shell_port}")
+    print(f"  Aurora内核: http://127.0.0.1:{_AURORA_PORT} (自动启动)")
+    print("  按 Ctrl+C 停止所有服务")
+    print("=" * 55)
+
+    try:
+        app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False, threaded=True,
+                ssl_context=ssl_context)
+    finally:
+        _stop_aurora_backend()
 
