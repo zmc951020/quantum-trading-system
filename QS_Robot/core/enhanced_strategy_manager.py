@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 QS Robot - 增强型策略管理器（双核统一版 V2.0）
 ==============================================
@@ -1366,6 +1366,81 @@ class EnhancedStrategyManager:
 
     # ---- 韬定律策略优化器集群 ----
 
+    # 策略类型 → 真实参数空间映射（替代通用默认值）
+    # 每种策略类型有独立参数空间，优化器按类型匹配合适的参数范围
+    STRATEGY_PARAM_RANGES: Dict[str, Dict[str, Tuple[float, float]]] = {
+        "grid": {
+            "grid_layers": (3.0, 20.0),       # 网格层数
+            "grid_spacing": (0.01, 0.10),      # 网格间距（价格比例）
+            "rebalance_threshold": (0.005, 0.05),  # 再平衡阈值
+            "take_profit_ratio": (0.02, 0.15),     # 止盈比例
+            "stop_loss_ratio": (0.01, 0.08),        # 止损比例
+        },
+        "trend": {
+            "short_period": (5.0, 30.0),       # 短期均线
+            "long_period": (30.0, 200.0),      # 长期均线
+            "signal_threshold": (0.005, 0.05), # 信号阈值
+            "atr_multiplier": (1.0, 4.0),      # ATR止损倍数
+            "trend_strength_filter": (0.1, 0.5),  # 趋势强度过滤
+        },
+        "ml": {
+            "lookback_window": (10.0, 60.0),   # 回看窗口
+            "learning_rate": (0.001, 0.05),    # 学习率
+            "regularization": (0.0001, 0.01),  # 正则化系数
+            "prediction_horizon": (1.0, 10.0), # 预测周期
+            "confidence_threshold": (0.3, 0.8), # 置信度阈值
+        },
+        "rl": {
+            "gamma": (0.90, 0.999),            # 折扣因子
+            "epsilon_decay": (0.95, 0.999),    # 探索衰减
+            "batch_size": (16.0, 128.0),       # 批大小
+            "buffer_size": (1000.0, 10000.0),  # 经验池大小
+            "entropy_coef": (0.001, 0.1),      # 熵正则系数
+        },
+        "value": {
+            "pe_threshold": (5.0, 30.0),       # PE阈值
+            "pb_threshold": (0.5, 3.0),        # PB阈值
+            "rotation_period": (5.0, 30.0),    # 轮动周期
+            "top_n_hold": (3.0, 15.0),         # 持仓数量
+            "dividend_weight": (0.1, 0.5),     # 股息权重
+        },
+        "multifactor": {
+            "momentum_weight": (0.1, 0.5),     # 动量因子权重
+            "value_weight": (0.1, 0.5),        # 价值因子权重
+            "quality_weight": (0.1, 0.5),      # 质量因子权重
+            "volatility_weight": (0.05, 0.3),  # 波动率因子权重
+            "signal_threshold": (0.3, 0.8),    # 综合信号阈值
+        },
+        "fund": {
+            "invest_interval": (1.0, 30.0),    # 定投间隔（天）
+            "amount_per_invest": (0.05, 0.30), # 每次投入比例
+            "stop_loss_ratio": (0.05, 0.25),   # 止损比例
+            "take_profit_ratio": (0.10, 0.50), # 止盈比例
+            "max_position": (0.3, 0.8),        # 最大仓位
+        },
+        "defense": {
+            "drawdown_threshold": (0.05, 0.25),    # 回撤触发阈值
+            "hedge_ratio": (0.1, 0.8),              # 对冲比例
+            "recovery_wait": (3.0, 30.0),           # 恢复等待期
+            "volatility_multiplier": (1.0, 3.0),    # 波动率倍数
+            "max_exposure": (0.1, 0.5),             # 最大暴露
+        },
+        "ensemble": {
+            "strategy_weight_smooth": (0.01, 0.3),  # 权重平滑系数
+            "diversity_penalty": (0.01, 0.2),       # 多样性惩罚
+            "rebalance_frequency": (1.0, 20.0),     # 再平衡频率
+            "min_weight_threshold": (0.01, 0.1),    # 最小权重阈值
+            "performance_lookback": (10.0, 60.0),   # 表现回看期
+        },
+        "fourier": {
+            "n_components": (3.0, 20.0),        # 傅里叶分量数
+            "window_size": (20.0, 100.0),       # 窗口大小
+            "prediction_steps": (1.0, 10.0),    # 预测步数
+            "rl_learning_rate": (0.001, 0.01),  # RL学习率
+            "feature_dim": (8.0, 64.0),         # 特征维度
+        },
+    }
+
     def run_tau_cluster_optimization(self, strategy_name: str, param_ranges: dict = None,
                                      coarse_points: int = 30, refined_points: int = 50,
                                      target: str = 'sharpe_ratio') -> dict:
@@ -1412,15 +1487,24 @@ class EnhancedStrategyManager:
                 pass
 
         # 2) 主力模式: 使用熵韬收敛优化器 (EntropyTauOptimizer) 本地执行
+        # 先解析参数范围（供主力和兜底共用）
+        ranges = param_ranges
+        if ranges is None:
+            name_lower = strategy_name.lower()
+            for type_key, type_ranges in self.STRATEGY_PARAM_RANGES.items():
+                if type_key in name_lower:
+                    ranges = type_ranges
+                    break
+            if ranges is None:
+                ranges = {
+                    'short_period': (5.0, 50.0),
+                    'long_period': (30.0, 200.0),
+                    'threshold': (0.01, 0.1)
+                }
+                print(f"  [警告] {strategy_name} 未匹配到专用参数空间，使用通用默认值")
+
         try:
             from .tau_enhanced_optimizer import EntropyTauOptimizer
-
-            # 默认参数范围 (未提供时使用通用双均线示例范围)
-            ranges = param_ranges or {
-                'short_period': (5.0, 50.0),
-                'long_period': (30.0, 200.0),
-                'threshold': (0.01, 0.1)
-            }
 
             # 创建熵韬收敛优化器实例
             tau_cluster = EntropyTauOptimizer(
@@ -1486,11 +1570,6 @@ class EnhancedStrategyManager:
             print(f"  [Fallback] 熵韬优化器失败: {e}，回退到原韬定律...")
             try:
                 from .tau_optimizer_cluster import TauOptimizerCluster
-                ranges = param_ranges or {
-                    'short_period': (5.0, 50.0),
-                    'long_period': (30.0, 200.0),
-                    'threshold': (0.01, 0.1)
-                }
                 fallback = TauOptimizerCluster(ranges, strategy_name=strategy_name)
                 fb_result = fallback.run_folding_optimization(
                     coarse_points=coarse_points,

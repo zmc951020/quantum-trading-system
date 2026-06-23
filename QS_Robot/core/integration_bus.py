@@ -1231,6 +1231,244 @@ class StrategyIntegrationBus:
         }
     
     # ============================================================
+    # 韬策略集群引擎集成 (v2.0)
+    # ============================================================
+
+    def register_cluster_engine(self, cluster_engine=None) -> Dict[str, Any]:
+        """
+        注册韬策略集群引擎到集成总线
+
+        打通链路：集成总线 ← → 集群引擎
+
+        Args:
+            cluster_engine: TauClusterEngine 实例，None 则自动获取单例
+
+        Returns:
+            {success, engine_version, strategy_count, archive}
+        """
+        from core.tau_cluster_engine import TauClusterEngine, get_cluster_engine
+
+        if cluster_engine is None:
+            cluster_engine = get_cluster_engine()
+
+        self._cluster_engine = cluster_engine
+
+        # 尝试恢复历史优化成果
+        load_result = cluster_engine.load_state()
+        if load_result.get("success"):
+            logger.info(f"[集成总线] 集群引擎已恢复优化成果: v{load_result.get('version')}")
+
+        # 获取策略归档
+        archive = cluster_engine.get_registered_strategy_archive()
+        type_summary = cluster_engine.get_type_summary()
+
+        logger.info(f"[集成总线] 集群引擎已注册: {len(archive)}个策略, "
+                   f"v{cluster_engine.__class__.__name__}")
+
+        return {
+            "success": True,
+            "engine_version": "2.0",
+            "strategy_count": len(archive),
+            "type_summary": type_summary,
+            "archive": archive,
+            "restored_state": load_result,
+        }
+
+    def auto_optimize_cluster_engine(self, rounds: int = 200,
+                                      seed: int = 42,
+                                      use_entropy_optimizer: bool = True) -> Dict[str, Any]:
+        """
+        使用熵韬收敛优化器对集群引擎进行参数优化
+        （优化器 → 集群引擎）
+
+        优化目标：准确率、夏普比率、交易频率、回撤的综合评分
+
+        v2.0: 使用 ClusterEngineOptimizer 真正调用 EntropyTauOptimizer.run_enhanced_optimization()
+              享受五维驱动搜索（E/V/H/M/P）：自适应粗筛 + 分区域精搜 + 熵趋势收敛
+
+        Args:
+            rounds: 每轮评估的模拟轮数
+            seed: 随机种子
+            use_entropy_optimizer: 是否使用熵韬优化器（否则网格搜索回退）
+
+        Returns:
+            {success, best_params, best_score, total_evals, convergence, ...}
+        """
+        if not hasattr(self, '_cluster_engine') or self._cluster_engine is None:
+            self.register_cluster_engine()
+
+        engine = self._cluster_engine
+        param_space = engine.to_optimizer_params()
+
+        logger.info(f"[集成总线] 开始集群引擎参数优化, 参数空间: {param_space}")
+
+        if use_entropy_optimizer:
+            try:
+                from core.tau_cluster_engine import ClusterEngineOptimizer
+
+                optimizer = ClusterEngineOptimizer(
+                    cluster_engine=engine,
+                    rounds=rounds,
+                    seed=seed,
+                    warm_start=True,
+                    auto_persist=True,
+                )
+
+                result = optimizer.run(
+                    coarse_points=50,
+                    refined_points_per_region=30,
+                    entropy_decay=True,
+                    early_stop=True,
+                )
+
+                if result["success"]:
+                    logger.info(f"[集成总线] 集群引擎优化完成: "
+                               f"params={result['best_params']}, "
+                               f"score={result['best_score']:.4f}, "
+                               f"evals={result['total_evals']}")
+
+                    return {
+                        "success": True,
+                        "workflow": "auto_optimize_cluster_engine",
+                        "optimizer": "ClusterEngineOptimizer (EntropyTau V5)",
+                        "best_params": result["best_params"],
+                        "best_score": result["best_score"],
+                        "total_evals": result["total_evals"],
+                        "convergence": result.get("convergence", {}),
+                        "elapsed_seconds": result.get("elapsed_seconds", 0),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                else:
+                    logger.warning(f"[集成总线] ClusterEngineOptimizer 失败: {result.get('error')}, 回退网格搜索")
+                    use_entropy_optimizer = False
+
+            except ImportError as e:
+                logger.warning(f"[集成总线] ClusterEngineOptimizer 不可用: {e}, 回退到网格搜索")
+                use_entropy_optimizer = False
+            except Exception as e:
+                logger.error(f"[集成总线] ClusterEngineOptimizer 异常: {e}, 回退到网格搜索")
+                import traceback
+                traceback.print_exc()
+                use_entropy_optimizer = False
+
+        # 回退：简单网格搜索（保留兼容性）
+        import random as _random
+        import math as _math
+
+        best_params = None
+        best_score = -float("inf")
+        score_history = []
+
+        def _evaluate_cluster_params(params: Dict[str, float]) -> float:
+            engine.reset_state(keep_strategies=True)
+            engine.apply_optimizer_result(params)
+            rnd = _random.Random(seed)
+            correct = wrong = 0
+            returns = []
+            for i in range(rounds):
+                ts = _math.sin(i * 0.08) * 0.8
+                true_dir = 1 if ts > 0.15 else (-1 if ts < -0.15 else 0)
+                price = 100.0 + ts * 3.0
+                cd = engine.evaluate({"price": price, "_true_signal": ts}, price)
+                ca = 1 if cd.action == "BUY" else (-1 if cd.action == "SELL" else 0)
+                if ca == 0:
+                    returns.append(0.0)
+                elif ca == true_dir and true_dir != 0:
+                    correct += 1
+                    returns.append(abs(ts) * 0.5)
+                elif ca != 0 and true_dir != 0:
+                    wrong += 1
+                    returns.append(-abs(ts) * 0.3)
+                else:
+                    wrong += 1
+                    returns.append(-0.02)
+            total_trades = correct + wrong
+            accuracy = correct / max(1, total_trades)
+            import statistics as _stats
+            if len(returns) >= 2 and _stats.stdev(returns) > 0:
+                sharpe = (_stats.mean(returns) / _stats.stdev(returns)) * _math.sqrt(252)
+            else:
+                sharpe = 0.0
+            trade_rate = total_trades / rounds
+            return accuracy * 0.40 + min(1.0, max(0.0, sharpe / 3.0)) * 0.30 + min(1.0, trade_rate / 0.3) * 0.30
+
+        for mr in [1, 2, 3]:
+            for ct in [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50]:
+                for at in [0.10, 0.20, 0.30]:
+                    params = {"min_resonance": float(mr), "consensus_threshold": ct, "action_threshold": at}
+                    score = _evaluate_cluster_params(params)
+                    score_history.append({"params": dict(params), "score": score})
+                    if score > best_score:
+                        best_score = score
+                        best_params = dict(params)
+
+        apply_result = engine.apply_optimizer_result(best_params, score=best_score)
+        logger.info(f"[集成总线] 集群引擎优化完成(网格回退): params={best_params}, score={best_score:.4f}")
+
+        return {
+            "success": True,
+            "workflow": "auto_optimize_cluster_engine",
+            "optimizer": "grid_search_fallback",
+            "best_params": best_params,
+            "best_score": round(best_score, 4),
+            "score_history": score_history,
+            "persisted": apply_result.get("persisted"),
+            "elapsed_info": f"evaluated {len(score_history)} parameter combinations",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def cluster_engine_health_check(self) -> Dict[str, Any]:
+        """
+        获取集群引擎健康报告（集群引擎 → 健康检查）
+
+        Returns:
+            {status, checks, metrics, ...}
+        """
+        if not hasattr(self, '_cluster_engine') or self._cluster_engine is None:
+            return {
+                "status": "critical",
+                "module": "tau_cluster_engine",
+                "checks": [{"name": "引擎状态", "status": "fail",
+                           "message": "集群引擎未注册到集成总线"}],
+                "warnings": 0,
+                "criticals": 1,
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        return self._cluster_engine.get_health_for_checker()
+
+    def cluster_engine_get_trade_signal(self) -> Optional[Dict[str, Any]]:
+        """
+        获取集群引擎的最新交易信号（集群引擎 → 实盘交易）
+
+        供 TradeExecutor 调用
+
+        Returns:
+            TradeSignal 格式的字典，或 None
+        """
+        if not hasattr(self, '_cluster_engine') or self._cluster_engine is None:
+            return None
+
+        return self._cluster_engine.to_trade_signal()
+
+    def cluster_engine_save_state(self) -> Dict[str, Any]:
+        """手动触发集群引擎状态持久化"""
+        if not hasattr(self, '_cluster_engine') or self._cluster_engine is None:
+            return {"success": False, "error": "集群引擎未注册"}
+
+        return self._cluster_engine.save_state(
+            optimizer_name="manual_save",
+            metadata={"trigger": "manual"}
+        )
+
+    def cluster_engine_load_state(self, version: int = None) -> Dict[str, Any]:
+        """手动触发集群引擎状态恢复"""
+        if not hasattr(self, '_cluster_engine') or self._cluster_engine is None:
+            return {"success": False, "error": "集群引擎未注册"}
+
+        return self._cluster_engine.load_state(version=version)
+
+    # ============================================================
     # 报告与状态方法
     # ============================================================
     def get_workflow_report(self) -> Dict[str, Any]:
