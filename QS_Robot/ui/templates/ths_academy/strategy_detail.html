@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ strat.name if strat else '策略不存在' }} - 同花顺金融大师学院</title>
+    <style>
+        :root { --primary: #4f8cff; --bg: #f5f7fa; --card: #fff; --text: #333; --muted: #888; --radius: 12px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+        .nav { background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d); padding: 14px 24px; display: flex; gap: 20px; align-items: center; }
+        .nav a { color: #fff; text-decoration: none; font-size: 15px; opacity: 0.9; }
+        .nav .brand { font-size: 18px; font-weight: bold; }
+        .container { max-width: 900px; margin: 24px auto; padding: 0 20px; }
+        .card { background: var(--card); border-radius: var(--radius); padding: 28px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+        h1 { color: var(--primary); margin-bottom: 8px; }
+        .id-tag { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+        .section { margin: 20px 0; }
+        .section h3 { color: var(--primary); margin-bottom: 8px; font-size: 16px; }
+        .section p { line-height: 1.8; color: var(--text); }
+        .factors { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+        .factor { background: #e8f0ff; color: var(--primary); padding: 4px 12px; border-radius: 6px; font-size: 13px; }
+        .rule-box { background: #f8f9fb; border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 4px; margin: 8px 0; }
+        .rule-box .label { font-weight: bold; color: var(--primary); font-size: 13px; }
+        .rule-box .value { color: var(--text); font-size: 14px; }
+        .params { background: #f0f4ff; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 13px; }
+        .btn { display: inline-block; padding: 8px 20px; background: var(--primary); color: #fff; border-radius: 8px; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <span class="brand">同花顺金融大师学院</span>
+        <a href="/ths_academy/">首页</a>
+        <a href="/ths_academy/strategies">策略战法</a>
+        <a href="/ths_academy/source_compare">三类选股对比</a>
+        <a href="/">← 返回Aurora</a>
+    </nav>
+    <div class="container">
+        {% if strat %}
+        <div class="card">
+            <h1>{{ strat.name }}</h1>
+            <div class="id-tag">ID: {{ strat.id }} | 来源: {{ strat.source_url }}</div>
+            <div class="section">
+                <h3>核心逻辑</h3>
+                <p>{{ strat.logic }}</p>
+            </div>
+            <div class="section">
+                <h3>关键因子</h3>
+                <div class="factors">
+                    {% for f in strat.factors %}<span class="factor">{{ f }}</span>{% endfor %}
+                </div>
+            </div>
+            <div class="section">
+                <h3>交易规则</h3>
+                <div class="rule-box"><span class="label">入场:</span> <span class="value">{{ strat.entry_rule }}</span></div>
+                <div class="rule-box"><span class="label">出场:</span> <span class="value">{{ strat.exit_rule }}</span></div>
+                <div class="rule-box"><span class="label">止损:</span> <span class="value">{{ strat.stop_loss }}</span></div>
+                <div class="rule-box"><span class="label">止盈:</span> <span class="value">{{ strat.take_profit }}</span></div>
+            </div>
+            {% if strat.params %}
+            <div class="section">
+                <h3>策略参数</h3>
+                <div class="params">{{ strat.params | tojson(indent=2) }}</div>
+            </div>
+            {% endif %}
+            {% if strat.math %}
+            <div class="section">
+                <h3>数学公式</h3>
+                <div class="params">{{ strat.math }}</div>
+            </div>
+            {% endif %}
+            {% if strat.win_rate_claim %}
+            <div class="section">
+                <h3>胜率参考</h3>
+                <p>{{ strat.win_rate_claim }}</p>
+            </div>
+            {% endif %}
+            <a href="/ths_academy/strategies" class="btn">← 返回列表</a>
+        </div>
+        {% else %}
+        <div class="card">
+            <h1>策略不存在</h1>
+            <p>未找到ID为 {{ sid }} 的策略。</p>
+            <a href="/ths_academy/strategies" class="btn">← 返回列表</a>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

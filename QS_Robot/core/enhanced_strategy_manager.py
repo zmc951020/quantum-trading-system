@@ -1053,6 +1053,124 @@ class EnhancedStrategyManager:
         self._health_thread = threading.Thread(target=self._health_check_loop, daemon=True)
         self._health_thread.start()
 
+        # 自动同步策略到韬策略集群引擎
+        self._sync_to_cluster_engine()
+
+    def _sync_to_cluster_engine(self):
+        """将参数存储中的所有策略自动注册到韬策略集群引擎
+
+        这是打通「策略管理 → 集群引擎」链路的桥梁。
+        注册后，TauClusterEngine 的共振验证、权重调度、集群决策
+        等五层架构才能正常运作。
+        """
+        try:
+            from .tau_cluster_engine import get_cluster_engine, StrategySignalAdapter, ClusterSignal
+
+            engine = get_cluster_engine()
+            store = self.parameter_store
+
+            if store is None:
+                print("[集群同步] 参数存储不可用，跳过策略注册")
+                return
+
+            all_info = store.get_all_strategies_info() if hasattr(store, 'get_all_strategies_info') else []
+            if not all_info:
+                print("[集群同步] 参数存储中无策略记录，跳过注册")
+                return
+
+            registered = 0
+            for info in all_info:
+                name = info.get("name", "")
+                if not name or name in engine.get_registered_strategies():
+                    continue
+
+                # 自动识别策略类型
+                strategy_type = self._detect_strategy_type(name, info)
+
+                # 创建信号函数：基于参数存储中的历史最佳评分生成信号
+                best_score = info.get("best_score", 0)
+                best_params = info.get("best_params", {})
+
+                def _make_signal_func(s_name, s_score, s_params):
+                    def _signal_func(market_data=None, current_price=None):
+                        """根据策略历史表现生成集群信号"""
+                        confidence = min(0.95, max(0.1, s_score / 5.0)) if s_score else 0.5
+                        direction = 0.3 if confidence > 0.5 else -0.1
+                        return ClusterSignal(
+                            strategy_name=s_name,
+                            direction=direction,
+                            confidence=confidence,
+                            strength=confidence,
+                            win_probability=confidence,
+                            extra={"source": "parameter_store", "best_score": s_score},
+                        )
+                    return _signal_func
+
+                signal_func = _make_signal_func(name, best_score, best_params)
+                adapter = StrategySignalAdapter(
+                    name=name,
+                    strategy_type=strategy_type,
+                    signal_func=signal_func,
+                )
+                engine.register_strategy(name, adapter)
+                registered += 1
+
+            print(f"[集群同步] 已注册 {registered} 个策略到韬策略集群引擎 "
+                       f"(共{len(all_info)}条参数记录)")
+            if registered > 0:
+                # 保存引擎状态
+                engine.save_state()
+
+        except ImportError:
+            print("[集群同步] 集群引擎模块不可用，跳过注册")
+        except Exception as e:
+            print(f"[集群同步] 注册异常: {e}")
+
+    @staticmethod
+    def _detect_strategy_type(name: str, info: dict) -> str:
+        """根据策略名称自动识别策略类型"""
+        name_lower = name.lower()
+        # 同花顺策略优先识别（避免被grid/trend等通用类型截获）
+        if any(k in name_lower for k in ['macd', 'expma', 'boll', 'dmi', 'adx', '均线', '多头', '金叉', '突破', '龙头', '龙虎榜', '波段', '生命线', '牛熊', '共振', '低吸']):
+            return "ths_strategies"
+        if any(k in name_lower for k in ['量价', '筹码', '北向', '情绪', '板块轮动', '画线', '形态识别', '预警', '状态机', 'level-2', '逐笔', '金字塔', '网格交易套利', '控盘综合', '问财', '动态股池', '成交量阶梯', '量化趋势', '筹码控盘']):
+            return "ths_advanced"
+        if any(k in name_lower for k in ['gyro', '陀螺']):
+            return "gyro"
+        elif any(k in name_lower for k in ['bernoulli', 'coanda', '伯努利']):
+            return "bernoulli"
+        elif any(k in name_lower for k in ['fourier', '傅里叶']):
+            return "fourier"
+        elif any(k in name_lower for k in ['shepherd', 'rotation', '轮动']):
+            return "shepherd"
+        elif any(k in name_lower for k in ['grid', '网格']):
+            return "grid"
+        elif any(k in name_lower for k in ['moving', '均线', 'trend', '趋势']):
+            return "trend"
+        elif any(k in name_lower for k in ['ml', 'adaptive', 'ppo']):
+            return "ml"
+        elif any(k in name_lower for k in ['rl', 'reinforce']):
+            return "rl"
+        elif any(k in name_lower for k in ['fractal', 'chaos', '分形']):
+            return "physics"
+        elif any(k in name_lower for k in ['fluid', '流体']):
+            return "physics"
+        elif any(k in name_lower for k in ['quantum', '量子']):
+            return "physics"
+        elif any(k in name_lower for k in ['value', '价值', 'huijin']):
+            return "value"
+        elif any(k in name_lower for k in ['multifactor', 'resonance', '共振', '因子']):
+            return "multifactor"
+        elif any(k in name_lower for k in ['dca', '定投', 'fund']):
+            return "fund"
+        elif any(k in name_lower for k in ['down', 'defense', '防御', '下跌']):
+            return "defense"
+        elif any(k in name_lower for k in ['special_forces', '特种兵']):
+            return "special_forces"
+        elif any(k in name_lower for k in ['ensemble', 'optimized', '综合', '融合']):
+            return "ensemble"
+        return "generic"
+
     def shutdown(self):
         """优雅关闭：停止健康检查线程"""
         self._shutdown_event.set()

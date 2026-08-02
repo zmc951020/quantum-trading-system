@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>策略战法 - 同花顺金融大师学院</title>
+    <style>
+        :root { --primary: #4f8cff; --bg: #f5f7fa; --card: #fff; --text: #333; --muted: #888; --radius: 12px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+        .nav { background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d); padding: 14px 24px; display: flex; gap: 20px; align-items: center; }
+        .nav a { color: #fff; text-decoration: none; font-size: 15px; opacity: 0.9; }
+        .nav a:hover { opacity: 1; }
+        .nav .brand { font-size: 18px; font-weight: bold; }
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
+        .tabs { display: flex; gap: 12px; margin-bottom: 20px; }
+        .tab { padding: 10px 24px; background: var(--card); border-radius: 8px; cursor: pointer; border: 2px solid transparent; font-size: 15px; }
+        .tab.active { border-color: var(--primary); color: var(--primary); font-weight: bold; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+        .card { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); }
+        .card h3 { color: var(--primary); margin-bottom: 8px; font-size: 16px; }
+        .card .id { color: var(--muted); font-size: 12px; }
+        .card .logic { color: var(--text); line-height: 1.6; font-size: 13px; margin: 8px 0; }
+        .card .factors { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .factor { background: #e8f0ff; color: var(--primary); padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .card a { color: var(--primary); text-decoration: none; font-size: 14px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <span class="brand">同花顺金融大师学院</span>
+        <a href="/ths_academy/">首页</a>
+        <a href="/ths_academy/strategies">策略战法</a>
+        <a href="/ths_academy/source_compare">三类选股对比</a>
+        <a href="/">← 返回Aurora</a>
+    </nav>
+    <div class="container">
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('14')">14策略战法（{{ strategies_14|length }}）</div>
+            <div class="tab" onclick="switchTab('18')">18高阶战法（{{ strategies_18|length }}）</div>
+        </div>
+        <div id="tab-14" class="grid">
+            {% for s in strategies_14 %}
+            <div class="card">
+                <span class="id">{{ s.id }}</span>
+                <h3>{{ s.name }}</h3>
+                <p class="logic">{{ s.logic[:100] }}...</p>
+                <div class="factors">
+                    {% for f in s.factors[:5] %}<span class="factor">{{ f }}</span>{% endfor %}
+                </div>
+                <a href="/ths_academy/strategy/{{ s.id }}">查看详情 →</a>
+            </div>
+            {% endfor %}
+        </div>
+        <div id="tab-18" class="grid hidden">
+            {% for s in strategies_18 %}
+            <div class="card">
+                <span class="id">{{ s.id }}</span>
+                <h3>{{ s.name }}</h3>
+                <p class="logic">{{ s.logic[:100] }}...</p>
+                <div class="factors">
+                    {% for f in s.factors[:5] %}<span class="factor">{{ f }}</span>{% endfor %}
+                </div>
+                <a href="/ths_academy/strategy/{{ s.id }}">查看详情 →</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-14').classList.toggle('hidden', tab !== '14');
+            document.getElementById('tab-18').classList.toggle('hidden', tab !== '18');
+        }
+    </script>
+</body>
+</html>

@@ -52,6 +52,13 @@ class PoolLevel(Enum):
         idx = order.index(self)
         return order[idx + 1] if idx < len(order) - 1 else self
 
+
+class StockSource(Enum):
+    """选股来源 - 三类分流以便对比哪类策略更好"""
+    AURORA_NATIVE = "aurora_native"   # 自创策略选股
+    VIBE_TRADING = "vibe_trading"     # 港大 Vibe Trading 选股
+    THS_IWENCAI = "ths_iwencai"       # 同花顺问财/策略选股
+
 # ============================================================
 # 股票记录
 # ============================================================
@@ -63,6 +70,8 @@ class StockRecord:
     level: PoolLevel                 # 当前层级
     added_at: str                    # 加入时间
     last_updated: str                # 最后更新时间
+    source: StockSource = StockSource.AURORA_NATIVE  # 选股来源（三类分流）
+    strategy_name: str = ""          # 产生信号的策略名
     metadata: Dict[str, Any] = field(default_factory=dict)  # 附加信息（PE、行业、财务指标等）
     history: List[Dict[str, Any]] = field(default_factory=list)  # 流转历史
     backtest_results: List[Dict[str, Any]] = field(default_factory=list)  # 回测记录
@@ -118,6 +127,7 @@ class StockPoolManager:
                     data = json.load(f)
                 # StockRecord 期望的字段列表
                 valid_fields = {"symbol", "name", "level", "added_at", "last_updated",
+                                "source", "strategy_name",
                                 "metadata", "history", "backtest_results", "risk_score", "strategy_params"}
                 for symbol, record in data.items():
                     # 过滤未知字段，防止旧版本JSON中的废弃字段导致错误
@@ -128,7 +138,11 @@ class StockPoolManager:
                     record.setdefault("backtest_results", [])
                     record.setdefault("risk_score", 0.0)
                     record.setdefault("strategy_params", {})
+                    record.setdefault("strategy_name", "")
                     record["level"] = PoolLevel(record["level"])
+                    # source 兼容旧数据：无则默认 aurora_native
+                    src = record.get("source", "aurora_native")
+                    record["source"] = StockSource(src) if isinstance(src, str) else (src or StockSource.AURORA_NATIVE)
                     self._pools[symbol] = StockRecord(**record)
         except Exception as e:
             print(f"[StockPool] 加载数据失败，使用空池: {e}")
@@ -142,6 +156,8 @@ class StockPoolManager:
             for v in data.values():
                 if hasattr(v["level"], 'value'):
                     v["level"] = v["level"].value
+                if hasattr(v.get("source"), 'value'):
+                    v["source"] = v["source"].value
             with open(self._data_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
@@ -151,12 +167,18 @@ class StockPoolManager:
 
     # ---------- 基础操作 ----------
 
-    def add_stock(self, symbol: str, name: str, level: PoolLevel = PoolLevel.WATCHLIST, 
-                  metadata: Dict = None):
-        """添加股票到指定池"""
+    def add_stock(self, symbol: str, name: str, level: PoolLevel = PoolLevel.WATCHLIST,
+                  metadata: Dict = None, source: StockSource = StockSource.AURORA_NATIVE,
+                  strategy_name: str = ""):
+        """添加股票到指定池
+
+        Args:
+            source: 选股来源（三类分流）
+            strategy_name: 产生信号的策略名
+        """
         if symbol in self._pools:
             return {"success": False, "error": f"股票 {symbol} 已存在"}
-        
+
         now = datetime.now().isoformat()
         record = StockRecord(
             symbol=symbol,
@@ -164,16 +186,19 @@ class StockPoolManager:
             level=level,
             added_at=now,
             last_updated=now,
+            source=source,
+            strategy_name=strategy_name,
             metadata=metadata or {},
             history=[{
                 "timestamp": now,
                 "action": "added",
-                "level": level.value
+                "level": level.value,
+                "source": source.value
             }]
         )
         self._pools[symbol] = record
         self._save()
-        return {"success": True, "message": f"已加入{level.value}池"}
+        return {"success": True, "message": f"已加入{level.value}池（来源：{source.value}）"}
 
     def remove_stock(self, symbol: str):
         """从所有池中移除股票"""
@@ -326,6 +351,29 @@ class StockPoolManager:
             if level_value in summary:
                 summary[level_value] += 1
         return summary
+
+    def get_stocks_by_source(self, source: StockSource) -> List[StockRecord]:
+        """获取指定来源的所有股票（三类分流查询）"""
+        return [r for r in self._pools.values() if r.source == source]
+
+    def get_source_summary(self) -> Dict[str, int]:
+        """获取各来源股票数量统计（三类对比）"""
+        summary = {s.value: 0 for s in StockSource}
+        for record in self._pools.values():
+            src = record.source.value if hasattr(record.source, 'value') else record.source
+            if src in summary:
+                summary[src] += 1
+        return summary
+
+    def get_source_level_matrix(self) -> Dict[str, Dict[str, int]]:
+        """获取 来源×层级 矩阵统计（三类选股在各池的分布）"""
+        matrix = {s.value: {l.value: 0 for l in PoolLevel} for s in StockSource}
+        for record in self._pools.values():
+            src = record.source.value if hasattr(record.source, 'value') else record.source
+            lvl = record.level.value if hasattr(record.level, 'value') else record.level
+            if src in matrix and lvl in matrix[src]:
+                matrix[src][lvl] += 1
+        return matrix
 
     # ---------- 批量操作接口 ----------
 

@@ -58,7 +58,7 @@ from core.enhanced_strategy_manager import (
 )
 
 # 导入新增模块
-from core.stock_pool import get_stock_pool_manager, PoolLevel
+from core.stock_pool import get_stock_pool_manager, PoolLevel, StockSource
 from core.risk_control import get_risk_control_engine
 from core.data_fetcher import get_data_fetcher
 
@@ -3131,6 +3131,116 @@ class StrategyIntegrationBus:
                 'exclude_st': False,
                 'description': '回测模式无限制'
             },
+        }
+
+    # ============================================================
+    # 三类选股入口（Aurora自创 / Vibe Trading / 同花顺问财）
+    # ============================================================
+
+    def select_stocks_aurora_native(self, strategy_name: str,
+                                    stock_list: List[Dict] = None) -> Dict[str, Any]:
+        """自创策略选股入口 - Aurora原生策略选股
+
+        使用Aurora自创策略（伯努利-康达、傅里叶RL等）选股，
+        推入股票池（来源标记：aurora_native）。
+
+        Args:
+            strategy_name: Aurora自创策略名
+            stock_list: 候选股票列表 [{symbol, name, ...}]，None则用现有池
+
+        Returns:
+            选股结果统计
+        """
+        pool = get_stock_pool_manager()
+        added, skipped = 0, 0
+        stocks = stock_list or []
+        for stock in stocks:
+            symbol = stock.get("symbol", "")
+            name = stock.get("name", symbol)
+            result = pool.add_stock(
+                symbol=symbol, name=name,
+                level=PoolLevel.WATCHLIST,
+                source=StockSource.AURORA_NATIVE,
+                strategy_name=strategy_name,
+                metadata=stock.get("metadata", {}),
+            )
+            if result.get("success"):
+                added += 1
+            else:
+                skipped += 1
+        logger.info("[三类选股] Aurora自创[%s] 新增%d 跳过%d", strategy_name, added, skipped)
+        return {"source": "aurora_native", "strategy": strategy_name,
+                "added": added, "skipped": skipped}
+
+    def select_stocks_vibe(self, vibe_signals: List[Dict]) -> Dict[str, Any]:
+        """港大 Vibe Trading 选股入口
+
+        接收Vibe Trading系统的选股信号，推入股票池（来源标记：vibe_trading）。
+
+        Args:
+            vibe_signals: Vibe Trading信号列表 [{symbol, name, score, ...}]
+
+        Returns:
+            选股结果统计
+        """
+        pool = get_stock_pool_manager()
+        added, skipped = 0, 0
+        for sig in vibe_signals:
+            symbol = sig.get("symbol", "")
+            name = sig.get("name", symbol)
+            result = pool.add_stock(
+                symbol=symbol, name=name,
+                level=PoolLevel.WATCHLIST,
+                source=StockSource.VIBE_TRADING,
+                strategy_name="Vibe Trading",
+                metadata={"vibe_score": sig.get("score", 0), **sig.get("metadata", {})},
+            )
+            if result.get("success"):
+                added += 1
+            else:
+                skipped += 1
+        logger.info("[三类选股] Vibe Trading 新增%d 跳过%d", added, skipped)
+        return {"source": "vibe_trading", "added": added, "skipped": skipped}
+
+    def select_stocks_ths_iwencai(self, bars_map: Dict[str, List[dict]] = None,
+                                  query: str = None,
+                                  stock_names: Dict[str, str] = None) -> Dict[str, Any]:
+        """同花顺选股入口
+
+        使用同花顺32策略（14策略+18战法）扫描选股，
+        推入股票池（来源标记：ths_iwencai）。
+
+        Args:
+            bars_map: {symbol: bars_list} K线数据
+            query: 问财自然语言查询（可选）
+            stock_names: {symbol: name} 股票名称映射
+
+        Returns:
+            选股结果统计
+        """
+        try:
+            from api.ths_bridge.signal_collector import SignalCollector
+        except ImportError:
+            logger.error("无法导入SignalCollector，同花顺选股不可用")
+            return {"source": "ths_iwencai", "error": "module_unavailable"}
+        collector = SignalCollector()
+        result = collector.collect_to_pool(bars_map or {}, stock_names)
+        logger.info("[三类选股] 同花顺32策略 信号%d 新增%d 跳过%d",
+                    result["total_signals"], result["added"], result["skipped"])
+        return {"source": "ths_iwencai", **result}
+
+    def get_source_comparison(self) -> Dict[str, Any]:
+        """三类选股来源对比看板
+
+        返回三类来源在各池层的分布，用于判断哪类策略更好。
+        """
+        pool = get_stock_pool_manager()
+        return {
+            "summary": pool.get_source_summary(),
+            "matrix": pool.get_source_level_matrix(),
+            "aurora_native": [r.symbol for r in pool.get_stocks_by_source(StockSource.AURORA_NATIVE)],
+            "vibe_trading": [r.symbol for r in pool.get_stocks_by_source(StockSource.VIBE_TRADING)],
+            "ths_iwencai": [r.symbol for r in pool.get_stocks_by_source(StockSource.THS_IWENCAI)],
         }
 
 

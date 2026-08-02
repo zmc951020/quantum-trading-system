@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三类选股对比 - 同花顺金融大师学院</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root { --primary: #4f8cff; --bg: #f5f7fa; --card: #fff; --text: #333; --muted: #888; --radius: 12px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+        .nav { background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d); padding: 14px 24px; display: flex; gap: 20px; align-items: center; }
+        .nav a { color: #fff; text-decoration: none; font-size: 15px; opacity: 0.9; }
+        .nav .brand { font-size: 18px; font-weight: bold; }
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
+        .card { background: var(--card); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+        h1 { color: var(--primary); margin-bottom: 8px; }
+        .desc { color: var(--muted); margin-bottom: 20px; }
+        .stat-row { display: flex; gap: 16px; margin-bottom: 20px; }
+        .stat-card { flex: 1; background: var(--card); border-radius: var(--radius); padding: 20px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+        .stat-card .num { font-size: 32px; font-weight: bold; }
+        .stat-card .label { color: var(--muted); font-size: 14px; margin-top: 4px; }
+        .aurora { color: #4f8cff; } .vibe { color: #ff6b6b; } .ths { color: #51cf66; }
+        #bar, #heatmap { width: 100%; height: 350px; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .table th, .table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
+        .table th { background: #f8f9fb; color: var(--muted); }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <span class="brand">同花顺金融大师学院</span>
+        <a href="/ths_academy/">首页</a>
+        <a href="/ths_academy/strategies">策略战法</a>
+        <a href="/ths_academy/source_compare">三类选股对比</a>
+        <a href="/">← 返回Aurora</a>
+    </nav>
+    <div class="container">
+        <div class="card">
+            <h1>三类选股来源对比看板</h1>
+            <p class="desc">Aurora自创策略 vs 港大Vibe Trading vs 同花顺问财AI — 统一进入"选股→股票池→测试→实盘"自动化流程</p>
+            {% if data.error %}
+            <p style="color:red">数据加载失败: {{ data.error }}</p>
+            {% else %}
+            <div class="stat-row">
+                <div class="stat-card">
+                    <div class="num aurora">{{ data.summary.aurora_native or 0 }}</div>
+                    <div class="label">Aurora自创策略</div>
+                </div>
+                <div class="stat-card">
+                    <div class="num vibe">{{ data.summary.vibe_trading or 0 }}</div>
+                    <div class="label">Vibe Trading</div>
+                </div>
+                <div class="stat-card">
+                    <div class="num ths">{{ data.summary.ths_iwencai or 0 }}</div>
+                    <div class="label">同花顺问财</div>
+                </div>
+            </div>
+            <div id="bar"></div>
+            <div id="heatmap"></div>
+            {% endif %}
+        </div>
+        {% if not data.error %}
+        <div class="card">
+            <h3>各来源股票明细</h3>
+            <table class="table">
+                <tr><th>来源</th><th>代码</th><th>名称</th><th>策略</th></tr>
+                {% for s in data.aurora_native %}
+                <tr><td><span class="aurora">●Aurora</span></td><td>{{ s.symbol }}</td><td>{{ s.name }}</td><td>{{ s.strategy }}</td></tr>
+                {% endfor %}
+                {% for s in data.vibe_trading %}
+                <tr><td><span class="vibe">●Vibe</span></td><td>{{ s.symbol }}</td><td>{{ s.name }}</td><td>{{ s.strategy }}</td></tr>
+                {% endfor %}
+                {% for s in data.ths_iwencai %}
+                <tr><td><span class="ths">●同花顺</span></td><td>{{ s.symbol }}</td><td>{{ s.name }}</td><td>{{ s.strategy }}</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    <script>
+        const summary = {{ data.summary | tojson if data.summary else '{}' }};
+        const matrix = {{ data.matrix | tojson if data.matrix else '{}' }};
+        const sources = Object.keys(summary);
+        const counts = sources.map(s => summary[s] || 0);
+        const barChart = echarts.init(document.getElementById('bar'));
+        barChart.setOption({
+            title: { text: '各来源选股数量', left: 'center' },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: ['Aurora自创', 'Vibe Trading', '同花顺问财'] },
+            yAxis: { type: 'value' },
+            series: [{ type: 'bar', data: counts, itemStyle: { color: '#4f8cff' }, barWidth: '40%' }]
+        });
+        const levels = ['观察池', '候选池', '测试池', '预实盘', '实盘'];
+        const heatData = [];
+        const srcNames = ['aurora_native', 'vibe_trading', 'ths_iwencai'];
+        const srcLabels = ['Aurora自创', 'Vibe Trading', '同花顺问财'];
+        const lvlKeys = ['watchlist', 'candidate', 'testing', 'prelive', 'live'];
+        srcNames.forEach((src, si) => {
+            lvlKeys.forEach((lvl, li) => {
+                heatData.push([li, si, (matrix[src] || {})[lvl] || 0]);
+            });
+        });
+        const heatChart = echarts.init(document.getElementById('heatmap'));
+        heatChart.setOption({
+            title: { text: '来源×池层 热力图', left: 'center' },
+            tooltip: { position: 'top' },
+            grid: { top: 60, bottom: 80, left: 100, right: 50 },
+            xAxis: { type: 'category', data: levels, splitArea: { show: true } },
+            yAxis: { type: 'category', data: srcLabels, splitArea: { show: true } },
+            visualMap: { min: 0, max: 10, calculable: true, orient: 'horizontal', left: 'center', bottom: 10 },
+            series: [{ type: 'heatmap', data: heatData, label: { show: true } }]
+        });
+        window.addEventListener('resize', () => { barChart.resize(); heatChart.resize(); });
+    </script>
+</body>
+</html>

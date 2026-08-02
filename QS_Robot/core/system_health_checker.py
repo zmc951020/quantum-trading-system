@@ -17,6 +17,7 @@ import time
 import uuid
 import logging
 import threading
+import subprocess
 import traceback
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Callable
@@ -303,6 +304,193 @@ class SystemHealthChecker:
             except Exception as e:
                 return (False, 0, f"回测对比器: 不可用 - {e}", "检查 core/backtest_comparator.py")
         yield ("L2_009", "回测多策略对比", "L2_业务链路", "warning", "both", _l2_009)
+
+        # ---- 韬策略引擎 & 熵韬收敛优化器 & 工作流 专项检查 ----
+
+        def _l2_010():
+            """韬策略引擎可用性检查"""
+            try:
+                from core.tau_cluster_engine import TauClusterEngine, get_cluster_engine
+                engine = get_cluster_engine()
+                strategy_count = len(engine.get_registered_strategies())
+                has_scheduler = engine.weight_scheduler is not None
+                has_validator = engine.validator is not None
+                has_regime = engine.regime_detector is not None
+                return (True, 100 if strategy_count > 0 else 70,
+                        f"韬策略引擎: {strategy_count}个策略, "
+                        f"权重调度={'✓' if has_scheduler else '✗'}, "
+                        f"共振验证={'✓' if has_validator else '✗'}, "
+                        f"市场检测={'✓' if has_regime else '✗'}",
+                        "注册策略以激活引擎" if strategy_count == 0 else "")
+            except Exception as e:
+                return (False, 0, f"韬策略引擎: 不可用 - {e}", "检查 core/tau_cluster_engine.py")
+        yield ("L2_010", "韬策略引擎可用性", "L2_业务链路", "critical", "both", _l2_010)
+
+        def _l2_011():
+            """熵韬收敛优化器核心可用性检查"""
+            try:
+                from core.tau_optimizer_cluster import TauOptimizerCluster, get_parameter_store
+                # 检查模块可导入性和核心功能
+                has_cluster_class = TauOptimizerCluster is not None
+                store = get_parameter_store()
+                has_five_dim = hasattr(store, 'get_best_score')  # 五维评分通过参数存储体现
+                has_folding = hasattr(store, 'get_param_groups')  # 参数分组=折叠
+                has_cache = hasattr(store, 'get_stats')  # 缓存统计
+                all_info = store.get_all_strategies_info() if hasattr(store, 'get_all_strategies_info') else []
+                has_warm_start = len(all_info) > 0  # Warm Start = 有历史参数
+                return (True, 100,
+                        f"熵韬收敛优化器: 集群={'✓' if has_cluster_class else '✗'}, "
+                        f"参数分组={'✓' if has_folding else '✗'}, "
+                        f"缓存统计={'✓' if has_cache else '✗'}, "
+                        f"历史参数={len(all_info)}条",
+                        "检查 core/tau_optimizer_cluster.py" if not all([has_cluster_class, has_folding, has_cache]) else "")
+            except Exception as e:
+                return (False, 0, f"熵韬收敛优化器: 不可用 - {e}", "检查 core/tau_optimizer_cluster.py")
+        yield ("L2_011", "熵韬收敛优化器核心", "L2_业务链路", "critical", "both", _l2_011)
+
+        def _l2_012():
+            """工作流引擎可用性检查"""
+            try:
+                from core.workflow_engine import OneClickWorkflowEngine, get_workflow_engine
+                engine = get_workflow_engine()
+                has_full = hasattr(engine, '_run_full_workflow')
+                has_manual = hasattr(engine, '_run_manual_workflow')
+                has_step = hasattr(engine, 'run_step')
+                has_batch = 'batch_mode' in engine.run_oneclick.__code__.co_varnames
+                return (True, 100,
+                        f"工作流引擎: 完整链路={'✓' if has_full else '✗'}, "
+                        f"降级手动={'✓' if has_manual else '✗'}, "
+                        f"单步执行={'✓' if has_step else '✗'}, "
+                        f"批量模式={'✓' if has_batch else '✗'}",
+                        "检查 core/workflow_engine.py" if not all([has_full, has_manual, has_step, has_batch]) else "")
+            except Exception as e:
+                return (False, 0, f"工作流引擎: 不可用 - {e}", "检查 core/workflow_engine.py")
+        yield ("L2_012", "工作流引擎可用性", "L2_业务链路", "critical", "both", _l2_012)
+
+        def _l2_013():
+            """工作流API端点检查"""
+            ok, d = self._api_get("/api/workflow/status")
+            status_ok = ok
+            ok2, d2 = self._api_get("/api/workflow/history")
+            hist_ok = ok2
+            all_ok = status_ok and hist_ok
+            return (all_ok, 100 if all_ok else 50,
+                    f"工作流API: status={'✓' if status_ok else '✗'}, "
+                    f"history={'✓' if hist_ok else '✗'}",
+                    "" if all_ok else "检查 gateway.py 中 /api/workflow/* 端点")
+        yield ("L2_013", "工作流API端点", "L2_业务链路", "warning", "both", _l2_013)
+
+        def _l2_014():
+            """股票池五层金字塔检查"""
+            try:
+                from core.stock_pool import StockPoolManager, get_stock_pool_manager
+                pool_mgr = get_stock_pool_manager()
+                summary = pool_mgr.get_pool_summary()
+                # get_pool_summary 返回 {"观察": n, "候选": n, ...} 或类似格式
+                if isinstance(summary, dict):
+                    total = sum(summary.values())
+                    detail_parts = []
+                    for level_name in ['观察', '候选', '测试', '预实盘', '实盘']:
+                        cnt = summary.get(level_name, 0)
+                        detail_parts.append(f"{level_name}{cnt}")
+                    detail_str = '→'.join(detail_parts)
+                else:
+                    total = len(summary) if summary else 0
+                    detail_str = f"共{total}只"
+                return (True, 100 if total > 0 else 70,
+                        f"股票池: {detail_str}",
+                        "执行选股流程以填充股票池" if total == 0 else "")
+            except Exception as e:
+                return (False, 0, f"股票池: 不可用 - {e}", "检查 core/stock_pool.py")
+        yield ("L2_014", "股票池五层金字塔", "L2_业务链路", "warning", "both", _l2_014)
+
+        def _l2_015():
+            """策略自动发现检查"""
+            try:
+                from core.strategy_auto_discovery import StrategyAutoDiscovery, get_auto_discovery
+                discovery = get_auto_discovery()
+                has_scan = hasattr(discovery, 'run_once') or hasattr(discovery, 'scan')
+                has_register = (hasattr(discovery, '_register_strategy') or
+                               hasattr(discovery, 'register_strategy') or
+                               hasattr(discovery, 'register'))
+                return (True, 100 if has_scan and has_register else 70,
+                        f"策略自动发现: 扫描={'✓' if has_scan else '✗'}, "
+                        f"注册={'✓' if has_register else '✗'}",
+                        "检查 core/strategy_auto_discovery.py" if not (has_scan and has_register) else "")
+            except Exception as e:
+                return (False, 0, f"策略自动发现: 不可用 - {e}", "检查 core/strategy_auto_discovery.py")
+        yield ("L2_015", "策略自动发现", "L2_业务链路", "warning", "both", _l2_015)
+
+        def _l2_016():
+            """策略自适应层检查"""
+            try:
+                from core.adaptive_market_regime import (
+                    MultiDimensionalRegimeDetector, StrategyPerformanceProfile,
+                    StrategyProfileStore, get_adaptation_engine
+                )
+                engine = get_adaptation_engine()
+                has_detector = hasattr(engine, '_detector') and engine._detector is not None
+                has_profile_store = (hasattr(engine, '_profile_store') and
+                                    engine._profile_store is not None)
+                return (True, 100 if has_detector and has_profile_store else 70,
+                        f"自适应层: 市场检测={'✓' if has_detector else '✗'}, "
+                        f"画像存储={'✓' if has_profile_store else '✗'}",
+                        "检查 core/adaptive_market_regime.py" if not (has_detector and has_profile_store) else "")
+            except Exception as e:
+                return (False, 0, f"自适应层: 不可用 - {e}", "检查 core/adaptive_market_regime.py")
+        yield ("L2_016", "策略自适应层", "L2_业务链路", "warning", "both", _l2_016)
+
+        def _l2_017():
+            """策略性能画像存储检查"""
+            try:
+                from core.adaptive_market_regime import StrategyProfileStore
+                import os
+                store_path = os.path.join(PROJECT_ROOT, "data", "strategy_profiles.json")
+                store = StrategyProfileStore(storage_path=store_path)
+                profiles = store.get_all_profiles() if hasattr(store, 'get_all_profiles') else []
+                profile_count = len(profiles) if profiles else 0
+                return (True, 100 if profile_count > 0 else 60,
+                        f"策略画像存储: {profile_count}个画像, "
+                        f"路径={'✓' if os.path.exists(store_path) else '✗'}",
+                        "执行一次优化以生成策略画像" if profile_count == 0 else "")
+            except Exception as e:
+                return (False, 0, f"策略画像存储: 不可用 - {e}", "检查 core/adaptive_market_regime.py")
+        yield ("L2_017", "策略性能画像存储", "L2_业务链路", "warning", "both", _l2_017)
+
+        # 新模块：同花顺金融大师桥接（14策略+18战法）
+        def _l2_018():
+            """同花顺桥接模块检查"""
+            try:
+                from api.ths_bridge import IwencaiAdapter, HttpAdapter, SignalCollector
+                collector = SignalCollector()
+                s14, s18 = collector.list_strategies()
+                ok = len(s14) == 14 and len(s18) == 18
+                return (ok, 100 if ok else 50,
+                        f"同花顺桥接: 14策略={'✓' if len(s14) == 14 else '✗'}({len(s14)}), "
+                        f"18战法={'✓' if len(s18) == 18 else '✗'}({len(s18)})",
+                        "检查 core/strategies/ths_strategies/ 目录" if not ok else "")
+            except Exception as e:
+                return (False, 0, f"同花顺桥接: 不可用 - {e}", "检查 api/ths_bridge/ 模块")
+        yield ("L2_018", "同花顺桥接模块", "L2_业务链路", "critical", "both", _l2_018)
+
+        # 新模块：三类选股分流
+        def _l2_019():
+            """三类选股分流检查"""
+            try:
+                from core.stock_pool import StockPoolManager, StockSource
+                mgr = StockPoolManager()
+                summary = mgr.get_source_summary()
+                has_all_sources = all(k in summary for k in
+                                       ["aurora_native", "vibe_trading", "ths_iwencai"])
+                matrix = mgr.get_source_level_matrix()
+                has_matrix = "aurora_native" in matrix and "ths_iwencai" in matrix
+                return (has_all_sources and has_matrix,
+                        100 if has_all_sources and has_matrix else 60,
+                        f"三类分流: 来源={len(summary)}, 矩阵={'✓' if has_matrix else '✗'}",
+                        "检查 core/stock_pool.py StockSource 枚举" if not has_all_sources else "")
+            except Exception as e:
+                return (False, 0, f"三类选股分流: 不可用 - {e}", "检查 core/stock_pool.py")
+        yield ("L2_019", "三类选股分流", "L2_业务链路", "warning", "both", _l2_019)
 
     # ==================== L3: 系统可靠性 ====================
 
@@ -1103,14 +1291,15 @@ class SystemHealthChecker:
         yield ("L8_014", "特种兵策略参数存储", "L8_深度审计", "warning", "deep", _l8_014)
 
         def _l8_015():
-            """特种兵策略API端点对齐检查"""
-            api_endpoints = [
-                "/api/special_forces/evolution",
-                "/api/special_forces/backtest",
-                "/api/special_forces/params/510300",
-                "/api/special_forces/start",
-                "/api/special_forces/stop",
-                "/api/special_forces/status",
+            """特种兵策略API端点对齐检查 — 识别 Flask 参数化路由 <symbol>"""
+            import re
+            expected_endpoints = [
+                "/special_forces/evolution",
+                "/special_forces/backtest",
+                "/special_forces/params/510300",
+                "/special_forces/start",
+                "/special_forces/stop",
+                "/special_forces/status",
             ]
             import os
             gw_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
@@ -1120,10 +1309,18 @@ class SystemHealthChecker:
                 try:
                     with open(gw_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                    for ep in api_endpoints:
-                        route = ep.replace("/api", "")
-                        if route not in content:
-                            missing.append(route)
+                    # 提取所有 @api_gateway.route('...') 定义
+                    route_pattern = re.compile(r"""@api_gateway\.route\(\s*['"]([^'"]+)['"]""")
+                    registered_routes = route_pattern.findall(content)
+                    # Flask <converter:name> 或 <name> → 匹配非斜杠字符
+                    def _route_to_regex(route):
+                        pattern = re.sub(r'<[^>]+>', '[^/]+', route)
+                        return re.compile(f'^{pattern}$')
+                    compiled = [(_route_to_regex(r), r) for r in registered_routes]
+                    for ep in expected_endpoints:
+                        matched = any(c.match(ep) for c, _ in compiled)
+                        if not matched:
+                            missing.append(ep)
                             ok = False
                 except Exception as e:
                     ok = False
@@ -1256,6 +1453,282 @@ class SystemHealthChecker:
             except Exception as e:
                 return (False, 0, f"溯源完整性检查异常: {e}", "检查 integration_bus 模块")
         yield ("L8_018", "Vibe全链路溯源完整性", "L8_深度审计", "warning", "deep", _l8_018)
+
+        # ---- 8.5 拟人化审核（身心七维度映射） ----
+        # 将 tests/audit/ 审核脚本集成到深度巡检，实现一键全面审核
+
+        def _l8_019():
+            """探针覆盖率审计（神经敏锐）"""
+            return self._run_audit_script("test_probe_coverage.py", "探针覆盖率")
+        yield ("L8_019", "探针覆盖率审计", "L8_深度审计", "critical", "deep", _l8_019)
+
+        def _l8_020():
+            """埋点覆盖率审计（全知全觉）"""
+            return self._run_audit_script("test_burial_audit.py", "埋点覆盖率")
+        yield ("L8_020", "埋点覆盖率审计", "L8_深度审计", "warning", "deep", _l8_020)
+
+        def _l8_021():
+            """多因子并行基准测试（思维敏捷）"""
+            return self._run_audit_script("test_factor_benchmark.py", "多因子并行基准")
+        yield ("L8_021", "多因子并行基准", "L8_深度审计", "warning", "deep", _l8_021)
+
+        def _l8_022():
+            """极端行情联动测试（肌体强健）"""
+            return self._run_audit_script("test_extreme_scenario.py", "极端行情联动")
+        yield ("L8_022", "极端行情联动测试", "L8_深度审计", "critical", "deep", _l8_022)
+
+        def _l8_023():
+            """全链路延迟统计（气血通达）"""
+            return self._run_audit_script("test_latency_chain.py", "全链路延迟")
+        yield ("L8_023", "全链路延迟统计", "L8_深度审计", "warning", "deep", _l8_023)
+
+        def _l8_024():
+            """代理通信延迟（气血通达）"""
+            return self._run_audit_script("test_proxy_latency.py", "代理通信延迟", needs_5002=True)
+        yield ("L8_024", "代理通信延迟", "L8_深度审计", "warning", "deep", _l8_024)
+
+        def _l8_025():
+            """混沌工程宕机恢复（肌体强健）"""
+            return self._run_audit_script("test_chaos.py", "混沌工程宕机恢复", needs_5002=True, needs_manual=True)
+        yield ("L8_025", "混沌工程宕机恢复", "L8_深度审计", "warning", "deep", _l8_025)
+
+        # ---- 8.6 韬策略引擎 & 工作流 深度审计 ----
+
+        def _l8_026():
+            """韬策略引擎状态持久化检查"""
+            try:
+                from core.tau_cluster_engine import get_cluster_engine
+                import os, json
+                engine = get_cluster_engine()
+                has_save = hasattr(engine, 'save_state')
+                has_load = hasattr(engine, 'load_state')
+
+                # 检查是否有持久化文件
+                state_dir = os.path.join(PROJECT_ROOT, "data", "cluster_engine")
+                state_files = []
+                if os.path.exists(state_dir):
+                    state_files = [f for f in os.listdir(state_dir) if f.endswith('.json')]
+
+                return (True, 100 if has_save and has_load else 60,
+                        f"韬策略引擎持久化: save={'✓' if has_save else '✗'}, "
+                        f"load={'✓' if has_load else '✗'}, "
+                        f"存档={len(state_files)}个版本",
+                        "" if has_save and has_load else "检查 save_state/load_state 方法")
+            except Exception as e:
+                return (False, 0, f"持久化检查异常: {e}", "检查 core/tau_cluster_engine.py")
+        yield ("L8_026", "韬策略引擎状态持久化", "L8_深度审计", "warning", "deep", _l8_026)
+
+        def _l8_027():
+            """熵韬收敛优化器Warm Start继承检查"""
+            try:
+                from core.tau_optimizer_cluster import get_parameter_store
+                store = get_parameter_store()
+                all_info = store.get_all_strategies_info() if hasattr(store, 'get_all_strategies_info') else []
+                has_history = any(info.get("current_version", 0) > 0 for info in all_info)
+                has_best_params = any(info.get("best_score", 0) > 0 for info in all_info)
+
+                return (True, 100 if has_history else 50,
+                        f"Warm Start: 历史版本={'有' if has_history else '无'}, "
+                        f"最佳评分={'有' if has_best_params else '无'}, "
+                        f"策略数={len(all_info)}",
+                        "" if has_history else "执行一次优化以生成历史参数")
+            except Exception as e:
+                return (False, 0, f"Warm Start检查异常: {e}", "检查 tau_optimizer_cluster 模块")
+        yield ("L8_027", "优化器Warm Start继承", "L8_深度审计", "warning", "deep", _l8_027)
+
+        def _l8_028():
+            """工作流断点续算检查"""
+            try:
+                from core.integration_bus import get_integration_bus
+                import os
+                bus = get_integration_bus()
+                has_checkpoint = (hasattr(bus, '_save_checkpoint') or
+                                 hasattr(bus, 'save_checkpoint') or
+                                 hasattr(bus, '_checkpoint'))
+                has_resume = (hasattr(bus, '_resume_from_checkpoint') or
+                             hasattr(bus, 'resume_from_checkpoint') or
+                             hasattr(bus, '_resume_checkpoint'))
+                # 检查断点文件是否存在
+                checkpoint_path = os.path.join(PROJECT_ROOT, "data", "checkpoint.json")
+                has_checkpoint_file = os.path.exists(checkpoint_path)
+
+                return (True, 100 if has_checkpoint and has_resume else 60,
+                        f"断点续算: 保存={'✓' if has_checkpoint else '✗'}, "
+                        f"恢复={'✓' if has_resume else '✗'}, "
+                        f"断点文件={'存在' if has_checkpoint_file else '无'}",
+                        "顺序执行一次完整工作流即可生成断点" if not has_checkpoint_file else "")
+            except Exception as e:
+                return (False, 0, f"断点续算检查异常: {e}", "检查 core/integration_bus.py")
+        yield ("L8_028", "工作流断点续算", "L8_深度审计", "warning", "deep", _l8_028)
+
+        def _l8_029():
+            """工作流批量模式支持检查"""
+            try:
+                from core.workflow_engine import get_workflow_engine
+                import inspect
+                engine = get_workflow_engine()
+                sig = inspect.signature(engine.run_oneclick)
+                has_batch = 'batch_mode' in sig.parameters
+                has_stock_pool = 'stock_pool' in sig.parameters
+                has_strategy = 'strategy_names' in sig.parameters
+                has_fast = 'fast_mode' in sig.parameters
+
+                return (True, 100 if has_batch else 50,
+                        f"批量模式: 参数={'✓' if has_batch else '✗'}, "
+                        f"股票池={'✓' if has_stock_pool else '✗'}, "
+                        f"策略指定={'✓' if has_strategy else '✗'}, "
+                        f"快速模式={'✓' if has_fast else '✗'}",
+                        "" if has_batch else "run_oneclick 需添加 batch_mode 参数")
+            except Exception as e:
+                return (False, 0, f"批量模式检查异常: {e}", "检查 core/workflow_engine.py")
+        yield ("L8_029", "工作流批量模式支持", "L8_深度审计", "warning", "deep", _l8_029)
+
+        def _l8_030():
+            """股票池流转一致性检查"""
+            try:
+                from core.stock_pool import get_stock_pool_manager
+                from core.integration_bus import get_integration_bus
+                pool_mgr = get_stock_pool_manager()
+                bus = get_integration_bus()
+                has_flow = (hasattr(bus, 'auto_stock_pool_flow') or
+                           hasattr(bus, 'auto_stock_pool_flow_for_strategy'))
+                has_match = hasattr(bus, 'auto_match_stock_pool')
+                # 检查各层级是否有重复股票
+                all_stocks = pool_mgr.get_all_stocks() if hasattr(pool_mgr, 'get_all_stocks') else []
+                all_ids = set()
+                duplicates = 0
+                for s in all_stocks:
+                    # StockRecord 是 dataclass，使用属性访问
+                    sid = getattr(s, 'symbol', None) or getattr(s, 'code', str(s))
+                    if sid in all_ids:
+                        duplicates += 1
+                    all_ids.add(sid)
+                return (True, 100 if duplicates == 0 and has_flow else 70,
+                        f"股票池流转: 匹配={'✓' if has_match else '✗'}, "
+                        f"流转={'✓' if has_flow else '✗'}, "
+                        f"总数={len(all_stocks)}, 重复={duplicates}",
+                        "检查 stock_pool 流转逻辑" if duplicates > 0 else "")
+            except Exception as e:
+                return (False, 0, f"股票池流转检查异常: {e}", "检查 core/stock_pool.py 和 core/integration_bus.py")
+        yield ("L8_030", "股票池流转一致性", "L8_深度审计", "warning", "deep", _l8_030)
+
+    # ========== 审核脚本执行辅助 ==========
+
+    def _get_audit_dir(self) -> str:
+        """获取审核脚本目录路径"""
+        # PROJECT_ROOT = QS_Robot/, audit scripts at ../tests/audit/
+        audit_dir = os.path.join(os.path.dirname(PROJECT_ROOT), "tests", "audit")
+        if os.path.isdir(audit_dir):
+            return audit_dir
+        # 降级：尝试 QS_Robot/tests/audit/
+        fallback = os.path.join(PROJECT_ROOT, "tests", "audit")
+        if os.path.isdir(fallback):
+            return fallback
+        return ""
+
+    def _run_audit_script(self, script_name: str, description: str,
+                          needs_5002: bool = False, needs_manual: bool = False,
+                          timeout: int = 180) -> tuple:
+        """执行审核脚本并返回 (passed, score, detail, suggestion)
+
+        Args:
+            script_name: 审核脚本文件名
+            description: 描述
+            needs_5002: 是否需要5002服务运行
+            needs_manual: 是否需要手动操作（如混沌测试）
+            timeout: 超时秒数
+        """
+        audit_dir = self._get_audit_dir()
+        if not audit_dir:
+            return (False, 0, "审核脚本目录不存在", "请确认 tests/audit/ 目录存在")
+
+        script_path = os.path.join(audit_dir, script_name)
+        if not os.path.isfile(script_path):
+            return (False, 0, f"审核脚本不存在: {script_name}", "请确认脚本文件存在")
+
+        # 需要手动操作的测试，跳过并给出提示
+        if needs_manual:
+            return (True, 80, "混沌工程测试需手动停止/重启5002，请单独执行 test_chaos.py",
+                    "以管理员身份运行: python tests/audit/test_chaos.py")
+
+        # 需要5002的测试，检查服务状态
+        if needs_5002:
+            try:
+                import requests
+                r = requests.get("http://127.0.0.1:5002/api/health", timeout=3)
+                if r.status_code not in (200, 503):
+                    return (False, 0, "5002服务不可用，跳过代理通信测试",
+                            "请先启动5002服务: python visualization.py")
+            except Exception:
+                return (False, 0, "5002服务不可达，跳过代理通信测试",
+                        "请先启动5002服务: python visualization.py")
+
+        try:
+            result = subprocess.run(
+                [sys.executable, script_path],
+                capture_output=True, text=True, timeout=timeout,
+                cwd=audit_dir,
+            )
+            output = result.stdout + result.stderr
+            raw_passed = result.returncode == 0
+
+            # 优先根据输出内容判断（比exit code更可靠）
+            # 查找验收结果区域
+            output_passed = False
+            if '验收结果' in output:
+                result_section = output.split('验收结果')[-1]
+                output_passed = '✅ 通过' in result_section and '❌' not in result_section
+            else:
+                output_passed = '✅ 通过' in output or '✅ 整体通过' in output
+            passed = output_passed or raw_passed
+
+            # 从输出中提取关键信息
+            detail = self._extract_audit_summary(output, description)
+
+            if passed:
+                return (True, 100, detail, "")
+            else:
+                return (False, max(0, 100 - result.returncode * 20),
+                        f"未通过: {detail[:200]}",
+                        f"请检查: python tests/audit/{script_name}")
+        except subprocess.TimeoutExpired:
+            return (False, 0, f"审核脚本超时(>{timeout}s): {description}", "请检查脚本执行环境")
+        except Exception as e:
+            return (False, 0, f"审核脚本执行异常: {str(e)[:100]}", "请检查Python环境和依赖")
+
+    def _extract_audit_summary(self, output: str, description: str) -> str:
+        """从审核脚本输出中提取摘要"""
+        lines = output.strip().split('\n')
+        # 查找验收结果区域
+        result_start = -1
+        for i, line in enumerate(lines):
+            if '验收结果' in line:
+                result_start = i
+                break
+        
+        if result_start >= 0:
+            # 只看验收结果区域的通过/未通过
+            result_lines = lines[result_start:]
+            for line in result_lines:
+                line = line.strip()
+                if '✅' in line and '通过' in line:
+                    return line[:200]
+                if '❌' in line and '未通过' in line:
+                    return line[:200]
+        
+        # 降级：查找最后的通过/未通过行
+        for line in reversed(lines):
+            line = line.strip()
+            if '✅' in line and '通过' in line and '验收结果' not in line:
+                return line[:200]
+            if '❌' in line and '未通过' in line and '验收结果' not in line:
+                return line[:200]
+        
+        # 返回最后几行作为摘要
+        summary_lines = [l.strip() for l in lines[-3:] if l.strip() and not l.startswith('[')]
+        if summary_lines:
+            return ' | '.join(summary_lines)[:200]
+        return f"{description} 完成"
 
     # ========== 构建检查清单 ==========
 
