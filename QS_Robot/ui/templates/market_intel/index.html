@@ -163,7 +163,8 @@
     <!-- Tab 7: 种子池（金融大师人工/专家评点 → 量化验证 → 实盘池） -->
     <div class="panel" id="tab-seed">
         <h2>🌱 种子池看板<span class="updated" id="seed-time"></span>
-            <button class="refresh-btn" style="float:right" onclick="collectSeedPool()">🔍 一键采集</button>
+            <button class="refresh-btn" style="float:right;margin-left:8px" onclick="collectSeedPool()">🔍 一键采集</button>
+            <button class="refresh-btn" style="float:right" onclick="validateSeedPool()">⚙️ 量化验证</button>
         </h2>
         <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
            金融大师策略股票池 + 专家评点池 → 通过32策略量化验证 → 升级为THS_IWENCAI实盘池
@@ -437,7 +438,7 @@ function collectSeedPool() {
             if (res.success) {
                 const d = res.data;
                 alert(`✅ 采集完成\n\n🎓 金融大师股票池: 采集${d.master_pool.total} → 新增${d.master_pool.added}\n👨‍🏫 专家评点池: 采集${d.expert.total} → 新增${d.expert.added}`);
-                loadSeedPool();  // 刷新看板
+                loadSeedPool();
             } else {
                 alert('❌ 采集失败: ' + (res.error || '未知错误'));
             }
@@ -446,6 +447,42 @@ function collectSeedPool() {
             btn.disabled = false;
             btn.textContent = '🔍 一键采集';
             alert('❌ 采集异常: ' + e);
+        });
+}
+
+function validateSeedPool() {
+    if (!confirm('确认触发种子池量化验证？\n\n将用32策略扫描种子池股票，命中买入信号的股票会升级为实盘池。\n\n注意：K线数据由后端行情模块自动加载，如未提供bars_map则只返回种子池股票列表。')) return;
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ 验证中...';
+    fetch('/market_intel/api/seed_pool/validate', { method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({}) })
+        .then(r => r.json())
+        .then(res => {
+            btn.disabled = false;
+            btn.textContent = '⚙️ 量化验证';
+            if (res.success) {
+                const d = res.data;
+                const msg = `✅ 量化验证完成\n\n种子池总数: ${d.total_seeds}\n命中信号: ${d.validated}\n升级成功: ${d.promoted}\n升级失败: ${d.failed}`;
+                if (d.message) {
+                    alert(msg + `\n\n提示: ${d.message}`);
+                } else if (d.promoted > 0) {
+                    const promotedList = d.details.filter(x => x.passed).slice(0, 5)
+                        .map(x => `  ${x.symbol} ${x.name} → ${x.strategy} (${x.hit_count}策略命中)`).join('\n');
+                    alert(msg + `\n\n升级明细:\n${promotedList}`);
+                } else {
+                    alert(msg);
+                }
+                loadSeedPool();
+            } else {
+                alert('❌ 验证失败: ' + (res.error || '未知错误'));
+            }
+        })
+        .catch(e => {
+            btn.disabled = false;
+            btn.textContent = '⚙️ 量化验证';
+            alert('❌ 验证异常: ' + e);
         });
 }
 

@@ -10,7 +10,7 @@ Aurora UI 内嵌模块 - 不做独立子站
 
 import logging
 from datetime import datetime
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, request
 
 from api.ths_bridge.market_intel import get_market_intel_collector
 
@@ -81,4 +81,24 @@ def api_seed_pool_collect():
                         "fetched_at": datetime.now().isoformat()})
     except Exception as e:
         logger.error("种子池采集失败: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/api/seed_pool/validate", methods=["POST"])
+def api_seed_pool_validate():
+    """触发种子池量化验证：32策略扫描 → 升级流转
+
+    需要请求体提供 bars_map: {symbol: bars_list}，否则只返回种子池股票列表
+    """
+    try:
+        from api.ths_bridge.seed_pool_validator import get_seed_pool_validator
+        validator = get_seed_pool_validator()
+        body = request.get_json(silent=True) or {}
+        bars_map = body.get("bars_map", {})
+        stock_names = body.get("stock_names", {})
+        result = validator.validate_seed_pool(bars_map, stock_names)
+        return jsonify({"success": True, "data": result,
+                        "fetched_at": datetime.now().isoformat()})
+    except Exception as e:
+        logger.error("种子池验证失败: %s", e)
         return jsonify({"success": False, "error": str(e)}), 500
