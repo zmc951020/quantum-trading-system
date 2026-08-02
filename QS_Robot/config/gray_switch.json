@@ -1,0 +1,12 @@
+{
+  "phase": "PHASE_1",
+  "mode": "user_hash",
+  "force_new_strategies": [],
+  "force_old_strategies": [],
+  "force_new_users": [],
+  "circuit_breaker_enabled": true,
+  "max_error_rate": 0.05,
+  "auto_advance": false,
+  "parallel_compare": true,
+  "updated_at": "2026-06-19T02:04:11.972212"
+}
