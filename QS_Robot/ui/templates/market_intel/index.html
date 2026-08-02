@@ -162,7 +162,9 @@
 
     <!-- Tab 7: 种子池（金融大师人工/专家评点 → 量化验证 → 实盘池） -->
     <div class="panel" id="tab-seed">
-        <h2>🌱 种子池看板<span class="updated" id="seed-time"></span></h2>
+        <h2>🌱 种子池看板<span class="updated" id="seed-time"></span>
+            <button class="refresh-btn" style="float:right" onclick="collectSeedPool()">🔍 一键采集</button>
+        </h2>
         <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
            金融大师策略股票池 + 专家评点池 → 通过32策略量化验证 → 升级为THS_IWENCAI实盘池
         </p>
@@ -420,6 +422,31 @@ function loadSeedPool() {
                          expert: { total: 0, pending: 0, promoted: 0, stocks: [] },
                          promoted_to_iwencai: 0 }, '网络异常');
     });
+}
+
+function collectSeedPool() {
+    if (!confirm('确认触发种子池采集？\n• 金融大师股票池：AKShare涨幅榜Top50 + 策略筛选\n• 专家评点：AKShare龙虎榜机构净买入≥3000万')) return;
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ 采集中...';
+    fetch('/market_intel/api/seed_pool/collect', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            btn.disabled = false;
+            btn.textContent = '🔍 一键采集';
+            if (res.success) {
+                const d = res.data;
+                alert(`✅ 采集完成\n\n🎓 金融大师股票池: 采集${d.master_pool.total} → 新增${d.master_pool.added}\n👨‍🏫 专家评点池: 采集${d.expert.total} → 新增${d.expert.added}`);
+                loadSeedPool();  // 刷新看板
+            } else {
+                alert('❌ 采集失败: ' + (res.error || '未知错误'));
+            }
+        })
+        .catch(e => {
+            btn.disabled = false;
+            btn.textContent = '🔍 一键采集';
+            alert('❌ 采集异常: ' + e);
+        });
 }
 
 function renderSeedPool(d, ts) {

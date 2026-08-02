@@ -68,3 +68,17 @@ def api_seed_pool():
             "expert": {"total": 0, "promoted": 0, "pending": 0, "stocks": []},
             "promoted_to_iwencai": 0,
         }})
+
+
+@bp.route("/api/seed_pool/collect", methods=["POST"])
+def api_seed_pool_collect():
+    """触发种子池采集：AKShare涨幅榜+龙虎榜 → 种子池"""
+    try:
+        from api.ths_bridge.seed_pool_collector import get_seed_pool_collector
+        collector = get_seed_pool_collector()
+        result = collector.collect_all()
+        return jsonify({"success": True, "data": result,
+                        "fetched_at": datetime.now().isoformat()})
+    except Exception as e:
+        logger.error("种子池采集失败: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
