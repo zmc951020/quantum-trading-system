@@ -87,3 +87,24 @@ desktop.ini
 *.exe
 *.dll
 *.bat
+
+# 脚本式测试/演示文件（非pytest格式，本地保留不入库）
+# 这些文件用 if __name__ == "__main__" 驱动，非 def test_() 格式
+QS_Robot/tests/test_acceptance.py
+QS_Robot/tests/test_aurora_audit.py
+QS_Robot/tests/test_orchestrate_debug.py
+QS_Robot/tests/test_orchestrate_demo.py
+QS_Robot/tests/test_security_audit.py
+QS_Robot/tests/test_shepherd_import.py
+QS_Robot/tests/test_stress_qlib.py
+
+# 测试运行产物（每次执行生成，不入库）
+QS_Robot/tests/acceptance_report.json
+QS_Robot/tests/audit_output.txt
+QS_Robot/tests/aurora_full_audit_report.json
+QS_Robot/tests/aurora_full_audit_report.md
+QS_Robot/tests/security_audit_report.json
+QS_Robot/tests/stress_test_report.json
+
+# 本地临时脚本目录（开发过程暂存，不入库）
+.tmp_scripts/
