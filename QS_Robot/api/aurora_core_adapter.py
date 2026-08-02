@@ -2141,36 +2141,69 @@ class AuroraCoreAdapter:
     # ========== LLM管理 ==========
 
     def get_llm_models(self) -> Dict:
-        """LLM模型列表 — 从真实LLM管理器获取"""
+        """LLM模型列表 — 并发探测三provider，单provider超时3秒，整体5秒上限"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
         try:
             llm = self._get_llm_manager()
             if llm and llm.providers:
-                models = []
-                for name, provider in llm.providers.items():
+                def _probe(item):
+                    name, provider = item
+                    res = {"name": name, "models": [], "available": False, "model": getattr(provider, 'model', '') or ''}
                     try:
-                        available = provider.get_available_models() if hasattr(provider, 'get_available_models') else []
+                        res["available"] = bool(provider.is_available()) if hasattr(provider, 'is_available') else False
                     except Exception:
-                        available = []
-                    if available:
-                        for m in available:
-                            models.append({
-                                "id": m,
-                                "name": m,
-                                "provider": name,
-                                "status": "available" if provider.is_available() else "unavailable",
-                            })
-                    else:
-                        # 至少显示provider名称
+                        res["available"] = False
+                    try:
+                        if hasattr(provider, 'get_available_models'):
+                            res["models"] = list(provider.get_available_models() or [])
+                    except Exception:
+                        res["models"] = []
+                    return res
+
+                probes: Dict[str, dict] = {}
+                pending_names = list(llm.providers.keys())
+                try:
+                    with ThreadPoolExecutor(max_workers=4) as ex:
+                        futs = {ex.submit(_probe, item): item[0] for item in llm.providers.items()}
+                        for fut in as_completed(futs, timeout=5):
+                            try:
+                                r = fut.result(timeout=3)
+                                probes[r["name"]] = r
+                            except Exception:
+                                pass
+                except _FutTimeout:
+                    logger.warning("[AuroraAdapter] get_llm_models 部分 provider 探测超时，返回已完成部分")
+                # 兜底：未完成的 provider 补占位，避免前端漏展示
+                for pname, prov in llm.providers.items():
+                    if pname not in probes:
+                        probes[pname] = {"name": pname, "models": [], "available": False, "model": getattr(prov, 'model', '') or ''}
+
+                current_model = getattr(llm.active_provider, 'model', '') if llm.active_provider else ''
+                active_name = llm.active_provider.name if llm.active_provider else "none"
+                models = []
+                providers_status = {}
+                for pname, p in probes.items():
+                    providers_status[pname] = {
+                        "available": p["available"],
+                        "model": p["model"],
+                        "name": pname,
+                    }
+                    avail_list = p["models"] if p["models"] else ([p["model"]] if p["model"] else [pname])
+                    for m in avail_list:
                         models.append({
-                            "id": name,
-                            "name": provider.name if hasattr(provider, 'name') else name,
-                            "provider": name,
-                            "status": "available" if provider.is_available() else "unavailable",
+                            "id": m,
+                            "name": m,
+                            "provider": pname,
+                            "status": "available" if p["available"] else "unavailable",
+                            "is_active": (m == current_model) and (pname == active_name),
                         })
-                active = llm.active_provider.name if llm.active_provider else "none"
+
                 return {"success": True, "data": {
                     "models": models,
-                    "active_provider": active,
+                    "active_provider": active_name,
+                    "current_model": current_model,
+                    "current_provider": active_name,
+                    "providers_status": providers_status,
                     "source": "LLM管理器",
                 }}
         except Exception as e:
@@ -2217,21 +2250,58 @@ class AuroraCoreAdapter:
         return {"success": True, "data": {"model": model, "message": f"已切换到 {model}（本地模式）", "source": "QS_Robot本地"}}
 
     def get_llm_config(self) -> Dict:
-        """LLM配置 — 从真实LLM管理器获取"""
+        """LLM配置 — 并发探测三provider可用性，对齐前端 model_switch.html 字段"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         try:
             llm = self._get_llm_manager()
             if llm:
+                ap = llm.active_provider
+                current_model = getattr(ap, 'model', '') if ap else 'gpt-4o'
+                current_provider = getattr(ap, 'name', 'none') if ap else 'none'
+
+                def _probe_avail(item):
+                    pname, prov = item
+                    try:
+                        avail = bool(prov.is_available()) if hasattr(prov, 'is_available') else False
+                    except Exception:
+                        avail = False
+                    return pname, {"available": avail, "model": getattr(prov, 'model', '') or '', "name": pname}
+
+                providers_status: Dict[str, dict] = {}
+                if llm.providers:
+                    try:
+                        with ThreadPoolExecutor(max_workers=4) as ex:
+                            futs = [ex.submit(_probe_avail, item) for item in llm.providers.items()]
+                            for fut in as_completed(futs, timeout=5):
+                                try:
+                                    pn, ps = fut.result(timeout=3)
+                                    providers_status[pn] = ps
+                                except Exception:
+                                    pass
+                    except Exception:
+                        logger.warning("[AuroraAdapter] get_llm_config 部分 provider 探测超时")
+                    # 兜底：未完成的 provider 补占位
+                    for pname, prov in llm.providers.items():
+                        if pname not in providers_status:
+                            providers_status[pname] = {"available": False, "model": getattr(prov, 'model', '') or '', "name": pname}
+
                 return {"success": True, "data": {
-                    "default_model": llm.active_provider.model if llm.active_provider else "gpt-4o",
-                    "active_provider": llm.active_provider.name if llm.active_provider else "none",
-                    "available_providers": list(llm.providers.keys()),
-                    "provider": "EchoBird" if "echobird" in llm.providers else "Ollama",
+                    "default_model": current_model,
+                    "current_model": current_model,
+                    "active_provider": current_provider,
+                    "current_provider": current_provider,
+                    "available_providers": list(llm.providers.keys()) if llm.providers else [],
+                    "providers_status": providers_status,
+                    "provider": current_provider,
                     "source": "QS_Robot本地",
                 }}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 获取LLM配置失败: {e}")
         return {"success": True, "data": {
-            "default_model": "gpt-4o", "temperature": 0.7, "max_tokens": 4096,
+            "default_model": "gpt-4o",
+            "current_model": "gpt-4o",
+            "current_provider": "EchoBird",
+            "providers_status": {},
             "provider": "EchoBird", "source": "QS_Robot本地",
         }}
 

@@ -39,6 +39,34 @@ data/
 *.db
 *.sqlite3
 
+# 运行时产物
+logs/
+node_modules/
+qlib_data/
+reports/
+test_results/
+*.log.bak.*
+alerts.json
+fund_state.json
+cookies.txt
+audit.log.bak.*
+
+# 临时验证脚本（开发过程一次性脚本，不入库）
+_*.py
+_*.ps1
+check_*.py
+check_*.ps1
+diagnose_*.py
+verify_*.py
+aurora_core_path.py
+# 根目录与QS_Robot根目录的test_*.py为临时验证脚本(正式测试在tests/目录)
+/test_*.py
+/QS_Robot/test_*.py
+/add_gyro_strategy.py
+/confirm_save.py
+/gyro_minute_strategy_v61_generated.py
+/migrate_v61.py
+
 # IDE
 .vscode/
 .idea/

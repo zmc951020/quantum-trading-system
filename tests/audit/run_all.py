@@ -35,11 +35,11 @@ def run_script(script_name: str, description: str, needs_service: bool) -> dict:
 
     if needs_service:
         print(f"  ⚠️ 此测试需要 5002 服务运行中")
-        # 检查服务是否可用
+        # 检查服务是否可用（200=健康, 503=降级但可用）
         try:
             import requests
             r = requests.get("http://127.0.0.1:5002/api/health", timeout=3)
-            if r.status_code != 200:
+            if r.status_code not in (200, 503):
                 print(f"  ⚠️ 5002 服务不可用，跳过此测试")
                 return {"script": script_name, "success": None, "skipped": True, "reason": "5002服务不可用"}
         except Exception:

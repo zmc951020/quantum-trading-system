@@ -21,6 +21,11 @@ audit.log
 *.audit.log
 ip_whitelist.json
 
+# HMAC密钥（审计日志签名密钥，泄露后可伪造审计日志）
+.secrets/
+*.hmac_key
+audit_hmac_key
+
 # SQLite数据库
 *.db
 *.sqlite

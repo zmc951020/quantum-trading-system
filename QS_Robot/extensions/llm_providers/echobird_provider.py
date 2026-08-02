@@ -93,7 +93,7 @@ class EchoBirdProvider(BaseLLMProvider):
             headers = {}
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
-            resp = requests.get(url, headers=headers, timeout=3)
+            resp = requests.get(url, headers=headers, timeout=1)
             return resp.status_code == 200
         except Exception:
             return False

@@ -6,6 +6,7 @@ import atexit
 import signal
 import time
 import urllib.request
+import urllib.error
 import json as _json
 from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, send_from_directory, redirect, url_for, make_response
@@ -159,6 +160,37 @@ except ImportError as e:
     print(f"[API Gateway] API网关导入失败: {e}")
 except Exception as e:
     print(f"[API Gateway] API网关注册失败: {e}")
+
+
+# ============================================================
+# 注册同花顺金融大师学院蓝图
+# ============================================================
+try:
+    from ui.blueprints.ths_academy_bp import bp as ths_academy_bp
+    app.register_blueprint(ths_academy_bp)
+    print("[THS Academy] 同花顺学院已注册: /ths_academy/")
+    print("[THS Academy] - /ths_academy/ -> 学院首页")
+    print("[THS Academy] - /ths_academy/strategies -> 14策略+18战法")
+    print("[THS Academy] - /ths_academy/source_compare -> 三类选股对比")
+except ImportError as e:
+    print(f"[THS Academy] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[THS Academy] 蓝图注册失败: {e}")
+
+
+# ============================================================
+# 注册市场情报看板蓝图（单页Tab模式，Aurora UI内嵌模块）
+# ============================================================
+try:
+    from ui.blueprints.market_intel_bp import bp as market_intel_bp
+    app.register_blueprint(market_intel_bp)
+    print("[Market Intel] 市场情报看板已注册: /market_intel/")
+    print("[Market Intel] - /market_intel/ -> 单页Tab(综合/热点/大盘/资金/板块/情绪)")
+    print("[Market Intel] - /market_intel/api/all -> 全部情报JSON")
+except ImportError as e:
+    print(f"[Market Intel] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[Market Intel] 蓝图注册失败: {e}")
 
 
 @app.route('/dashboard')
@@ -387,17 +419,17 @@ def main_system_page():
 
 @app.route('/aurora_main')
 def aurora_main_page():
-    """Aurora 量化主系统 - 策略管理核心、优化器中心、完整工作流"""
+    """Aurora 量化主系统 - 策略管理核心、优化器中心、完整工作流（用户主入口）"""
     # 临时跳过登录验证
     # if not is_logged_in():
     #     return redirect(url_for('login_page'))
-    return render_template('aurora_main.html')
+    return render_template('aurora_main.html', entry_mode='main', entry_title='Aurora 主系统')
 
 
 @app.route('/aurora_core')
 def aurora_core_page():
-    """Aurora 量化核心系统 - 备用入口"""
-    return render_template('aurora_main.html')
+    """Aurora 量化内核 - API直连调试入口（开发者/运维使用，直连5002内核）"""
+    return render_template('aurora_main.html', entry_mode='core', entry_title='Aurora 内核直连')
 
 
 @app.route('/maintenance')
@@ -2192,59 +2224,139 @@ LLM_CONFIG = {
     'current_model': 'gpt-4o'
 }
 
+
+_LLM_CACHE = {"ts": 0, "models": [], "providers_status": {}, "current_model": "", "current_provider": "none"}
+_LLM_CACHE_TTL = 30  # 缓存30秒，避免高频探测拖慢响应
+
+def _sync_llm_config_from_manager():
+    """从 llm_manager.active_provider 同步当前模型到 LLM_CONFIG（并发探测，2秒超时）"""
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
+    try:
+        ap = llm_manager.active_provider if llm_manager else None
+        if ap is not None:
+            model = getattr(ap, 'model', None) or LLM_CONFIG['current_model']
+            LLM_CONFIG['current_model'] = model
+            LLM_CONFIG['current_provider'] = getattr(ap, 'name', 'unknown')
+        else:
+            LLM_CONFIG['current_provider'] = 'none'
+
+        providers = llm_manager.providers.items() if llm_manager else []
+        def _probe(item):
+            name, p = item
+            try:
+                avail = bool(p.is_available())
+            except Exception:
+                avail = False
+            return name, {'available': avail, 'model': getattr(p, 'model', ''), 'name': getattr(p, 'name', name)}
+
+        providers_status = {}
+        if providers:
+            try:
+                with ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = [ex.submit(_probe, item) for item in providers]
+                    for fut in as_completed(futs, timeout=2):
+                        try:
+                            n, s = fut.result(timeout=1)
+                            providers_status[n] = s
+                        except Exception:
+                            pass
+            except _FutTimeout:
+                pass
+            for name, p in providers:
+                if name not in providers_status:
+                    providers_status[name] = {'available': False, 'model': getattr(p, 'model', ''), 'name': name}
+        LLM_CONFIG['providers_status'] = providers_status
+    except Exception as e:
+        import logging as _lg
+        _lg.getLogger(__name__).warning(f"[LLM] 同步llm_manager状态失败: {e}")
+
+
 @app.route('/api/llm/models', methods=['GET'])
 def api_llm_models():
-    """获取可用模型列表 - 从llm_manager动态获取"""
+    """获取可用模型列表 - 并发探测provider(2秒超时)，缓存30秒，超时降级默认列表"""
+    import time as _time
     try:
-        # 尝试从EchoBird提供者获取动态模型列表
-        echobird_provider = llm_manager.get_provider('echobird')
-        dynamic_models = []
+        now = _time.time()
+        # 缓存有效期内直接返回
+        if _LLM_CACHE["models"] and (now - _LLM_CACHE["ts"]) < _LLM_CACHE_TTL:
+            return jsonify({
+                "success": True,
+                "models": _LLM_CACHE["models"],
+                "current_model": _LLM_CACHE["current_model"],
+                "current_provider": _LLM_CACHE["current_provider"],
+                "providers_status": _LLM_CACHE["providers_status"],
+                "message": "模型列表加载成功(缓存)"
+            })
 
-        if echobird_provider:
-            # 检查EchoBird服务是否可用
-            is_available = echobird_provider.is_available()
+        # 并发同步（2秒超时）
+        _sync_llm_config_from_manager()
 
-            if is_available:
-                # 从EchoBird服务获取实际可用的模型列表
-                available_models = echobird_provider.get_available_models()
+        all_models = []
+        providers_status = LLM_CONFIG.get('providers_status', {})
+        current_model = LLM_CONFIG['current_model']
 
-                # 如果获取到了模型列表，使用动态列表
-                if available_models:
-                    current_model = llm_manager.active_provider.model if llm_manager.active_provider else LLM_CONFIG['current_model']
-
-                    for model_name in available_models:
-                        # 根据模型名称推断描述信息
-                        desc = _get_model_description(model_name)
-                        dynamic_models.append({
-                            "name": model_name,
-                            "provider": "EchoBird",
-                            "description": desc,
+        if llm_manager and llm_manager.providers:
+            from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
+            def _probe_models(item):
+                prov_name, prov = item
+                models = []
+                try:
+                    available_models = []
+                    if hasattr(prov, 'get_available_models'):
+                        available_models = prov.get_available_models() or []
+                    if not available_models:
+                        m = getattr(prov, 'model', '')
+                        if m:
+                            available_models = [m]
+                    for m in available_models:
+                        models.append({
+                            "name": m,
+                            "provider": getattr(prov, 'name', prov_name).capitalize(),
+                            "description": _get_model_description(m),
                             "context": "动态",
                             "performance": "动态",
-                            "price": "动态",
-                            "is_active": model_name == current_model
+                            "price": "动态" if prov_name != 'ollama' else "免费",
+                            "is_active": (m == current_model) and (prov == llm_manager.active_provider)
                         })
+                except Exception:
+                    pass
+                return models
+            try:
+                with ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = [ex.submit(_probe_models, item) for item in llm_manager.providers.items()]
+                    for fut in as_completed(futs, timeout=2):
+                        try:
+                            all_models.extend(fut.result(timeout=1))
+                        except Exception:
+                            pass
+            except _FutTimeout:
+                pass
 
-        # 如果动态获取失败，使用默认列表
-        if not dynamic_models:
-            current_model = LLM_CONFIG['current_model']
-            dynamic_models = [
-                {"name": "gpt-4o", "provider": "EchoBird", "description": "GPT-4o 高性能模型，适合复杂推理和量化分析", "context": "128K", "performance": "高", "price": "中", "is_active": current_model == 'gpt-4o'},
-                {"name": "gpt-4", "provider": "EchoBird", "description": "GPT-4 旗舰模型，最强推理能力", "context": "8K", "performance": "极高", "price": "高", "is_active": current_model == 'gpt-4'},
-                {"name": "gpt-3.5-turbo", "provider": "EchoBird", "description": "GPT-3.5 Turbo，性价比之选", "context": "16K", "performance": "中", "price": "低", "is_active": current_model == 'gpt-3.5-turbo'},
-                {"name": "claude-3-opus", "provider": "EchoBird", "description": "Claude 3 Opus，超长上下文", "context": "200K", "performance": "极高", "price": "高", "is_active": current_model == 'claude-3-opus'},
-                {"name": "claude-3-sonnet", "provider": "EchoBird", "description": "Claude 3 Sonnet，平衡性能与成本", "context": "200K", "performance": "高", "price": "中", "is_active": current_model == 'claude-3-sonnet'},
-                {"name": "gemini-1.5-pro", "provider": "EchoBird", "description": "Gemini 1.5 Pro，多模态能力强", "context": "1M", "performance": "极高", "price": "高", "is_active": current_model == 'gemini-1.5-pro'},
-                {"name": "deepseek-chat", "provider": "EchoBird", "description": "深度求索开源模型，量化专用", "context": "64K", "performance": "中", "price": "免费", "is_active": current_model == 'deepseek-chat'},
-                {"name": "qwen-max", "provider": "EchoBird", "description": "通义千问 Max，中文优化", "context": "128K", "performance": "高", "price": "中", "is_active": current_model == 'qwen-max'},
+        # 若三个provider都拿不到模型，使用默认列表（向后兼容）
+        if not all_models:
+            default_provider = "EchoBird"
+            default_list = [
+                ("gpt-4o", "GPT-4o 高性能模型，适合复杂推理和量化分析", "128K", "高", "中"),
+                ("gpt-4", "GPT-4 旗舰模型，最强推理能力", "8K", "极高", "高"),
+                ("gpt-3.5-turbo", "GPT-3.5 Turbo，性价比之选", "16K", "中", "低"),
+                ("claude-3-5-sonnet", "Claude 3.5 Sonnet，平衡性能与成本", "200K", "高", "中"),
+                ("qwen2.5-coder", "通义千问代码模型，本地Ollama", "32K", "中", "免费"),
+                ("deepseek-chat", "深度求索开源模型，量化专用", "64K", "中", "免费"),
             ]
+            for name, desc, ctx, perf, price in default_list:
+                all_models.append({
+                    "name": name, "provider": default_provider, "description": desc,
+                    "context": ctx, "performance": perf, "price": price,
+                    "is_active": name == current_model
+                })
 
         return jsonify({
             "success": True,
-            "models": dynamic_models,
+            "models": all_models,
             "current_model": LLM_CONFIG['current_model'],
-            "provider": "EchoBird",
-            "echobird_available": echobird_provider.is_available() if echobird_provider else False,
+            "current_provider": LLM_CONFIG.get('current_provider', 'unknown'),
+            "providers_status": providers_status or LLM_CONFIG.get('providers_status', {}),
             "message": "模型列表加载成功"
         })
     except Exception as e:
@@ -2325,19 +2437,35 @@ def api_llm_config():
     """获取或保存LLM配置"""
     try:
         if request.method == 'GET':
+            _sync_llm_config_from_manager()
             return jsonify({
                 "success": True,
                 "auto_switch": LLM_CONFIG['auto_switch'],
                 "quant_model": LLM_CONFIG['quant_model'],
                 "code_model": LLM_CONFIG['code_model'],
-                "current_model": LLM_CONFIG['current_model']
+                "current_model": LLM_CONFIG['current_model'],
+                "current_provider": LLM_CONFIG.get('current_provider', 'unknown'),
+                "providers_status": LLM_CONFIG.get('providers_status', {})
             })
         else:
             data = request.get_json()
             LLM_CONFIG['auto_switch'] = data.get('auto_switch', False)
             LLM_CONFIG['quant_model'] = data.get('quant_model', '')
             LLM_CONFIG['code_model'] = data.get('code_model', '')
-            
+
+            # 若指定了 quant_model/code_model，尝试在llm_manager侧激活对应provider
+            target_model = LLM_CONFIG.get('quant_model') or LLM_CONFIG.get('code_model')
+            if target_model and llm_manager:
+                try:
+                    # 优先按模型名匹配provider
+                    for prov_name, prov in llm_manager.providers.items():
+                        if getattr(prov, 'model', None) == target_model:
+                            llm_manager.set_active_provider(prov_name)
+                            break
+                    llm_manager.set_model(target_model)
+                except Exception:
+                    pass
+
             return jsonify({
                 "success": True,
                 "message": "配置保存成功",
@@ -2351,21 +2479,42 @@ def api_llm_config():
 
 @app.route('/api/cline/chat', methods=['POST'])
 def api_cline_chat():
-    """Cline智能体聊天接口"""
+    """Cline智能体聊天接口 - 优先走Cline provider，回退到robot_core命令路由"""
     try:
         data = request.get_json()
         user_message = data.get('message', '')
-        
+
         if not user_message:
             return jsonify({"success": False, "error": "消息内容不能为空"}), 400
-        
-        response = robot_core.process_command(user_message)
-        
+
+        # 同步当前 LLM 状态，确保返回信息真实
+        _sync_llm_config_from_manager()
+
+        # 优先：如果当前激活的 provider 是 cline，直接走 ClineAgentProvider
+        used_provider = LLM_CONFIG.get('current_provider', 'unknown')
+        used_model = LLM_CONFIG['current_model']
+        response_text = None
+
+        if llm_manager and llm_manager.active_provider is not None:
+            prov_name = getattr(llm_manager.active_provider, 'name', '')
+            if prov_name == 'cline':
+                try:
+                    messages = [{"role": "user", "content": user_message}]
+                    response_text = llm_manager.active_provider.chat(messages, stream=False)
+                except Exception as ce:
+                    # Cline 失败 → 回退到 robot_core 命令路由
+                    print(f"[Cline] provider调用失败，回退到robot_core: {ce}")
+                    response_text = None
+
+        # 回退：通过 robot_core 命令路由处理（含韬定律总线/策略/回测/风控等关键词）
+        if response_text is None:
+            response_text = robot_core.process_command(user_message)
+
         return jsonify({
             "success": True,
-            "response": response,
-            "model": LLM_CONFIG['current_model'],
-            "provider": "EchoBird"
+            "response": response_text,
+            "model": used_model,
+            "provider": used_provider
         })
     except Exception as e:
         import traceback
@@ -2704,7 +2853,7 @@ def launch_desktop():
 _aurora_process = None
 _AURORA_PORT = 5002
 _AURORA_HEALTH_URL = f"http://127.0.0.1:{_AURORA_PORT}/api/health"
-_AURORA_STARTUP_TIMEOUT = 60  # 最大等待时间（秒）
+_AURORA_STARTUP_TIMEOUT = 180  # 最大等待时间（秒）—— visualization.py 加载39个策略需要较长时间
 
 
 def _get_aurora_path() -> str:
@@ -2721,12 +2870,21 @@ def _get_aurora_path() -> str:
 
 
 def _is_aurora_running() -> bool:
-    """检查 5002 是否健康运行（仅以 /api/health 端点响应为准）"""
+    """检查 5002 是否健康运行（仅以 /api/health 端点响应为准）
+
+    判定标准：
+    - 200 = healthy（所有组件健康）→ 运行中
+    - 503 = degraded（部分组件降级，但服务在运行）→ 运行中
+    - 其他状态（404/500/超时等）→ 未运行或异常
+    """
     try:
         req = urllib.request.Request(_AURORA_HEALTH_URL, method='GET')
         req.add_header('User-Agent', 'QS-Robot-Startup-Check')
         with urllib.request.urlopen(req, timeout=3) as resp:
-            return resp.status == 200
+            return resp.status in (200, 503)
+    except urllib.error.HTTPError as e:
+        # 503 属于 HTTPError，需单独捕获：服务在运行但组件降级
+        return e.code == 503
     except Exception:
         return False
 
@@ -2823,10 +2981,15 @@ def _start_aurora_backend() -> bool:
 
     try:
         # 启动 Aurora 子进程
+        # 注意：不能用 stdout=PIPE，否则 PIPE 缓冲区满后子进程会阻塞在 print 上
+        # 改为重定向到日志文件，避免阻塞，且便于排查问题
+        aurora_log_path = os.path.join(aurora_path, 'logs', 'aurora_5002_stdout.log')
+        os.makedirs(os.path.dirname(aurora_log_path), exist_ok=True)
+        aurora_log_file = open(aurora_log_path, 'a', encoding='utf-8', buffering=1)
         _aurora_process = subprocess.Popen(
             [sys.executable, 'visualization.py'],
             cwd=aurora_path,
-            stdout=subprocess.PIPE,
+            stdout=aurora_log_file,
             stderr=subprocess.STDOUT,
             text=True,
             encoding='utf-8',
@@ -2847,10 +3010,12 @@ def _start_aurora_backend() -> bool:
                 exit_code = _aurora_process.returncode
                 print(f"[Aurora] 5002 进程异常退出 (exit_code={exit_code})")
                 try:
-                    stdout, _ = _aurora_process.communicate(timeout=1)
-                    if stdout:
-                        for line in stdout.strip().split('\n')[-5:]:
-                            print(f"  {line}")
+                    aurora_log_file.flush()
+                    with open(aurora_log_path, 'r', encoding='utf-8', errors='replace') as f:
+                        lines = f.readlines()
+                    if lines:
+                        for line in lines[-5:]:
+                            print(f"  {line.rstrip()}")
                 except Exception:
                     pass
                 _aurora_process = None

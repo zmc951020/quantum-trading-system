@@ -320,15 +320,20 @@
             <a href="/model-switch" class="nav-link">🔄 模型切换</a>
             <a href="/chat" class="nav-link">💬 智能助手</a>
             <a href="/maintenance" class="nav-link">🔧 系统维护</a>
+            <a href="/ths_academy/" class="nav-link">🎓 金融大师学院</a>
+            <a href="/market_intel/" class="nav-link">📊 市场情报</a>
         </div>
     </nav>
 
     <!-- 主内容区 -->
     <div class="main-content">
-        <!-- 页面标题 -->
+        <!-- 页面标题（由后端 entry_mode/entry_title 动态控制）-->
         <div class="page-header">
-            <h1 class="page-title">Aurora 量化主系统</h1>
-            <p class="page-subtitle">策略管理核心 · 优化器中心 · 完整工作流</p>
+            <h1 class="page-title">{{ entry_title | default('Aurora 量化主系统') }}
+                {% if entry_mode == 'core' %}<span style="font-size:14px; color:#f59e0b; padding:4px 10px; border:1px solid #f59e0b; border-radius:6px; margin-left:12px; vertical-align:middle;">🔧 内核直连模式</span>{% endif %}
+                {% if entry_mode == 'main' %}<span style="font-size:14px; color:#10b981; padding:4px 10px; border:1px solid #10b981; border-radius:6px; margin-left:12px; vertical-align:middle;">✅ 完整工作流</span>{% endif %}
+            </h1>
+            <p class="page-subtitle">{% if entry_mode == 'core' %}直连 Aurora 5002 内核 API · 调试/运维专用 · 不经过外壳封装{% else %}策略管理核心 · 优化器中心 · 完整工作流{% endif %}</p>
         </div>
 
         <!-- 核心模块入口 -->

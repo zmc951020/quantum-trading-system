@@ -179,16 +179,69 @@ class PasswordManager:
 
 class AuditLogger:
     """操作审计日志管理器（带HMAC防篡改签名）"""
-    
-    _HMAC_KEY = None  # 类级签名密钥（首次使用时自动生成）
-    
+
+    _HMAC_KEY = None  # 类级签名密钥（持久化，跨重启可验证）
+    # 密钥持久化文件：默认放在 QS_Robot 根目录的 .secrets/ 下
+    _KEY_FILE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        '.secrets', 'audit_hmac_key'
+    )
+    # 迁移标记文件：标记密钥迁移已完成，之后无签名日志视为篡改
+    _MIGRATED_FILE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        '.secrets', 'audit_migrated'
+    )
+
     def __init__(self, log_file: str = "audit.log"):
         self._log_file = log_file
         self._logs: List[AuditLog] = []
-        self._load_logs()
-        # 初始化HMAC密钥
+        # 先初始化HMAC密钥（持久化），再加载历史日志做签名验证
         if AuditLogger._HMAC_KEY is None:
-            AuditLogger._HMAC_KEY = secrets.token_bytes(32)
+            AuditLogger._HMAC_KEY = AuditLogger._load_or_create_hmac_key()
+        self._load_logs()
+
+    @classmethod
+    def _load_or_create_hmac_key(cls) -> bytes:
+        """加载或创建HMAC密钥（持久化，确保跨重启可验证历史日志）
+
+        优先级：
+        1. 环境变量 AUDIT_HMAC_KEY（运维显式指定，不写文件）
+        2. 持久化密钥文件（跨重启复用）
+        3. 生成新密钥并持久化到文件
+        """
+        # 1. 环境变量优先
+        env_key = os.environ.get('AUDIT_HMAC_KEY')
+        if env_key:
+            key_bytes = env_key.encode('utf-8')
+            if len(key_bytes) < 32:
+                key_bytes = key_bytes.ljust(32, b'\0')
+            return key_bytes[:32]
+        # 2. 从持久化文件加载
+        try:
+            if os.path.exists(cls._KEY_FILE):
+                with open(cls._KEY_FILE, 'rb') as f:
+                    key_bytes = f.read()
+                if len(key_bytes) >= 32:
+                    return key_bytes[:32]
+        except OSError as e:
+            logger.warning(f"读取HMAC密钥文件失败: {e}")
+        # 3. 生成新密钥并持久化
+        new_key = secrets.token_bytes(32)
+        try:
+            key_dir = os.path.dirname(cls._KEY_FILE)
+            if key_dir and not os.path.exists(key_dir):
+                os.makedirs(key_dir, exist_ok=True)
+            with open(cls._KEY_FILE, 'wb') as f:
+                f.write(new_key)
+            # 限制文件权限（仅所有者可读写）
+            try:
+                os.chmod(cls._KEY_FILE, 0o600)
+            except (OSError, AttributeError):
+                pass  # Windows不支持chmod，忽略
+            logger.info("已生成并持久化审计HMAC密钥")
+        except OSError as e:
+            logger.warning(f"持久化HMAC密钥失败（仅本次会话有效）: {e}")
+        return new_key
     
     def _sign_entry(self, data: dict) -> str:
         """对审计日志条目进行HMAC-SHA256签名"""
@@ -201,26 +254,78 @@ class AuditLogger:
         expected = hmac.new(AuditLogger._HMAC_KEY, raw, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
     
+    def _is_migrated(self) -> bool:
+        """检查密钥迁移是否已完成（迁移标记文件存在）"""
+        return os.path.exists(AuditLogger._MIGRATED_FILE)
+
+    def _mark_migrated(self):
+        """标记密钥迁移已完成"""
+        try:
+            key_dir = os.path.dirname(AuditLogger._MIGRATED_FILE)
+            if key_dir and not os.path.exists(key_dir):
+                os.makedirs(key_dir, exist_ok=True)
+            with open(AuditLogger._MIGRATED_FILE, 'w', encoding='utf-8') as f:
+                f.write(datetime.now().isoformat())
+        except OSError as e:
+            logger.warning(f"创建迁移标记文件失败: {e}")
+
     def _load_logs(self):
-        """加载历史日志（含签名验证）"""
-        if os.path.exists(self._log_file):
-            tampered = 0
-            try:
-                with open(self._log_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            entry = json.loads(line)
-                            sig = entry.pop('_sig', None)
-                            if sig and not self._verify_entry(entry, sig):
-                                tampered += 1
-                                logger.warning(f"审计日志条目签名验证失败，可能被篡改")
-                                continue
+        """加载历史日志（含签名验证）
+
+        迁移期容忍策略：
+          - .migrated 标记不存在 → 密钥迁移期
+            * 无 _sig → WARNING（历史日志，待补签）
+            * _sig 验证失败 → WARNING（密钥迁移期日志，待补签）
+          - .migrated 标记存在 → 严格模式
+            * 无 _sig → ERROR（篡改）
+            * _sig 验证失败 → ERROR（篡改）
+        """
+        if not os.path.exists(self._log_file):
+            return
+        migrated = self._is_migrated()
+        legacy_count = 0
+        tampered = 0
+        try:
+            with open(self._log_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"审计日志行JSON解析失败: {e}")
+                        continue
+                    sig = entry.pop('_sig', None)
+                    if sig is None:
+                        # 无签名
+                        if migrated:
+                            tampered += 1
+                            logger.error(f"审计日志条目无签名（迁移后视为篡改）")
+                            continue
+                        else:
+                            legacy_count += 1
+                            logger.info(f"历史日志条目（无签名），待补签")
                             self._logs.append(AuditLog(**entry))
-            except Exception as e:
-                logger.error(f"加载审计日志失败: {e}")
-            if tampered > 0:
-                logger.error(f"发现 {tampered} 条审计日志签名不匹配")
+                            continue
+                    # 有签名
+                    if not self._verify_entry(entry, sig):
+                        if migrated:
+                            tampered += 1
+                            logger.error(f"审计日志条目签名验证失败，可能被篡改")
+                            continue
+                        else:
+                            legacy_count += 1
+                            logger.warning(f"密钥迁移期日志签名验证失败，待补签")
+                            self._logs.append(AuditLog(**entry))
+                            continue
+                    self._logs.append(AuditLog(**entry))
+        except Exception as e:
+            logger.error(f"加载审计日志失败: {e}")
+        if legacy_count > 0 and not migrated:
+            logger.warning(f"发现 {legacy_count} 条密钥迁移期日志（无签名或签名失效），建议调用 re_sign_legacy_logs()")
+        if tampered > 0:
+            logger.error(f"发现 {tampered} 条审计日志签名不匹配（疑似篡改）")
     
     def log(self, user: str, operation: OperationType, target: str,
             result: str = "success", details: Dict = None,
@@ -236,9 +341,9 @@ class AuditLogger:
             ip_address=ip_address,
             session_id=session_id
         )
-        
+
         self._logs.append(log_entry)
-        
+
         # 写入文件（带HMAC签名）
         try:
             data = log_entry.__dict__
@@ -247,10 +352,73 @@ class AuditLogger:
                 f.write(json.dumps(data, ensure_ascii=False) + '\n')
         except Exception as e:
             logger.error(f"写入审计日志失败: {e}")
-        
+
         # 保持日志数量限制
         if len(self._logs) > 10000:
             self._logs = self._logs[-5000:]
+
+    def re_sign_legacy_logs(self) -> int:
+        """用当前密钥为所有无签名或签名失效的历史日志重新签名
+
+        场景：密钥迁移后，旧日志签名无法验证。调用本方法：
+          1. 备份原日志到 <log_file>.bak.<timestamp>
+          2. 读取所有条目，剥离旧签名
+          3. 用当前密钥重新签名并覆盖原文件
+          4. 创建 .migrated 标记文件，之后严格模式生效
+
+        Returns:
+            重新签名的条目数
+        """
+        if not os.path.exists(self._log_file):
+            self._mark_migrated()
+            return 0
+
+        # 1. 备份原日志
+        timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
+        backup_path = f"{self._log_file}.bak.{timestamp_str}"
+        try:
+            import shutil
+            shutil.copy2(self._log_file, backup_path)
+            logger.info(f"已备份原审计日志到: {backup_path}")
+        except OSError as e:
+            logger.error(f"备份审计日志失败，中止迁移: {e}")
+            return 0
+
+        # 2. 读取所有条目（剥离 _sig），重新签名
+        re_signed = 0
+        new_lines = []
+        try:
+            with open(self._log_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    entry.pop('_sig', None)  # 移除旧签名
+                    # 重新签名（用当前密钥）
+                    entry['_sig'] = self._sign_entry(entry)
+                    new_lines.append(json.dumps(entry, ensure_ascii=False))
+                    re_signed += 1
+        except Exception as e:
+            logger.error(f"读取审计日志失败，迁移中止: {e}")
+            return 0
+
+        # 3. 覆盖原文件
+        try:
+            with open(self._log_file, 'w', encoding='utf-8') as f:
+                for line in new_lines:
+                    f.write(line + '\n')
+        except OSError as e:
+            logger.error(f"写入迁移后审计日志失败: {e}")
+            return 0
+
+        # 4. 创建迁移标记
+        self._mark_migrated()
+        logger.info(f"已完成密钥迁移：重新签名 {re_signed} 条审计日志，创建迁移标记")
+        return re_signed
     
     def get_logs(self, user: str = None, operation: OperationType = None,
                  limit: int = 100) -> List[AuditLog]:

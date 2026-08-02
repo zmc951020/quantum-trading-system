@@ -2457,7 +2457,7 @@ def risk_control_status():
 
 @api_gateway.route('/broker-pool', methods=['GET'])
 @require_auth
-def broker_pool():
+def external_broker_pool():
     """券商池 — 代理到5002"""
     try:
         import requests as req
@@ -2465,3 +2465,167 @@ def broker_pool():
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================================
+# 一键选股自动化工作流
+# ============================================================
+
+@api_gateway.route('/workflow/status', methods=['GET'])
+@require_auth
+def workflow_status():
+    """获取工作流运行状态"""
+    try:
+        from core.workflow_engine import get_workflow_engine
+        engine = get_workflow_engine()
+        return jsonify(APIResponse.success(engine.get_status()))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+@api_gateway.route('/workflow/run', methods=['POST'])
+@require_auth
+@sanitize_input
+def workflow_run():
+    """一键执行选股工作流"""
+    try:
+        from core.workflow_engine import get_workflow_engine
+        engine = get_workflow_engine()
+
+        data = request.get_json(silent=True) or {}
+        stock_pool = data.get("stock_pool", None)
+        strategy_names = data.get("strategies", None)
+        fast_mode = data.get("fast_mode", False)
+        batch_mode = data.get("batch_mode", False)
+
+        import threading
+        def _run():
+            engine.run_oneclick(
+                stock_pool=stock_pool,
+                strategy_names=strategy_names,
+                fast_mode=fast_mode,
+                batch_mode=batch_mode,
+            )
+
+        threading.Thread(target=_run, daemon=True).start()
+        return jsonify(APIResponse.success({
+            "message": "工作流已启动",
+            "fast_mode": fast_mode,
+            "batch_mode": batch_mode,
+        }))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+@api_gateway.route('/workflow/history', methods=['GET'])
+@require_auth
+def workflow_history():
+    """获取工作流历史记录"""
+    try:
+        from core.workflow_engine import get_workflow_engine
+        engine = get_workflow_engine()
+        return jsonify(APIResponse.success(engine.get_history()))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+@api_gateway.route('/workflow/step', methods=['POST'])
+@require_auth
+@sanitize_input
+def workflow_step():
+    """执行单个工作流步骤"""
+    try:
+        from core.workflow_engine import get_workflow_engine
+        engine = get_workflow_engine()
+        data = request.get_json(silent=True) or {}
+        step = data.get("step", "discover")
+        result = engine.run_step(step)
+        return jsonify(APIResponse.success({
+            "name": result.name,
+            "status": result.status,
+            "message": result.message,
+            "data": result.data,
+            "error": result.error,
+        }))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+# ============================================================
+# 系统健康检查（增强版）
+# ============================================================
+
+@api_gateway.route('/health/enhanced', methods=['GET'])
+@require_auth
+def health_full_enhanced():
+    """完整系统健康检查（含韬策略引擎+优化器+自适应层）"""
+    try:
+        from core.system_health_checker import get_health_checker
+        checker = get_health_checker()
+        report = checker.run_quick_check()
+
+        # 补充集群引擎健康
+        cluster_health = {}
+        try:
+            from core.integration_bus import get_integration_bus
+            bus = get_integration_bus()
+            cluster_health = bus.cluster_engine_health_check()
+        except Exception:
+            pass
+
+        # 补充自适应层健康
+        adaptation_health = {}
+        try:
+            from core.adaptive_market_regime import get_adaptation_engine
+            adaptation = get_adaptation_engine()
+            adaptation_health = adaptation.get_health_report()
+        except Exception:
+            pass
+
+        return jsonify(APIResponse.success({
+            "system_health": report.to_dict() if hasattr(report, 'to_dict') else str(report),
+            "cluster_engine": cluster_health,
+            "adaptation_engine": adaptation_health,
+            "timestamp": __import__('datetime').datetime.now().isoformat(),
+        }))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+@api_gateway.route('/health/cluster', methods=['GET'])
+@require_auth
+def health_cluster_check():
+    """韬策略引擎健康检查"""
+    try:
+        from core.integration_bus import get_integration_bus
+        bus = get_integration_bus()
+        health = bus.cluster_engine_health_check()
+        return jsonify(APIResponse.success(health))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+@api_gateway.route('/health/adaptation', methods=['GET'])
+@require_auth
+def health_adaptation_check():
+    """自适应策略层健康检查"""
+    try:
+        from core.adaptive_market_regime import get_adaptation_engine
+        adaptation = get_adaptation_engine()
+        health = adaptation.get_health_report()
+        return jsonify(APIResponse.success(health))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500
+
+
+@api_gateway.route('/health/optimizer', methods=['GET'])
+@require_auth
+def health_optimizer_check():
+    """优化器集群健康检查"""
+    try:
+        from core.integration_bus import get_integration_bus
+        bus = get_integration_bus()
+        report = bus.get_workflow_report()
+        return jsonify(APIResponse.success(report))
+    except Exception as e:
+        return jsonify(APIResponse.error(str(e))), 500

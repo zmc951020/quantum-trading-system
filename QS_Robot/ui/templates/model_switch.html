@@ -527,15 +527,31 @@
                         <div class="status-dot online"></div>
                     </div>
                     <div class="status-value" id="currentModelValue">GPT-4o</div>
-                    <div class="status-subtitle">通过 EchoBird 提供</div>
+                    <div class="status-subtitle" id="currentProviderSubtitle">通过 EchoBird 提供</div>
                 </div>
                 <div class="status-card success">
                     <div class="status-header-row">
                         <span class="status-title">EchoBird 服务</span>
-                        <div class="status-dot online" id="echobirdStatusDot"></div>
+                        <div class="status-dot" id="echobirdStatusDot"></div>
                     </div>
-                    <div class="status-value" id="echobirdStatusValue">已连接</div>
+                    <div class="status-value" id="echobirdStatusValue">检测中</div>
                     <div class="status-subtitle">API: localhost:8080</div>
+                </div>
+                <div class="status-card success">
+                    <div class="status-header-row">
+                        <span class="status-title">Ollama 本地</span>
+                        <div class="status-dot" id="ollamaStatusDot"></div>
+                    </div>
+                    <div class="status-value" id="ollamaStatusValue">检测中</div>
+                    <div class="status-subtitle">API: localhost:11434</div>
+                </div>
+                <div class="status-card success">
+                    <div class="status-header-row">
+                        <span class="status-title">Cline 智能体</span>
+                        <div class="status-dot" id="clineStatusDot"></div>
+                    </div>
+                    <div class="status-value" id="clineStatusValue">检测中</div>
+                    <div class="status-subtitle">CLI 智能体通道</div>
                 </div>
                 <div class="status-card">
                     <div class="status-header-row">
@@ -562,7 +578,7 @@
                 <button class="provider-tab active" data-provider="all" onclick="filterModels('all')">全部</button>
                 <button class="provider-tab" data-provider="echobird" onclick="filterModels('echobird')">🐦 EchoBird</button>
                 <button class="provider-tab" data-provider="ollama" onclick="filterModels('ollama')">🦙 Ollama</button>
-                <button class="provider-tab" data-provider="openai" onclick="filterModels('openai')">🟢 OpenAI</button>
+                <button class="provider-tab" data-provider="cline" onclick="filterModels('cline')">🤖 Cline</button>
             </div>
             <div class="model-grid" id="modelGrid">
             </div>
@@ -623,12 +639,20 @@
             try {
                 const response = await fetch('/api/llm/models');
                 const data = await response.json();
-                
+
                 if (data.success && data.models) {
                     models = data.models;
                     document.getElementById('modelCount').textContent = models.length;
                     document.getElementById('currentModelValue').textContent = data.current_model || '未设置';
-                    
+                    document.getElementById('currentProviderSubtitle').textContent =
+                        '通过 ' + (data.current_provider || data.provider || 'EchoBird') + ' 提供';
+
+                    // 更新三个 provider 状态卡片
+                    const ps = data.providers_status || {};
+                    updateProviderCard('echobird', ps.echobird);
+                    updateProviderCard('ollama', ps.ollama);
+                    updateProviderCard('cline', ps.cline);
+
                     renderModels();
                     populateModelSelects();
                 }
@@ -636,6 +660,15 @@
                 console.error('加载模型失败:', error);
                 showToast('加载模型列表失败', 'error');
             }
+        }
+
+        function updateProviderCard(name, info) {
+            const dot = document.getElementById(name + 'StatusDot');
+            const val = document.getElementById(name + 'StatusValue');
+            if (!dot || !val) return;
+            const ok = info && info.available;
+            dot.className = 'status-dot ' + (ok ? 'online' : 'offline');
+            val.textContent = ok ? ('已连接 · ' + (info.model || '-')) : '未连接';
         }
 
         function renderModels() {
