@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import sma
 
 class FourMAResonanceStrategy(THSBaseStrategy):
     NAME = "四线多头共振"
+    ID = "14_four_ma_resonance"
     RISK_LEVEL = "中"
     PERIOD_RANGE = (3, 120)
 

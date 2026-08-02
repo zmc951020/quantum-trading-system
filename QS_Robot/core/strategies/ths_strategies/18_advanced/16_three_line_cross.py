@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import sma
 
 class ThreeLineCrossStrategy(THSBaseStrategy):
     NAME = "一阳穿三线"
+    ID = "16_three_line_cross"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     BIG_CANDLE_RANGE = (0.03, 0.08)

@@ -31,6 +31,9 @@ venv.bak/
 
 # 数据文件
 data/
+# 策略元数据必须纳入版本控制（14策略+18战法JSON）
+!data/ths_academy/
+!data/ths_academy/**
 *.log
 *.sqlite
 *.db

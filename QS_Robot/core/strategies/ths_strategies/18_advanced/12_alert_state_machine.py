@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import sma
 
 class AlertStateMachineStrategy(THSBaseStrategy):
     NAME = "条件预警状态机"
+    ID = "12_alert_state_machine"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     VOL_RATIO_RANGE = (1.2, 2.5)

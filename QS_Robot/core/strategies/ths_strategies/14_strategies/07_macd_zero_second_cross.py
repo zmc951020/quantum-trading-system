@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import macd
 
 class MACDZeroSecondCrossStrategy(THSBaseStrategy):
     NAME = "MACD零轴二次金叉"
+    ID = "07_macd_zero_second_cross"
     RISK_LEVEL = "中"
     FAST_RANGE = (5, 30)
     SLOW_RANGE = (20, 40)

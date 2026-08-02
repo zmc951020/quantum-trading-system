@@ -492,6 +492,30 @@ class SystemHealthChecker:
                 return (False, 0, f"三类选股分流: 不可用 - {e}", "检查 core/stock_pool.py")
         yield ("L2_019", "三类选股分流", "L2_业务链路", "warning", "both", _l2_019)
 
+        def _l2_020():
+            """市场情报看板检查（5维度采集器+种子池）"""
+            try:
+                from api.ths_bridge.market_intel import get_market_intel_collector
+                from core.stock_pool import StockSource
+                collector = get_market_intel_collector()
+                data = collector.fetch_all()
+                dims_ok = sum(1 for k in ["hot_stocks", "market_overview",
+                                            "capital_flow", "sector_rotation",
+                                            "market_emotion"] if k in data)
+                # 种子池来源是否就位
+                seed_ok = (StockSource.THS_MASTER_POOL.value in
+                           [s.value for s in StockSource.seed_sources()])
+                ok = dims_ok == 5 and seed_ok
+                score = 100 if ok else 60
+                msg = (f"市场情报: 5维度={'✓' if dims_ok == 5 else '✗'}({dims_ok}/5), "
+                       f"种子池={'✓' if seed_ok else '✗'}")
+                return (ok, score, msg,
+                        "检查 api/ths_bridge/market_intel.py 和 core/stock_pool.py" if not ok else "")
+            except Exception as e:
+                return (False, 0, f"市场情报看板: 不可用 - {e}",
+                        "检查 api/ths_bridge/market_intel.py")
+        yield ("L2_020", "市场情报看板", "L2_业务链路", "warning", "both", _l2_020)
+
     # ==================== L3: 系统可靠性 ====================
 
     def _build_l3_checks(self) -> List[Callable]:

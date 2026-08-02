@@ -9,6 +9,7 @@ from core.strategies.ths_strategies._ma_pullback_base import MAPullbackBase
 
 class FiveDayLowSuckStrategy(MAPullbackBase):
     NAME = "5日线超短低吸"
+    ID = "10_five_day_low_suck"
     RISK_LEVEL = "低"
     MA_PERIOD = 5
     PULLBACK_DAYS = 1

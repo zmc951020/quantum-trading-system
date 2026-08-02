@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import sma
 
 class VolumePriceResonanceStrategy(THSBaseStrategy):
     NAME = "主力量价操盘"
+    ID = "02_volume_price_resonance"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     VOL_RATIO_RANGE = (1.5, 3.0)

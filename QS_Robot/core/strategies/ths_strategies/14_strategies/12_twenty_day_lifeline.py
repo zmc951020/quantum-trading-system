@@ -9,6 +9,7 @@ from core.strategies.ths_strategies._ma_pullback_base import MAPullbackBase
 
 class TwentyDayLifelineStrategy(MAPullbackBase):
     NAME = "20日线生命线低吸"
+    ID = "12_twenty_day_lifeline"
     RISK_LEVEL = "中"
     MA_PERIOD = 20
     PULLBACK_DAYS = 3

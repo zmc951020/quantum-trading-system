@@ -88,20 +88,39 @@ class SignalCollector:
         logger.info("已加载 %d 策略 + %d 战法", len(self._strategies_14), len(self._strategies_18))
 
     def scan(self, bars_map: Dict[str, List[dict]],
-             params_map: Optional[Dict[str, Dict]] = None) -> List[Dict]:
+             params_map: Optional[Dict[str, Dict]] = None,
+             stock_names: Optional[Dict[str, str]] = None) -> List[Dict]:
         """扫描所有股票，收集买入信号
 
         Args:
             bars_map: {symbol: bars_list}
             params_map: {symbol: {param: value}} 可选
+            stock_names: {symbol: name} 用于ST股过滤
 
         Returns:
             信号列表 [{symbol, strategy_name, signal, ...}]
         """
+        from api.ths_bridge.pool_filter import get_pool_filter
+        pool_filter = get_pool_filter()
+
         signals = []
         all_strategies = self._strategies_14 + self._strategies_18
+        # 预加载每个策略的 applicable_pool 配置
+        strat_configs = {strat.NAME: pool_filter._load_pool_config(strat.ID) or {}
+                         for strat in all_strategies if hasattr(strat, 'ID')}
+        strat_skipped = {strat.NAME: 0 for strat in all_strategies}
+
         for symbol, bars in bars_map.items():
+            name = (stock_names or {}).get(symbol, "")
             for strat in all_strategies:
+                # 按 applicable_pool 预筛选：股票是否符合该策略适用范围
+                config = strat_configs.get(strat.NAME, {})
+                if config:
+                    passes, reason = pool_filter.filter_stock(
+                        symbol=symbol, name=name, pool_config=config)
+                    if not passes:
+                        strat_skipped[strat.NAME] = strat_skipped.get(strat.NAME, 0) + 1
+                        continue
                 params = (params_map or {}).get(symbol, {}).get(strat.NAME, {})
                 try:
                     sig = strat.generate_signal(bars, params)
@@ -114,8 +133,9 @@ class SignalCollector:
                         })
                 except Exception as e:
                     logger.debug("策略 %s 对 %s 异常: %s", strat.NAME, symbol, e)
-        logger.info("扫描完成: %d 只股票 × %d 策略 → %d 信号",
-                    len(bars_map), len(all_strategies), len(signals))
+        skipped_total = sum(strat_skipped.values())
+        logger.info("扫描完成: %d 只股票 × %d 策略 → %d 信号 (按applicable_pool过滤%d次)",
+                    len(bars_map), len(all_strategies), len(signals), skipped_total)
         return signals
 
     def collect_to_pool(self, bars_map: Dict[str, List[dict]],

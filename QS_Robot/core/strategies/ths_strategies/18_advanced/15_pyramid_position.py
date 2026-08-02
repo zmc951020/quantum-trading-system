@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import sma
 
 class PyramidPositionStrategy(THSBaseStrategy):
     NAME = "金字塔加码仓位"
+    ID = "15_pyramid_position"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     FIRST_PCT_RANGE = (0.1, 0.3)

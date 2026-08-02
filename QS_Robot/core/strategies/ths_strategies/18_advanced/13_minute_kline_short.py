@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import macd, sma
 
 class MinuteKlineShortStrategy(THSBaseStrategy):
     NAME = "15/30分钟超短"
+    ID = "13_minute_kline_short"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "高"
     FAST_RANGE = (5, 15)

@@ -12,11 +12,13 @@ class THSBaseStrategy(ABC):
     """同花顺策略抽象基类
 
     属性:
+        ID: 策略ID（与JSON元数据 id 字段对应，如 "01_macd_wave"）
         NAME: 策略名（中文）
         CATEGORY: 分类（固定 "ths_strategies"）
         SOURCE: 来源（同花顺金融大师）
         RISK_LEVEL: 风险等级（低/中/高）
     """
+    ID: str = ""
     NAME: str = ""
     CATEGORY: str = "ths_strategies"
     SOURCE: str = "同花顺金融大师"

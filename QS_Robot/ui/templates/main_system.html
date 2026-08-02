@@ -739,6 +739,8 @@
             <a href="/model-switch" style="color: #8ba3c7; text-decoration: none; font-size: 13px; padding: 8px 12px; border-radius: 6px; transition: all 0.3s;">🔄 模型切换</a>
             <a href="/chat" style="color: #8ba3c7; text-decoration: none; font-size: 13px; padding: 8px 12px; border-radius: 6px; transition: all 0.3s;">💬 智能助手</a>
             <a href="/maintenance" style="color: #8ba3c7; text-decoration: none; font-size: 13px; padding: 8px 12px; border-radius: 6px; transition: all 0.3s;">🔧 系统维护</a>
+            <a href="/ths_academy/" style="color: #8ba3c7; text-decoration: none; font-size: 13px; padding: 8px 12px; border-radius: 6px; transition: all 0.3s;">🎓 金融大师学院</a>
+            <a href="/market_intel/" style="color: #8ba3c7; text-decoration: none; font-size: 13px; padding: 8px 12px; border-radius: 6px; transition: all 0.3s;">📊 市场情报</a>
         </div>
     </nav>
     
@@ -813,7 +815,10 @@
             <span class="tab-icon">🛡️</span><span>五层防钓鱼风控</span>
         </button>
         <button class="tab-btn" data-tab="chat">
-            <span class="tab-icon">🤖</span><span>Cline智能体</span>
+            <span class="tab-icon">🤖</span><span>AI助手</span>
+        </button>
+        <button class="tab-btn" data-tab="workflow">
+            <span class="tab-icon">🚀</span><span>一键选股</span>
         </button>
     </div>
 
@@ -1550,6 +1555,162 @@
 
     </div>
 
+    <!-- ========== 一键选股自动化工作流 ========== -->
+    <div class="tab-panel" id="panel-workflow">
+        <div class="dashboard-grid">
+            <div class="stat-card" id="wf-status-card">
+                <div class="stat-icon">🚀</div>
+                <div class="stat-label">工作流状态</div>
+                <div class="stat-value" id="wf-status-text">待启动</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📈</div>
+                <div class="stat-label">已发现策略</div>
+                <div class="stat-value" id="wf-strategies">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-label">匹配股票</div>
+                <div class="stat-value" id="wf-stocks">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-label">生成信号</div>
+                <div class="stat-value" id="wf-signals">0</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">
+                <div class="panel-title-left">🎯 一键选股自动化</div>
+                <span class="panel-subtitle">策略发现 → 参数优化 → 回测验证 → 股票池匹配 → 自适应 → 信号生成 → 交易配置</span>
+            </div>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+                <button class="btn btn-primary" onclick="runWorkflow()" id="btn-wf-run">
+                    🚀 一键执行全流程
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('vibe')">
+                    🌍 仅Vibe分析
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('discover')">
+                    🔍 仅策略发现
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('optimize')">
+                    ⚡ 仅参数优化
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('backtest')">
+                    📊 仅回测验证
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('match')">
+                    📊 仅股票匹配
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('adapt')">
+                    🧠 仅自适应
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('signals')">
+                    📡 仅信号生成
+                </button>
+                <button class="btn btn-info" onclick="runWorkflowStep('trading')">
+                    📋 仅交易配置
+                </button>
+                <button class="btn btn-secondary" onclick="refreshWorkflowStatus()">
+                    🔄 刷新状态
+                </button>
+            </div>
+            <!-- 工作流配置选项 -->
+            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:4px;
+                padding:10px 14px; background:#0a0e1a; border-radius:8px;">
+                <label style="display:flex; align-items:center; gap:6px; color:#a0b4d0; font-size:13px; cursor:pointer;">
+                    <input type="checkbox" id="wf-fast-mode" style="accent-color:#6366f1;">
+                    ⚡ 快速模式
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; color:#a0b4d0; font-size:13px; cursor:pointer;">
+                    <input type="checkbox" id="wf-batch-mode" style="accent-color:#f59e0b;">
+                    📦 批量模式（对比排名）
+                </label>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="color:#8ba3c7; font-size:12px; white-space:nowrap;">股票池:</span>
+                    <input type="text" id="wf-stock-pool" placeholder="000001,600519（逗号分隔，留空=全市场）"
+                        style="width:260px; padding:5px 10px; background:#1a1f35; border:1px solid #2a3050;
+                        border-radius:6px; color:#c8d6e5; font-size:12px;">
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="color:#8ba3c7; font-size:12px; white-space:nowrap;">策略:</span>
+                    <input type="text" id="wf-strategy-names" placeholder="留空=自动发现"
+                        style="width:180px; padding:5px 10px; background:#1a1f35; border:1px solid #2a3050;
+                        border-radius:6px; color:#c8d6e5; font-size:12px;">
+                </div>
+            </div>
+        </div>
+
+        <!-- 阶段进度 -->
+        <div class="panel">
+            <div class="panel-title">
+                <div class="panel-title-left">📋 工作流阶段</div>
+            </div>
+            <div id="wf-stages" style="display:flex; flex-direction:column; gap:8px;">
+                <div style="color:#8ba3c7; text-align:center; padding:30px;">
+                    点击"一键执行"按钮启动工作流
+                </div>
+            </div>
+        </div>
+
+        <!-- 执行历史 -->
+        <div class="panel">
+            <div class="panel-title">
+                <div class="panel-title-left">📜 执行历史</div>
+            </div>
+            <table class="data-table" id="wf-history-table">
+                <thead>
+                    <tr><th>ID</th><th>状态</th><th>时间</th><th>耗时</th><th>阶段</th><th>策略</th><th>股票</th></tr>
+                </thead>
+                <tbody id="wf-history-body">
+                    <tr><td colspan="7" style="color:#8ba3c7; text-align:center;">暂无记录</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 系统健康 -->
+        <div class="panel">
+            <div class="panel-title">
+                <div class="panel-title-left">🏥 核心组件健康状态</div>
+                <button class="btn btn-secondary btn-sm" onclick="refreshHealth()">🔄 刷新</button>
+            </div>
+            <div class="dashboard-grid" id="health-grid">
+                <div class="stat-card" id="health-cluster">
+                    <div class="stat-icon">⚙️</div>
+                    <div class="stat-label">韬策略引擎</div>
+                    <div class="stat-value" style="font-size:18px;color:#8ba3c7;">检查中...</div>
+                </div>
+                <div class="stat-card" id="health-optimizer">
+                    <div class="stat-icon">🔬</div>
+                    <div class="stat-label">熵韬收敛优化器</div>
+                    <div class="stat-value" style="font-size:18px;color:#8ba3c7;">检查中...</div>
+                </div>
+                <div class="stat-card" id="health-adaptation">
+                    <div class="stat-icon">🧠</div>
+                    <div class="stat-label">自适应策略层</div>
+                    <div class="stat-value" style="font-size:18px;color:#8ba3c7;">检查中...</div>
+                </div>
+                <div class="stat-card" id="health-system">
+                    <div class="stat-icon">🏥</div>
+                    <div class="stat-label">系统总体健康</div>
+                    <div class="stat-value" style="font-size:18px;color:#8ba3c7;">检查中...</div>
+                </div>
+                <div class="stat-card" id="health-workflow">
+                    <div class="stat-icon">🚀</div>
+                    <div class="stat-label">自动化工作流</div>
+                    <div class="stat-value" style="font-size:18px;color:#8ba3c7;">检查中...</div>
+                </div>
+                <div class="stat-card" id="health-stockpool">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-label">股票池金字塔</div>
+                    <div class="stat-value" style="font-size:18px;color:#8ba3c7;">检查中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 底部操作栏 ========== -->
     <div class="bottom-bar">
         <div class="bottom-bar-left">
@@ -1673,6 +1834,7 @@
             fetchStockPool();
             updateMonitorData();
             setInterval(updateMonitorData, 10000);
+            refreshHealth();  // 页面加载时检查核心组件健康状态
 
             // 策略筛选
             document.getElementById('strategySearch').addEventListener('input', filterStrategy);
@@ -2433,6 +2595,218 @@
             fetchPerformanceData();
             setTimeout(() => showMessage('✅ 所有数据已刷新'), 1000);
         }
+
+        // ========== 一键选股自动化工作流 ==========
+        let wfPollTimer = null;
+
+        async function runWorkflow() {
+            const btn = document.getElementById('btn-wf-run');
+            btn.disabled = true;
+            btn.textContent = '⏳ 启动中...';
+            try {
+                const fastMode = document.getElementById('wf-fast-mode').checked;
+                const batchMode = document.getElementById('wf-batch-mode').checked;
+                const stockPoolRaw = document.getElementById('wf-stock-pool').value.trim();
+                const strategyNamesRaw = document.getElementById('wf-strategy-names').value.trim();
+
+                const body = { fast_mode: fastMode, batch_mode: batchMode };
+                if (stockPoolRaw) {
+                    body.stock_pool = stockPoolRaw.split(',').map(s => s.trim()).filter(Boolean);
+                }
+                if (strategyNamesRaw) {
+                    body.strategies = strategyNamesRaw.split(',').map(s => s.trim()).filter(Boolean);
+                }
+
+                const resp = await fetch('/api/workflow/run', { method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showMessage('🚀 工作流已启动！' + (batchMode ? ' (批量模式)' : ''));
+                    startWfPolling();
+                } else {
+                    showMessage('❌ 启动失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                showMessage('❌ 请求失败: ' + e.message);
+            }
+            btn.disabled = false;
+            btn.textContent = '🚀 一键执行全流程';
+        }
+
+        async function runWorkflowStep(step) {
+            showMessage('⏳ 执行步骤: ' + step + '...');
+            try {
+                const resp = await fetch('/api/workflow/step', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ step: step })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showMessage('✅ ' + data.data.message || '步骤完成');
+                }
+            } catch (e) {
+                showMessage('❌ 步骤失败: ' + e.message);
+            }
+            refreshWorkflowStatus();
+        }
+
+        async function refreshWorkflowStatus() {
+            try {
+                const resp = await fetch('/api/workflow/status');
+                const data = await resp.json();
+                if (data.success && data.data) {
+                    renderWorkflowStatus(data.data);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function refreshWorkflowHistory() {
+            try {
+                const resp = await fetch('/api/workflow/history');
+                const data = await resp.json();
+                if (data.success && data.data) {
+                    renderWorkflowHistory(data.data);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderWorkflowStatus(status) {
+            document.getElementById('wf-status-text').textContent =
+                status.running ? '⏳ 执行中' : (status.status === 'success' ? '✅ 完成' : '⏸️ 待启动');
+            const statusCard = document.getElementById('wf-status-card');
+            statusCard.className = 'stat-card ' + (status.running ? 'warning' :
+                (status.status === 'success' ? 'success' : ''));
+
+            if (status.stages) {
+                let html = '';
+                const stageIcons = {
+                    'Vibe市场分析': '🌍', '策略发现': '🔍', '参数优化': '⚡', '回测验证': '📊',
+                    '完整自动化流程': '🚀', '股票池匹配': '📊', '自适应策略': '🧠', '信号生成': '📡', '交易配置': '📋'
+                };
+                const statusColors = {
+                    'success': '#10b981', 'running': '#f59e0b', 'failed': '#ef4444',
+                    'skipped': '#8ba3c7', 'pending': '#4a5568'
+                };
+                const statusEmoji = {
+                    'success': '✅', 'running': '⏳', 'failed': '❌',
+                    'skipped': '⏭️', 'pending': '⏸️'
+                };
+                for (const s of status.stages) {
+                    const icon = stageIcons[s.name] || '📌';
+                    const color = statusColors[s.status] || '#8ba3c7';
+                    const emoji = statusEmoji[s.status] || '⏸️';
+                    html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
+                        'background:#0a0e1a;border-radius:8px;border-left:4px solid ' + color + ';">' +
+                        '<span style="font-size:20px;">' + icon + '</span>' +
+                        '<span style="flex:1;font-weight:500;">' + s.name + '</span>' +
+                        '<span style="color:#8ba3c7;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (s.message || '') + '</span>' +
+                        '<span>' + emoji + '</span>' +
+                        '<span style="color:#8ba3c7;font-size:11px;min-width:50px;text-align:right;">' + (s.elapsed || 0).toFixed(1) + 's</span>' +
+                        '</div>';
+                }
+                document.getElementById('wf-stages').innerHTML = html;
+            }
+
+            if (status.final_stock_count !== undefined) {
+                document.getElementById('wf-stocks').textContent = status.final_stock_count;
+            }
+            if (status.signal_count !== undefined) {
+                document.getElementById('wf-signals').textContent = status.signal_count;
+            }
+
+            if (status.running) {
+                startWfPolling();
+            } else {
+                stopWfPolling();
+            }
+        }
+
+        function renderWorkflowHistory(history) {
+            let html = '';
+            for (const h of history) {
+                const statusColor = h.status === 'success' ? '#10b981' :
+                    (h.status === 'failed' ? '#ef4444' : '#f59e0b');
+                html += '<tr>' +
+                    '<td style="font-size:11px;">' + h.workflow_id + '</td>' +
+                    '<td><span style="color:' + statusColor + ';">' + h.status + '</span></td>' +
+                    '<td style="font-size:11px;">' + (h.started_at || '').substring(11, 19) + '</td>' +
+                    '<td>' + (h.total_elapsed || 0).toFixed(1) + 's</td>' +
+                    '<td>' + (h.stages_ok || 0) + '/' + (h.stages_total || 0) + '</td>' +
+                    '<td>' + (h.best_strategy || '-') + '</td>' +
+                    '<td>' + (h.stock_count || 0) + '</td>' +
+                    '</tr>';
+            }
+            document.getElementById('wf-history-body').innerHTML = html ||
+                '<tr><td colspan="7" style="color:#8ba3c7;text-align:center;">暂无记录</td></tr>';
+        }
+
+        function startWfPolling() {
+            if (wfPollTimer) return;
+            wfPollTimer = setInterval(refreshWorkflowStatus, 2000);
+        }
+
+        function stopWfPolling() {
+            if (wfPollTimer) { clearInterval(wfPollTimer); wfPollTimer = null; }
+            refreshWorkflowHistory();
+        }
+
+        async function refreshHealth() {
+            const cards = {
+                'health-cluster': { label: '韬策略引擎', url: '/api/health/cluster' },
+                'health-optimizer': { label: '熵韬收敛优化器', url: '/api/health/optimizer' },
+                'health-adaptation': { label: '自适应策略层', url: '/api/health/adaptation' },
+                'health-system': { label: '系统总体健康', url: '/api/health/enhanced' },
+                'health-workflow': { label: '自动化工作流', url: '/api/workflow/status' },
+                'health-stockpool': { label: '股票池金字塔', url: '/api/stock-pool' },
+            };
+            for (const [id, cfg] of Object.entries(cards)) {
+                const el = document.getElementById(id);
+                if (!el) continue;
+                el.querySelector('.stat-value').textContent = '检查中...';
+                el.querySelector('.stat-value').style.color = '#8ba3c7';
+                try {
+                    const resp = await fetch(cfg.url);
+                    const data = await resp.json();
+                    // 兼容不同API响应格式
+                    let health, status, detail;
+                    if (data.data) {
+                        health = data.data;
+                        status = health.status || health.overall_status || 'unknown';
+                        detail = health.detail || health.message || '';
+                    } else if (data.success !== undefined) {
+                        status = data.success ? 'healthy' : 'warning';
+                        detail = data.message || '';
+                    } else {
+                        status = resp.ok ? 'healthy' : 'warning';
+                        detail = '';
+                    }
+                    let color = status === 'healthy' ? '#10b981' : (status === 'warning' ? '#f59e0b' : '#ef4444');
+                    let text = status === 'healthy' ? '✅ 正常' : (status === 'warning' ? '⚠️ 警告' : '❌ 异常');
+                    text += detail ? ' ' + detail.substring(0, 30) : '';
+                    el.querySelector('.stat-value').textContent = text;
+                    el.querySelector('.stat-value').style.color = color;
+                    el.className = 'stat-card ' + (status === 'healthy' ? 'success' : (status === 'warning' ? 'warning' : 'danger'));
+                } catch (e) {
+                    el.querySelector('.stat-value').textContent = '❌ 离线';
+                    el.querySelector('.stat-value').style.color = '#ef4444';
+                    el.className = 'stat-card danger';
+                }
+            }
+        }
+
+        // 切换到工作流tab时自动刷新
+        const origSwitchTab = switchTab;
+        switchTab = function(tabName) {
+            origSwitchTab(tabName);
+            if (tabName === 'workflow') {
+                refreshWorkflowStatus();
+                refreshWorkflowHistory();
+                refreshHealth();
+            }
+        };
 
         // ========== 聊天 ==========
         function sendChat() {

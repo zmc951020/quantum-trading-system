@@ -54,10 +54,32 @@ class PoolLevel(Enum):
 
 
 class StockSource(Enum):
-    """选股来源 - 三类分流以便对比哪类策略更好"""
+    """选股来源 - 三类分流+两类种子池入口
+
+    三类分流（直接对比哪类策略更好）：
+      AURORA_NATIVE  - 自创策略选股
+      VIBE_TRADING   - 港大 Vibe Trading 选股
+      THS_IWENCAI    - 同花顺问财/策略选股（已通过量化验证）
+
+    两类种子池（金融大师人工/专家筛选，需通过32策略量化验证才能升级）：
+      THS_MASTER_POOL - 金融大师策略股票池入口（教学/演示池）
+      THS_EXPERT      - 金融大师专家评点股票池（人工推荐池）
+    """
     AURORA_NATIVE = "aurora_native"   # 自创策略选股
     VIBE_TRADING = "vibe_trading"     # 港大 Vibe Trading 选股
     THS_IWENCAI = "ths_iwencai"       # 同花顺问财/策略选股
+    THS_MASTER_POOL = "ths_master_pool"  # 金融大师策略股票池（种子池）
+    THS_EXPERT = "ths_expert"            # 专家评点股票池（种子池）
+
+    @classmethod
+    def seed_sources(cls) -> list:
+        """所有种子池来源（需通过验证才能升级为实盘池）"""
+        return [cls.THS_MASTER_POOL, cls.THS_EXPERT]
+
+    @classmethod
+    def trading_sources(cls) -> list:
+        """所有实盘交易类来源（三类分流）"""
+        return [cls.AURORA_NATIVE, cls.VIBE_TRADING, cls.THS_IWENCAI]
 
 # ============================================================
 # 股票记录
@@ -366,7 +388,7 @@ class StockPoolManager:
         return summary
 
     def get_source_level_matrix(self) -> Dict[str, Dict[str, int]]:
-        """获取 来源×层级 矩阵统计（三类选股在各池的分布）"""
+        """获取 来源×层级 矩阵统计（三类选股+两类种子池在各池的分布）"""
         matrix = {s.value: {l.value: 0 for l in PoolLevel} for s in StockSource}
         for record in self._pools.values():
             src = record.source.value if hasattr(record.source, 'value') else record.source
@@ -374,6 +396,110 @@ class StockPoolManager:
             if src in matrix and lvl in matrix[src]:
                 matrix[src][lvl] += 1
         return matrix
+
+    # ---------- 种子池升级流程（金融大师股票池→验证→实盘池）----------
+
+    def add_seed_stock(self, symbol: str, name: str,
+                       source: StockSource,
+                       strategy_name: str = "",
+                       metadata: Dict = None) -> Dict:
+        """添加种子池股票（金融大师策略股票池 / 专家评点股票池）
+
+        种子池股票必须经过32策略量化验证才能升级为THS_IWENCAI实盘池
+        """
+        if source not in StockSource.seed_sources():
+            return {"success": False,
+                    "error": f"{source} 不是种子池来源，请使用 add_stock"}
+        return self.add_stock(
+            symbol=symbol, name=name,
+            level=PoolLevel.WATCHLIST,
+            source=source,
+            strategy_name=strategy_name,
+            metadata=metadata or {},
+        )
+
+    def promote_seed_to_iwencai(self, symbol: str,
+                                strategy_name: str = "",
+                                validation_result: Dict = None) -> Dict:
+        """种子池股票通过量化验证后升级为同花顺实盘池
+
+        Args:
+            symbol: 股票代码
+            strategy_name: 通过验证的策略名
+            validation_result: 验证结果（信号/回测/风控评分）
+        """
+        if symbol not in self._pools:
+            return {"success": False, "error": "股票不存在"}
+
+        record = self._pools[symbol]
+        if record.source not in StockSource.seed_sources():
+            return {"success": False,
+                    "error": f"股票来源 {record.source.value} 非种子池，无需升级"}
+
+        # 记录流转历史
+        now = datetime.now().isoformat()
+        record.history.append({
+            "timestamp": now,
+            "action": "seed_promoted",
+            "from_source": record.source.value,
+            "to_source": StockSource.THS_IWENCAI.value,
+            "strategy": strategy_name,
+            "validation": validation_result or {},
+        })
+        # 升级来源 + 记录验证结果
+        record.source = StockSource.THS_IWENCAI
+        record.strategy_name = strategy_name or record.strategy_name
+        if validation_result:
+            record.backtest_results.append({
+                "timestamp": now,
+                "strategy": strategy_name,
+                **validation_result,
+            })
+            risk = validation_result.get("risk_score")
+            if risk is not None:
+                record.risk_score = float(risk)
+        record.last_updated = now
+        self._save()
+        return {"success": True,
+                "message": f"{symbol} 已从种子池升级为THS_IWENCAI实盘池"}
+
+    def get_seed_pool_overview(self) -> Dict[str, Any]:
+        """获取种子池整体看板（区分两类种子池+验证进度）"""
+        overview = {
+            "master_pool": {"total": 0, "promoted": 0, "pending": 0, "stocks": []},
+            "expert": {"total": 0, "promoted": 0, "pending": 0, "stocks": []},
+            "promoted_to_iwencai": 0,
+        }
+        for record in self._pools.values():
+            # 种子池当前存量（未升级的）
+            if record.source == StockSource.THS_MASTER_POOL:
+                overview["master_pool"]["total"] += 1
+                overview["master_pool"]["pending"] += 1
+                overview["master_pool"]["stocks"].append({
+                    "symbol": record.symbol, "name": record.name,
+                    "added_at": record.added_at,
+                    "strategy": record.strategy_name,
+                })
+            elif record.source == StockSource.THS_EXPERT:
+                overview["expert"]["total"] += 1
+                overview["expert"]["pending"] += 1
+                overview["expert"]["stocks"].append({
+                    "symbol": record.symbol, "name": record.name,
+                    "added_at": record.added_at,
+                    "strategy": record.strategy_name,
+                })
+            elif record.source == StockSource.THS_IWENCAI:
+                # 检查历史是否从种子池升级而来
+                for h in record.history:
+                    if h.get("action") == "seed_promoted":
+                        from_src = h.get("from_source", "")
+                        if from_src == StockSource.THS_MASTER_POOL.value:
+                            overview["master_pool"]["promoted"] += 1
+                        elif from_src == StockSource.THS_EXPERT.value:
+                            overview["expert"]["promoted"] += 1
+                        overview["promoted_to_iwencai"] += 1
+                        break
+        return overview
 
     # ---------- 批量操作接口 ----------
 

@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import sma
 
 class SmartMoneyTrackingStrategy(THSBaseStrategy):
     NAME = "主力筹码控盘综合"
+    ID = "18_smart_money_tracking"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     ANGLE_RANGE = (30, 50)

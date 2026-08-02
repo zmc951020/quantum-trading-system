@@ -9,6 +9,7 @@ from core.strategies.ths_strategies.base import THSBaseStrategy
 
 class DragonTigerQuantSeatStrategy(THSBaseStrategy):
     NAME = "龙虎榜量化席位"
+    ID = "06_dragon_tiger_quant_seat"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "高"
     INST_BUY_MIN_RANGE = (10000000, 100000000)

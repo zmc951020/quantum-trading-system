@@ -9,6 +9,7 @@ from core.strategies.ths_strategies.base import THSBaseStrategy
 
 class QuantTrendFollowStrategy(THSBaseStrategy):
     NAME = "跟随量化趋势"
+    ID = "03_quant_trend_follow"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "高"
     NORTH_INFLOW_RANGE = (5, 50)

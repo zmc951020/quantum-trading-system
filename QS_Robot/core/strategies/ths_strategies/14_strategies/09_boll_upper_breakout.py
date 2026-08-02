@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import boll, sma
 
 class BollUpperBreakoutStrategy(THSBaseStrategy):
     NAME = "BOLL上轨突破"
+    ID = "09_boll_upper_breakout"
     RISK_LEVEL = "中"
     PERIOD_RANGE = (15, 30)
     STD_RANGE = (1.5, 2.5)

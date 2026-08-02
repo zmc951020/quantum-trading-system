@@ -10,6 +10,7 @@ from core.strategies.ths_strategies._indicators import ema
 
 class EXPMADoubleCrossStrategy(THSBaseStrategy):
     NAME = "EXPMA双金叉"
+    ID = "06_expma_double_cross"
     RISK_LEVEL = "中"
     SHORT_RANGE = (3, 15)
     LONG_RANGE = (15, 40)

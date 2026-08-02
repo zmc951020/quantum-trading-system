@@ -9,6 +9,7 @@ from core.strategies.ths_strategies._ma_pullback_base import MAPullbackBase
 
 class TenDayWaveStrategy(MAPullbackBase):
     NAME = "10日线波段滚动"
+    ID = "11_ten_day_wave"
     RISK_LEVEL = "低"
     MA_PERIOD = 10
     PULLBACK_DAYS = 2

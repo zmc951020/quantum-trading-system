@@ -10,14 +10,39 @@
       "category": "策略战法",
       "source_url": "https://xtz.10jqka.com.cn/webApp/home",
       "logic": "MACD四要素：零轴+DIF+DEA+柱状线。零轴上方代表多头市场，DIF上穿DEA金叉为顺势做多信号，柱状线由负转正为多头动能启动。零轴上方二次金叉（空中加油）是最强多头确认。",
-      "factors": ["DIF", "DEA", "MACD柱状线", "零轴", "金叉", "空中加油", "底背离", "顶背离"],
+      "factors": [
+        "DIF",
+        "DEA",
+        "MACD柱状线",
+        "零轴",
+        "金叉",
+        "空中加油",
+        "底背离",
+        "顶背离"
+      ],
       "entry_rule": "DIF在零轴上方上穿DEA形成金叉，柱状线由负转正且放大，当日放量上涨，5/10/20日均线多头排列",
       "exit_rule": "DIF下穿DEA形成死叉，或柱状线顶背离（股价新高但MACD柱未新高），或跌破20日均线",
       "stop_loss": "跌破20日均线或近期低点-2%",
       "take_profit": "1.5倍风险或柱状线持续缩短",
-      "params": {"fast": 12, "slow": 26, "signal": 9},
+      "params": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9
+      },
       "math": "DIF = EMA(close, fast) - EMA(close, slow); DEA = EMA(DIF, signal); MACD柱 = 2*(DIF-DEA)",
-      "win_rate_claim": "标准周线MACD零轴上方金叉，后续延续上涨概率78%+"
+      "win_rate_claim": "标准周线MACD零轴上方金叉，后续延续上涨概率78%+",
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative",
+          "tech"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 50,
+        "min_volume": 5000,
+        "description": "适用主板/创业板/科创板的流动性较好的股票，排除ST和新股"
+      }
     },
     {
       "id": "02_weekly_breakout",
@@ -25,14 +50,37 @@
       "category": "策略战法",
       "source_url": "https://xtz.10jqka.com.cn/webApp/home",
       "logic": "周线级别过滤日线杂波与主力骗线。标准周线突破形态：横盘8-12周箱体后放量突破平台高点，5/10/20周均线多头排列向上发散，突破周成交量≥近5周均量1.5倍。",
-      "factors": ["周线箱体", "箱体高点突破", "5/10/20周均线", "周成交量", "60周均线", "筹码单峰密集"],
+      "factors": [
+        "周线箱体",
+        "箱体高点突破",
+        "5/10/20周均线",
+        "周成交量",
+        "60周均线",
+        "筹码单峰密集"
+      ],
       "entry_rule": "周K线收盘价突破15周箱体高点3%以上，5周均线上穿10周均线，突破周成交量≥近5周均量1.5倍，筹码底部单峰密集（占比≥70%）",
       "exit_rule": "跌破箱体高点或5周均线，或周线MACD死叉",
       "stop_loss": "箱体高点下方3%或5周均线下方",
       "take_profit": "箱体高度的1.5-2倍或15%",
-      "params": {"box_weeks": 15, "ma_short": 5, "ma_long": 20, "vol_ratio": 1.5},
+      "params": {
+        "box_weeks": 15,
+        "ma_short": 5,
+        "ma_long": 20,
+        "vol_ratio": 1.5
+      },
       "math": "box_high = MAX(high[-box_weeks:-1]); breakout = close > box_high * 1.03; vol_ok = vol > MA(vol, 5) * 1.5",
-      "win_rate_claim": "标准周线突破形态后续延续上涨概率78%以上"
+      "win_rate_claim": "标准周线突破形态后续延续上涨概率78%以上",
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": false,
+        "min_market_cap": 30,
+        "min_volume": 3000,
+        "description": "周线突破需足够历史数据，主板和创业板为主"
+      }
     },
     {
       "id": "03_dragon_head",
@@ -40,13 +88,39 @@
       "category": "策略战法",
       "source_url": "https://xtz.10jqka.com.cn/webApp/home",
       "logic": "5句口诀锁定板块真龙头：①主线题材率先涨停，早盘封板干脆无反复开板；②业务逻辑纯正贴合热点，非蹭概念杂毛；③上涨放量回调缩量，量价结构健康；④流通市值20-80亿，股性活跃有涨停历史；⑤板块调整逆势抗跌，反弹领涨。",
-      "factors": ["主线题材", "封板时间", "封单质量", "题材纯正度", "量价配合", "流通市值", "涨停历史", "抗跌性"],
+      "factors": [
+        "主线题材",
+        "封板时间",
+        "封单质量",
+        "题材纯正度",
+        "量价配合",
+        "流通市值",
+        "涨停历史",
+        "抗跌性"
+      ],
       "entry_rule": "主线题材板块率先涨停（9:30-10:00封板），流通市值20-80亿，主营贴合热点，量价健康，板块调整抗跌，5日均线支撑",
       "exit_rule": "封板次日大幅低开，或跌破5日均线3日不收回，或板块退潮",
       "stop_loss": "5日均线下方3%或近期涨停板下沿",
       "take_profit": "下一涨停板或3-5日内10-20%",
-      "params": {"limit_up_pct": 9.8, "sector_count": 3, "market_cap_min": 20, "market_cap_max": 80},
-      "win_rate_claim": "完整5条件验证的龙头股，连板概率显著高于单条件"
+      "params": {
+        "limit_up_pct": 9.8,
+        "sector_count": 3,
+        "market_cap_min": 20,
+        "market_cap_max": 80
+      },
+      "win_rate_claim": "完整5条件验证的龙头股，连板概率显著高于单条件",
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative",
+          "tech"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 100,
+        "min_volume": 10000,
+        "description": "龙头股通常是大市值+高成交额的板块领头羊"
+      }
     },
     {
       "id": "04_dragon_list_follow",
@@ -54,12 +128,34 @@
       "category": "策略战法",
       "source_url": "https://xtz.10jqka.com.cn/topic.html?detailId=497&topicId=499",
       "logic": "龙虎榜显示游资/机构席位净买入。机构专用席位单日净买入超3000万值得关注，游资联动（多个知名营业部同时现身）是强信号。回踩3-5日缩量起爆，5/10日均线支撑不破。",
-      "factors": ["机构净买入", "游资席位", "营业部联动", "回踩缩量", "5/10日均线", "换手率"],
+      "factors": [
+        "机构净买入",
+        "游资席位",
+        "营业部联动",
+        "回踩缩量",
+        "5/10日均线",
+        "换手率"
+      ],
       "entry_rule": "龙虎榜机构专用席位净买入≥3000万，回踩3-5日缩量至龙虎榜日量能70%以下，5/10日均线支撑不破",
       "exit_rule": "跌破10日均线或放量跌破龙虎榜日收盘价",
       "stop_loss": "10日均线下方3%或龙虎榜日低点",
       "take_profit": "8-15%或下一阻力位",
-      "params": {"institutional_buy_pct": 30, "pullback_days": 3, "vol_shrink_ratio": 0.7}
+      "params": {
+        "institutional_buy_pct": 30,
+        "pullback_days": 3,
+        "vol_shrink_ratio": 0.7
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 50,
+        "min_volume": 8000,
+        "description": "龙虎榜跟庄需要龙虎榜数据，主板流动性最好"
+      }
     },
     {
       "id": "05_ma_long_arrangement",
@@ -67,120 +163,329 @@
       "category": "策略战法",
       "source_url": "https://www.wycxhzb.com/article/4738.html",
       "logic": "5/10/20/60日均线全部向上发散呈多头排列，是最强多头趋势确认。回踩核心均线不破是趋势中低吸良机，过滤80%无效震荡信号。",
-      "factors": ["5/10/20/60日均线", "多头排列", "均线向上发散", "回踩缩量", "支撑确认"],
+      "factors": [
+        "5/10/20/60日均线",
+        "多头排列",
+        "均线向上发散",
+        "回踩缩量",
+        "支撑确认"
+      ],
       "entry_rule": "5/10/20/60日均线全部向上多头排列，股价回调至5/10日均线附近，缩量收阳不破均线",
       "exit_rule": "跌破20日均线或连续3日收在10日均线下方",
       "stop_loss": "20日均线下方2%",
       "take_profit": "趋势延续至均线死叉",
-      "params": {"ma_periods": [5, 10, 20, 60], "pullback_to": "5或10日均线"}
+      "params": {
+        "ma_periods": [
+          5,
+          10,
+          20,
+          60
+        ],
+        "pullback_to": "5或10日均线"
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative",
+          "tech"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 30,
+        "min_volume": 3000,
+        "description": "均线多头排列需较长趋势，适用流动性好的股票"
+      }
     },
     {
       "id": "06_expma_double_cross",
       "name": "EXPMA7/21双金叉顺势战法",
       "category": "策略战法",
       "logic": "EXPMA比传统MA均线滞后性更低。7日EXPMA首次上穿21日EXPMA形成第一金叉，回调不跌破21日EXPMA后再次上穿形成第二金叉，当日放量上涨，是短线多头趋势最强确认。",
-      "factors": ["EXPMA7", "EXPMA21", "双金叉", "回调不破", "放量上涨"],
+      "factors": [
+        "EXPMA7",
+        "EXPMA21",
+        "双金叉",
+        "回调不破",
+        "放量上涨"
+      ],
       "entry_rule": "7日EXPMA上穿21日EXPMA第一金叉后，回调不破21日EXPMA，再次上穿形成第二金叉，当日放量",
       "exit_rule": "7日EXPMA下穿21日EXPMA形成死叉",
       "stop_loss": "21日EXPMA下方2%",
       "take_profit": "5-10%",
-      "params": {"expma_short": 7, "expma_long": 21}
+      "params": {
+        "expma_short": 7,
+        "expma_long": 21
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 30,
+        "min_volume": 3000,
+        "description": "EXPMA双交叉策略，主板/创业板适用"
+      }
     },
     {
       "id": "07_macd_zero_second_cross",
       "name": "MACD零轴上方二次金叉战法",
       "category": "策略战法",
       "logic": "MACD零轴上方是多头市场，二次金叉（空中加油）代表多头力量再次发力，过滤震荡市假金叉。DIF在零轴上方首次上穿DEA后回调不破零轴，再次金叉时是最强加仓点。",
-      "factors": ["DIF零轴上方", "二次金叉", "空中加油", "红柱放大", "放量上涨"],
+      "factors": [
+        "DIF零轴上方",
+        "二次金叉",
+        "空中加油",
+        "红柱放大",
+        "放量上涨"
+      ],
       "entry_rule": "DIF在零轴上方首次上穿DEA后回调不破零轴，再次上穿DEA形成二次金叉，当日放量上涨，红柱放大",
       "exit_rule": "DIF下穿DEA死叉或DIF跌破零轴",
       "stop_loss": "近期低点-2%",
       "take_profit": "前高或2倍风险",
-      "params": {"fast": 12, "slow": 26, "signal": 9}
+      "params": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative",
+          "tech"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 50,
+        "min_volume": 5000,
+        "description": "MACD零轴二次金叉是强趋势确认"
+      }
     },
     {
       "id": "08_dmi_adx_strong_trend",
       "name": "DMI+ADX强趋势轧空战法",
       "category": "策略战法",
       "logic": "DMI是唯一能判断趋势强度的指标。+DI上穿-DI形成金叉，ADX从20以下持续上行突破25，+DI始终在-DI上方，是强多头趋势确认，过滤90%震荡假信号。",
-      "factors": ["+DI", "-DI", "ADX", "DI金叉", "ADX突破25", "10日均线支撑"],
+      "factors": [
+        "+DI",
+        "-DI",
+        "ADX",
+        "DI金叉",
+        "ADX突破25",
+        "10日均线支撑"
+      ],
       "entry_rule": "+DI从下往上穿越-DI金叉，ADX从20以下持续上行突破25，+DI始终在-DI上方，股价回踩10日均线不破",
       "exit_rule": "ADX从高位回落跌破25，或+DI下穿-DI",
       "stop_loss": "10日均线下方3%",
       "take_profit": "ADX见顶回落时",
-      "params": {"dmi_period": 14, "adx_threshold": 25}
+      "params": {
+        "dmi_period": 14,
+        "adx_threshold": 25
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 30,
+        "min_volume": 3000,
+        "description": "DMI-ADX强趋势策略，需稳定趋势股票"
+      }
     },
     {
       "id": "09_boll_upper_breakout",
       "name": "BOLL轨道上轨顺势突破战法",
       "category": "策略战法",
       "logic": "BOLL上轨是多头趋势压力位。放量突破上轨且轨道开口放大，代表多头力量完全释放，主升浪启动。中轨向上+股价站上上轨+开口放大是三重确认。",
-      "factors": ["BOLL上轨", "中轨向上", "开口放大", "放量突破", "5日均量1.5倍"],
+      "factors": [
+        "BOLL上轨",
+        "中轨向上",
+        "开口放大",
+        "放量突破",
+        "5日均量1.5倍"
+      ],
       "entry_rule": "BOLL中轨向上，股价在上方运行，当日放量上涨收盘价站上BOLL上轨，成交量>5日均量1.5倍，轨道开口持续放大",
       "exit_rule": "股价跌破BOLL中轨，或轨道开口收口",
       "stop_loss": "BOLL中轨下方",
       "take_profit": "开口收口或轨道上轨回落",
-      "params": {"boll_period": 20, "boll_std": 2, "vol_ratio": 1.5}
+      "params": {
+        "boll_period": 20,
+        "boll_std": 2,
+        "vol_ratio": 1.5
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative",
+          "tech"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 30,
+        "min_volume": 5000,
+        "description": "BOLL突破需波动率适中的股票"
+      }
     },
     {
       "id": "10_five_day_low_suck",
       "name": "5日线超短低吸战法",
       "category": "策略战法",
       "logic": "5日线是短期趋势生命线。股价在5日线上方运行代表短期多头趋势，回踩5日线不破是超短低吸良机。",
-      "factors": ["5日均线", "均线向上", "回踩不破", "缩量收阳"],
+      "factors": [
+        "5日均线",
+        "均线向上",
+        "回踩不破",
+        "缩量收阳"
+      ],
       "entry_rule": "股价在5日线上方运行，5日均线向上，当日回调至5日均线附近，缩量收阳不破均线",
       "exit_rule": "股价跌破5日均线或连续2日收在5日均线下方",
       "stop_loss": "5日均线下方2%",
       "take_profit": "3-5%",
-      "params": {"ma_period": 5}
+      "params": {
+        "ma_period": 5
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 30,
+        "min_volume": 3000,
+        "description": "5日低吸需流动性好，便于精确低吸"
+      }
     },
     {
       "id": "11_ten_day_wave",
       "name": "10日线波段滚动战法",
       "category": "策略战法",
       "logic": "10日线是中期波段生命线。股价在10日线上方运行代表中期多头趋势，回踩10日线不破是波段低吸良机。",
-      "factors": ["10日均线", "均线向上", "回踩不破", "缩量收阳"],
+      "factors": [
+        "10日均线",
+        "均线向上",
+        "回踩不破",
+        "缩量收阳"
+      ],
       "entry_rule": "股价在10日线上方运行，10日均线向上，连续2日回调至10日均线附近，缩量收阳不破均线",
       "exit_rule": "股价跌破10日均线或连续3日收在10日均线下方",
       "stop_loss": "10日均线下方3%",
       "take_profit": "5-10%",
-      "params": {"ma_period": 10}
+      "params": {
+        "ma_period": 10
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative",
+          "tech"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 20,
+        "min_volume": 2000,
+        "description": "10日波段策略，覆盖范围较广"
+      }
     },
     {
       "id": "12_twenty_day_lifeline",
       "name": "20日线生命线低吸战法",
       "category": "策略战法",
       "logic": "20日线是股价生命线，多空趋势分界线。股价在20日线上方运行代表多头趋势，回踩20日线不破是中长期低吸良机。",
-      "factors": ["20日均线", "均线向上", "回踩不破", "缩量收阳", "趋势分界"],
+      "factors": [
+        "20日均线",
+        "均线向上",
+        "回踩不破",
+        "缩量收阳",
+        "趋势分界"
+      ],
       "entry_rule": "股价在20日线上方运行，20日均线向上，连续3日回调至20日均线附近，缩量收阳不破均线",
       "exit_rule": "股价跌破20日均线或连续5日收在20日均线下方",
       "stop_loss": "20日均线下方3%",
       "take_profit": "10-15%",
-      "params": {"ma_period": 20}
+      "params": {
+        "ma_period": 20
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 50,
+        "min_volume": 5000,
+        "description": "20日生命线需中等市值以上股票"
+      }
     },
     {
       "id": "13_sixty_day_bull_bear",
       "name": "60日线牛熊分界战法",
       "category": "策略战法",
       "logic": "60日线是牛熊分界线，大级别趋势核心判断标准。股价在60日线上方运行代表牛市行情，回踩60日线不破是大级别低吸良机。",
-      "factors": ["60日均线", "均线向上", "回踩不破", "牛熊分界", "缩量企稳"],
+      "factors": [
+        "60日均线",
+        "均线向上",
+        "回踩不破",
+        "牛熊分界",
+        "缩量企稳"
+      ],
       "entry_rule": "股价在60日线上方运行，60日均线向上，连续5日回调至60日均线附近，缩量收阳不破均线",
       "exit_rule": "股价跌破60日均线或连续10日收在60日均线下方",
       "stop_loss": "60日均线下方5%",
       "take_profit": "20%以上",
-      "params": {"ma_period": 60}
+      "params": {
+        "ma_period": 60
+      },
+      "applicable_pool": {
+        "markets": [
+          "main"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 100,
+        "min_volume": 8000,
+        "description": "60日牛熊线判断大盘趋势，主板大市值股为主"
+      }
     },
     {
       "id": "14_four_ma_resonance",
       "name": "5/10/20/60四线多头共振战法",
       "category": "策略战法",
       "logic": "四条均线同时向上发散呈多头排列，是大级别多头趋势最强确认，过滤90%无效震荡信号。",
-      "factors": ["5/10/20/60日均线", "多头排列", "向上发散", "共振"],
+      "factors": [
+        "5/10/20/60日均线",
+        "多头排列",
+        "向上发散",
+        "共振"
+      ],
       "entry_rule": "5/10/20/60日均线全部向上多头排列，股价站上所有均线，回踩任一均线不破均可低吸",
       "exit_rule": "跌破20日均线或60日均线拐头向下",
       "stop_loss": "20日均线下方3%",
       "take_profit": "趋势延续至均线死叉",
-      "params": {"ma_periods": [5, 10, 20, 60]}
+      "params": {
+        "ma_periods": [
+          5,
+          10,
+          20,
+          60
+        ]
+      },
+      "applicable_pool": {
+        "markets": [
+          "main",
+          "creative"
+        ],
+        "exclude_st": true,
+        "exclude_new": true,
+        "min_market_cap": 50,
+        "min_volume": 5000,
+        "description": "四均线共振需中等市值股票，避免小盘股噪音"
+      }
     }
-  ]
+  ],
+  "applicable_pool_version": "2.0"
 }

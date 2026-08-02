@@ -9,6 +9,7 @@ from core.strategies.ths_strategies._ma_pullback_base import MAPullbackBase
 
 class SixtyDayBullBearStrategy(MAPullbackBase):
     NAME = "60日线牛熊分界"
+    ID = "13_sixty_day_bull_bear"
     RISK_LEVEL = "中"
     MA_PERIOD = 60
     PULLBACK_DAYS = 5

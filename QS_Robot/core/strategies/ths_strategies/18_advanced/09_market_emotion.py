@@ -9,6 +9,7 @@ from core.strategies.ths_strategies.base import THSBaseStrategy
 
 class MarketEmotionStrategy(THSBaseStrategy):
     NAME = "市场情绪温度计"
+    ID = "09_market_emotion"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     UP_RATIO_RANGE = (0.6, 0.8)

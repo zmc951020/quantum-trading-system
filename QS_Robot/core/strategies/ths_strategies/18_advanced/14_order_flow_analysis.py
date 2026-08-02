@@ -9,6 +9,7 @@ from core.strategies.ths_strategies.base import THSBaseStrategy
 
 class OrderFlowAnalysisStrategy(THSBaseStrategy):
     NAME = "Level-2逐笔分析"
+    ID = "14_order_flow_analysis"
     CATEGORY = "ths_advanced"
     RISK_LEVEL = "中"
     PROGRAM_PCT_RANGE = (0.2, 0.4)
