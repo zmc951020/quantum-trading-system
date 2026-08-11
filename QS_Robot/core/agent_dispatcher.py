@@ -40,6 +40,9 @@ from core.agent_registry import (
 
 logger = logging.getLogger(__name__)
 
+# 调度超时配置
+DISPATCH_TIMEOUT = 10  # 调度总超时（秒）
+
 
 # ============================================================
 # 自然语言解析
@@ -217,12 +220,21 @@ class AgentDispatcher:
         由编排引擎识别任务意图、分解子任务、智能分配Agent。
         """
         start_time = time.time()
+        timing = {}  # 各阶段耗时统计
+
+        logger.info(f"[Dispatcher] 收到调度请求: '{message[:80]}...'")
 
         try:
             # 1. 解析意图
+            t0 = time.time()
             intent = parse_dispatch(message)
+            timing["parse"] = round((time.time() - t0) * 1000, 1)
+            logger.info(f"[Dispatcher] 解析: symbol={intent.symbol}, mode={intent.mode}, "
+                        f"agents={len(intent.agent_ids)}, groups={len(intent.group_ids)} "
+                        f"({timing['parse']}ms)")
 
             if not intent.symbol:
+                logger.warning(f"[Dispatcher] 未检测到股票代码")
                 return {
                     "success": False,
                     "error": "未检测到股票代码，请提供6位数字代码（如：600519）",
@@ -231,16 +243,26 @@ class AgentDispatcher:
                 }
 
             # 2. 确定要执行的Agent列表
+            t0 = time.time()
             agents_to_run = self._resolve_agents(intent)
+            timing["resolve"] = round((time.time() - t0) * 1000, 1)
 
             # 3. 智能编排：未指定Agent/分组时，自动识别任务意图并分配
-            # 如果用户没有明确指定Agent名称，即使标签匹配到了一些Agent/Skill，
-            # 也应该触发智能编排，让系统自动选择最合适的Agent组合
             has_explicit_agent = _has_explicit_agent_name(message)
             if not has_explicit_agent and not intent.group_ids:
-                logger.info(f"未指定Agent/分组，触发智能编排: {message}")
-                from core.agent_orchestrator import orchestrate
-                return orchestrate(message, intent.symbol)
+                t0 = time.time()
+                logger.info(f"[Dispatcher] 未指定Agent/分组，触发智能编排 ({timing['resolve']}ms)")
+                from core.agent_orchestrator import orchestrate, _check_llm_available
+                llm_ok = _check_llm_available()
+                timing["llm_check"] = round((time.time() - t0) * 1000, 1)
+                if not llm_ok:
+                    logger.warning(f"[Dispatcher] LLM不可用，使用降级编排 ({timing['llm_check']}ms)")
+                t0 = time.time()
+                result = orchestrate(message, intent.symbol)
+                timing["orchestrate"] = round((time.time() - t0) * 1000, 1)
+                result["_timing"] = timing
+                result["_elapsed_total"] = round((time.time() - start_time) * 1000, 0)
+                return result
 
             if not agents_to_run:
                 return {
@@ -251,15 +273,20 @@ class AgentDispatcher:
                 }
 
             # 3. 获取K线数据
+            t0 = time.time()
             kline_data = self._fetch_kline(intent.symbol)
+            timing["fetch_kline"] = round((time.time() - t0) * 1000, 1)
+            logger.info(f"[Dispatcher] K线获取: {len(kline_data.get('closes', []))}条 ({timing['fetch_kline']}ms)")
 
             # 4. 按模式执行
+            t0 = time.time()
             if intent.mode == "debate":
                 result = self._execute_debate(intent, agents_to_run, kline_data)
             elif intent.mode == "skill_only":
                 result = self._execute_skills(intent, kline_data)
             else:
                 result = self._execute_agents(intent, agents_to_run, kline_data)
+            timing["execute"] = round((time.time() - t0) * 1000, 1)
 
             # 5. 聚合元数据
             result["success"] = True
@@ -268,16 +295,21 @@ class AgentDispatcher:
             result["agents_executed"] = [a.agent_id for a in agents_to_run]
             result["agents_count"] = len(agents_to_run)
             result["elapsed_ms"] = round((time.time() - start_time) * 1000, 0)
+            result["_timing"] = timing
+            result["_elapsed_total"] = round((time.time() - start_time) * 1000, 0)
 
+            logger.info(f"[Dispatcher] 调度完成: total={result['_elapsed_total']}ms, "
+                        f"timing={json_module.dumps(timing, ensure_ascii=False)}")
             return result
 
         except Exception as e:
             import traceback
-            logger.error(f"Agent调度失败: {e}\n{traceback.format_exc()}")
+            elapsed = round((time.time() - start_time) * 1000, 0)
+            logger.error(f"[Dispatcher] 调度失败({elapsed}ms): {e}\n{traceback.format_exc()}")
             return {
                 "success": False,
                 "error": str(e),
-                "elapsed_ms": round((time.time() - start_time) * 1000, 0),
+                "elapsed_ms": elapsed,
             }
 
     def _resolve_agents(self, intent: DispatchIntent) -> List[AgentInfo]:

@@ -46,9 +46,12 @@ class LLMManager:
             })
             print("[OK] Cline智能体提供者已初始化")
         
-        # 设置默认激活的提供者
+        # 设置默认激活的提供者(优先选可用的,避免默认provider不可用导致chat调用直接失败)
         if self.providers:
-            self.active_provider = list(self.providers.values())[0]
+            self.active_provider = next(
+                (p for p in self.providers.values() if p.is_available()),
+                list(self.providers.values())[0]
+            )
             print(f"[OK] 默认LLM提供者: {self.active_provider.name}")
     
     def _init_smart_selector(self):

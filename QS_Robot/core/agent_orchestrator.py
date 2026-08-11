@@ -21,9 +21,11 @@ Agent智能编排引擎（Agent Orchestrator）
 """
 
 import re
+import os
 import time
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 from typing import Dict, List, Optional, Any, Tuple
 
 from core.agent_registry import (
@@ -32,6 +34,76 @@ from core.agent_registry import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ============================================================
+# 重试与降级配置
+# ============================================================
+
+MAX_RETRIES = 2
+RETRY_BACKOFF = 1.5  # 指数退避基数（秒）
+SUBTASK_TIMEOUT = 15  # 单子任务超时（秒）
+ORCHESTRATION_TIMEOUT = 45  # 编排总超时（秒）
+LLM_CHECK_TIMEOUT = 3  # LLM可用性检查超时（秒）
+
+_llm_available_cache = {"value": None, "ts": 0}
+_llm_lock = threading.Lock()
+
+# 模拟降级开关：设置环境变量 FORCE_LLM_DEGRADED=1 强制走降级路径
+_FORCE_DEGRADED = os.environ.get("FORCE_LLM_DEGRADED", "0") == "1"
+
+
+def _check_llm_available() -> bool:
+    """检查LLM是否可用（带缓存+超时，30秒内不重复检查）
+    
+    支持 FORCE_LLM_DEGRADED=1 环境变量强制降级
+    """
+    if _FORCE_DEGRADED:
+        logger.info("[LLM检查] FORCE_LLM_DEGRADED=1，强制降级模式")
+        return False
+
+    with _llm_lock:
+        now = time.time()
+        if _llm_available_cache["value"] is not None and now - _llm_available_cache["ts"] < 30:
+            return _llm_available_cache["value"]
+
+        available = False
+        try:
+            # 用线程包装，加超时保护
+            result_holder = {"available": False}
+
+            def _probe():
+                try:
+                    from llm_manager import LLMManager
+                    mgr = LLMManager()
+                    providers = mgr.get_available_providers()
+                    result_holder["available"] = len(providers) > 0 and any(
+                        p.get("status") == "available" for p in providers
+                    )
+                    result_holder["count"] = len(providers)
+                except Exception as e:
+                    result_holder["error"] = str(e)
+
+            t = threading.Thread(target=_probe, daemon=True)
+            t.start()
+            t.join(timeout=LLM_CHECK_TIMEOUT)
+
+            if t.is_alive():
+                logger.warning("[LLM检查] 检查超时，假定LLM不可用")
+                available = False
+            elif "error" in result_holder:
+                logger.warning(f"[LLM检查] 检查失败: {result_holder['error']}")
+                available = False
+            else:
+                available = result_holder["available"]
+                logger.info(f"[LLM检查] 可用提供者={result_holder.get('count', 0)}, "
+                            f"可用={'是' if available else '否'}")
+        except Exception as e:
+            logger.warning(f"[LLM检查] 检查异常: {e}")
+            available = False
+
+        _llm_available_cache["value"] = available
+        _llm_available_cache["ts"] = now
+        return available
 
 
 # ============================================================
@@ -242,23 +314,31 @@ class AgentOrchestrator:
         result = orchestrator.orchestrate("全面分析600519的市场风险")
 
     编排流程：
-        1. 识别任务类型
-        2. 分解子任务
-        3. 为每个子任务分配Agent
-        4. 并行执行子任务
-        5. 聚合结果生成报告
+        1. LLM可用性预检 → 降级决策
+        2. 识别任务类型
+        3. 分解子任务
+        4. 为每个子任务分配Agent
+        5. 并行执行子任务（带重试+超时）
+        6. 聚合结果生成报告
     """
 
     def __init__(self, dispatcher=None):
-        self.dispatcher = dispatcher  # 可注入AgentDispatcher实例
+        self.dispatcher = dispatcher
         self._executor = ThreadPoolExecutor(max_workers=10)
 
     def orchestrate(self, message: str, symbol: str = None,
                     kline_data: Dict = None) -> Dict[str, Any]:
-        """智能编排入口"""
+        """智能编排入口（带重试+超时+降级）"""
         start_time = time.time()
+        logger.info(f"[Orchestrator] 开始编排: message='{message[:60]}...', symbol={symbol}")
 
         try:
+            # 0. LLM可用性预检
+            llm_ok = _check_llm_available()
+            if not llm_ok:
+                logger.warning("[Orchestrator] LLM不可用，降级为本地规则引擎模式")
+                return self._degraded_orchestrate(message, symbol, start_time)
+
             # 1. 提取股票代码
             if not symbol:
                 symbol_match = re.search(r'(\d{6})', message)
@@ -267,10 +347,12 @@ class AgentOrchestrator:
 
             # 2. 识别任务类型
             task_type, confidence = identify_task_type(message)
-            logger.info(f"编排: 任务类型={task_type}, 置信度={confidence:.0%}")
+            logger.info(f"[Orchestrator] 任务类型={task_type}, 置信度={confidence:.0%}")
 
             # 3. 分解子任务
             intent = decompose_task(message, task_type)
+            logger.info(f"[Orchestrator] 分解为{len(intent.sub_tasks)}个子任务: "
+                        f"{[st.name for st in intent.sub_tasks]}")
 
             # 4. 为每个子任务分配Agent
             sub_task_results = []
@@ -283,47 +365,136 @@ class AgentOrchestrator:
                     "priority": st.priority,
                     "assigned_agents": [a.agent_id for a in assigned_agents],
                     "assigned_skills": assigned_skills,
+                    "retries": 0,
                     "result": None,
                 })
+                logger.debug(f"[Orchestrator] 子任务'{st.name}' → "
+                             f"{len(assigned_agents)}Agent + {len(assigned_skills)}技能")
 
-            # 5. 并行执行子任务
+            # 5. 并行执行子任务（带重试+超时）
             if symbol:
                 kline = kline_data or self._fetch_kline(symbol)
+                logger.info(f"[Orchestrator] K线数据获取: {'有数据' if kline.get('closes') else '空'}")
+
                 with ThreadPoolExecutor(max_workers=min(len(intent.sub_tasks), 5)) as executor:
                     futures = {}
                     for i, st in enumerate(intent.sub_tasks):
                         agents = self._assign_agents_for_subtask(st)
                         skills = st.skills if st.skills else intent.suggested_skills
                         future = executor.submit(
-                            self._execute_subtask, st, agents, skills, symbol, kline
+                            self._execute_subtask_with_retry, st, agents, skills, symbol, kline
                         )
                         futures[future] = i
 
-                    for future in as_completed(futures):
+                    for future in as_completed(futures, timeout=ORCHESTRATION_TIMEOUT):
                         idx = futures[future]
                         try:
-                            result = future.result(timeout=60)
-                            sub_task_results[idx]["result"] = result
+                            result = future.result(timeout=SUBTASK_TIMEOUT + 5)
+                            sub_task_results[idx]["result"] = result["data"]
+                            sub_task_results[idx]["retries"] = result["retries"]
+                            elapsed_sub = result.get("elapsed_ms", 0)
+                            logger.info(f"[Orchestrator] ✓ 子任务'{sub_task_results[idx]['name']}' "
+                                        f"完成 ({elapsed_sub}ms, 重试{result['retries']}次)")
+                        except FutureTimeoutError:
+                            sub_task_results[idx]["result"] = {"error": "子任务执行超时"}
+                            logger.warning(f"[Orchestrator] ⚠ 子任务'{sub_task_results[idx]['name']}' 超时")
                         except Exception as e:
                             sub_task_results[idx]["result"] = {"error": str(e)}
+                            logger.error(f"[Orchestrator] ✗ 子任务'{sub_task_results[idx]['name']}' "
+                                         f"失败: {e}")
 
             # 6. 聚合结果
             orchestration_result = self._aggregate_orchestration(
                 message, symbol, task_type, confidence, intent, sub_task_results,
                 time.time() - start_time
             )
+            elapsed = round((time.time() - start_time) * 1000, 0)
+            logger.info(f"[Orchestrator] 编排完成: {elapsed}ms, "
+                        f"成功={orchestration_result['summary']['completed']}, "
+                        f"失败={orchestration_result['summary']['failed']}")
 
             return orchestration_result
 
         except Exception as e:
             import traceback
-            logger.error(f"编排失败: {e}\n{traceback.format_exc()}")
+            elapsed = round((time.time() - start_time) * 1000, 0)
+            logger.error(f"[Orchestrator] 编排失败({elapsed}ms): {e}\n{traceback.format_exc()}")
             return {
                 "success": False,
                 "error": str(e),
-                "traceback": traceback.format_exc(),
-                "elapsed_ms": round((time.time() - start_time) * 1000, 0),
+                "elapsed_ms": elapsed,
             }
+
+    def _degraded_orchestrate(self, message: str, symbol: str,
+                              start_time: float) -> Dict[str, Any]:
+        """LLM不可用时的降级编排：仅做本地规则匹配，不调用LLM"""
+        logger.info(f"[Orchestrator] 降级模式: 本地规则引擎处理 '{message[:60]}...'")
+
+        task_type, confidence = identify_task_type(message)
+        intent = decompose_task(message, task_type)
+
+        # 降级模式：只返回任务分解，不执行Agent
+        sub_tasks = []
+        for st in intent.sub_tasks:
+            agents = self._assign_agents_for_subtask(st)
+            sub_tasks.append({
+                "name": st.name,
+                "description": st.description,
+                "priority": st.priority,
+                "assigned_agents": [a.agent_id for a in agents],
+                "assigned_skills": st.skills if st.skills else intent.suggested_skills,
+                "result": {"degraded": True, "note": "LLM不可用，仅返回任务分解"},
+                "retries": 0,
+            })
+
+        elapsed = round((time.time() - start_time) * 1000, 0)
+        logger.info(f"[Orchestrator] 降级完成({elapsed}ms): {len(sub_tasks)}个子任务已分解")
+
+        return {
+            "success": True,
+            "degraded": True,
+            "symbol": symbol,
+            "message": message,
+            "task_type": task_type,
+            "confidence": round(confidence * 100, 0),
+            "mode": "degraded_llm_unavailable",
+            "sub_tasks": sub_tasks,
+            "summary": {
+                "total_sub_tasks": len(sub_tasks),
+                "completed": 0,
+                "failed": 0,
+                "pending": len(sub_tasks),
+                "note": "LLM服务不可用，任务已分解但未执行。请启动Ollama或配置EchoBird后重试。",
+            },
+            "elapsed_ms": elapsed,
+        }
+
+    def _execute_subtask_with_retry(self, subtask, agents, skills,
+                                     symbol, kline) -> Dict[str, Any]:
+        """带重试的子任务执行"""
+        t0 = time.time()
+        last_error = None
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                logger.debug(f"[Orchestrator] 子任务'{subtask.name}' 第{attempt+1}次尝试")
+                data = self._execute_subtask(subtask, agents, skills, symbol, kline)
+                return {
+                    "data": data,
+                    "retries": attempt,
+                    "elapsed_ms": round((time.time() - t0) * 1000, 0),
+                }
+            except Exception as e:
+                last_error = e
+                if attempt < MAX_RETRIES:
+                    wait = RETRY_BACKOFF ** (attempt + 1)
+                    logger.warning(f"[Orchestrator] 子任务'{subtask.name}' "
+                                   f"第{attempt+1}次失败: {e}, {wait:.1f}s后重试")
+                    time.sleep(wait)
+
+        logger.error(f"[Orchestrator] 子任务'{subtask.name}' "
+                     f"全部{MAX_RETRIES+1}次重试失败: {last_error}")
+        raise last_error
 
     def _assign_agents_for_subtask(self, subtask: SubTask) -> List[AgentInfo]:
         """为子任务分配Agent"""

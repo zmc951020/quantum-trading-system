@@ -5,12 +5,15 @@ import subprocess
 import atexit
 import signal
 import time
+import logging
 import urllib.request
 import urllib.error
 import json as _json
 from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, send_from_directory, redirect, url_for, make_response
 from flask_cors import CORS
+
+logger = logging.getLogger(__name__)
 
 # 用户数据库（密码从环境变量读取，启动时通过bcrypt哈希初始化）
 # 环境变量: AURORA_USER_<username>=<password>
@@ -191,6 +194,31 @@ except ImportError as e:
     print(f"[Market Intel] 蓝图导入失败: {e}")
 except Exception as e:
     print(f"[Market Intel] 蓝图注册失败: {e}")
+
+
+# ============================================================
+# 注册三入口策略矩阵集群路由（自创/Vibe智能体/金融大师32策略）
+# 在 5003 端口 aurora_main.html 内嵌，不新增web页
+# ============================================================
+try:
+    _aurora_path = os.environ.get(
+        'AURORA_ROOT',
+        config.get('aurora_system.base_path', '')
+    )
+    if not _aurora_path or not os.path.isdir(_aurora_path):
+        raise ImportError(f"Aurora根路径未配置或不存在: {_aurora_path}")
+    if _aurora_path not in sys.path:
+        sys.path.insert(0, _aurora_path)
+    from monitor.cluster_routes import register_cluster_routes
+    register_cluster_routes(app)
+    print("[Cluster Routes] 三入口策略矩阵集群已挂接到5003端口app")
+    print("[Cluster Routes] - /api/cluster/ths/* -> 金融大师32策略集群")
+    print("[Cluster Routes] - /api/cluster/custom/* -> 自创策略集群")
+    print("[Cluster Routes] - /api/vibe/agents/* -> 港大Vibe 28智能体(非集群)")
+except ImportError as e:
+    print(f"[Cluster Routes] Aurora集群路由导入失败: {e}")
+except Exception as e:
+    print(f"[Cluster Routes] Aurora集群路由挂接失败: {e}")
 
 
 @app.route('/dashboard')
@@ -1967,20 +1995,28 @@ def agent_dispatch():
     请求体: {"message": "用趋势和动量分析600519" 或 "让技术组和风控组辩论600519"}
     返回: 调度结果（Agent结果 + 聚合统计 + 最终决策）
     """
+    import time as _time
+    t0 = _time.time()
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
+        logger.info(f"[API] /api/agent/dispatch 收到: '{message[:80]}...'")
         
         if not message:
             return jsonify({"success": False, "error": "消息不能为空"}), 400
         
         from core.agent_dispatcher import dispatch
         result = dispatch(message)
+        elapsed = round((_time.time() - t0) * 1000, 0)
+        logger.info(f"[API] /api/agent/dispatch 完成({elapsed}ms): "
+                    f"success={result.get('success')}, mode={result.get('mode', 'N/A')}")
         return jsonify(result)
     
     except Exception as e:
         import traceback
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        elapsed = round((_time.time() - t0) * 1000, 0)
+        logger.error(f"[API] /api/agent/dispatch 异常({elapsed}ms): {e}\n{traceback.format_exc()}")
+        return jsonify({"success": False, "error": str(e), "elapsed_ms": elapsed}), 500
 
 
 @app.route('/api/agent/registry', methods=['GET'])
@@ -2040,20 +2076,28 @@ def agent_orchestrate():
       - dispatch: 需要明确指定Agent/分组/技能
       - orchestrate: 自动理解任务意图，智能分配Agent和技能
     """
+    import time as _time
+    t0 = _time.time()
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
+        logger.info(f"[API] /api/agent/orchestrate 收到: '{message[:80]}...'")
         
         if not message:
             return jsonify({"success": False, "error": "消息不能为空"}), 400
         
         from core.agent_orchestrator import orchestrate
         result = orchestrate(message)
+        elapsed = round((_time.time() - t0) * 1000, 0)
+        logger.info(f"[API] /api/agent/orchestrate 完成({elapsed}ms): "
+                    f"success={result.get('success')}, degraded={result.get('degraded', False)}")
         return jsonify(result)
     
     except Exception as e:
         import traceback
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        elapsed = round((_time.time() - t0) * 1000, 0)
+        logger.error(f"[API] /api/agent/orchestrate 异常({elapsed}ms): {e}\n{traceback.format_exc()}")
+        return jsonify({"success": False, "error": str(e), "elapsed_ms": elapsed}), 500
 
 
 # ==================== 强强联合流程 API ====================
