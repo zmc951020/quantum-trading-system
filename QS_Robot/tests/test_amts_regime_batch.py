@@ -222,7 +222,7 @@ def _generate_realistic_mock(symbol: str, days: int) -> Dict[str, Any]:
     )
 
 
-def test_one_stock(detector: MultiDimensionalRegimeDetector, kline: Dict[str, Any]) -> Dict[str, Any]:
+def _analyze_one_stock(detector: MultiDimensionalRegimeDetector, kline: Dict[str, Any]) -> Dict[str, Any]:
     """对一只股票运行 AMTS 状态识别，返回统计结果"""
     closes = kline.get("closes", [])
     volumes = kline.get("volumes", [])
@@ -296,8 +296,8 @@ def test_one_stock(detector: MultiDimensionalRegimeDetector, kline: Dict[str, An
     }
 
 
-def test_batch(batch_id: int, stocks: List[Tuple[str, str]],
-               days: int = 500) -> Dict[str, Any]:
+def _run_batch(batch_id: int, stocks: List[Tuple[str, str]],
+              days: int = 500) -> Dict[str, Any]:
     """测试一个批次（20只股票）"""
     batch_start = time.time()
     results = {}
@@ -315,7 +315,7 @@ def test_batch(batch_id: int, stocks: List[Tuple[str, str]],
         stock_start = time.time()
         try:
             kline = get_stock_data(symbol, days)
-            stock_result = test_one_stock(detector, kline)
+            stock_result = _analyze_one_stock(detector, kline)
             results[f"{symbol} {name}"] = stock_result
 
             if "dominant_state" in stock_result:
@@ -370,7 +370,7 @@ def run_all_batches() -> Dict[str, Any]:
         print(f"  批次 {i}/10: {len(stocks)}只股票")
         print(f"{'─' * 60}")
 
-        batch_result = test_batch(i, stocks)
+        batch_result = _run_batch(i, stocks)
         all_batches.append(batch_result)
 
         print(f"\n  批次 {i} 完成: "

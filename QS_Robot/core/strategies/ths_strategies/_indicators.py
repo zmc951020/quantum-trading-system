@@ -26,17 +26,19 @@ def expma(values: Sequence[float], period: int) -> list[float]:
     return ema(values, period)
 
 
-def macd(closes: Sequence[float], fast: int, slow: int, signal: int) -> tuple[float, float, float]:
+def macd(closes: Sequence[float], fast: int, slow: int, signal: int) -> tuple[float, float, float, float, float]:
     if len(closes) < slow + signal:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0
     ema_fast = ema(closes, fast)
     ema_slow = ema(closes, slow)
-    dif_series = [ema_fast[i] - ema_slow[i] for i in range(slow - 1, len(closes))]
+    dif_series = [ema_fast[i] - ema_slow[i] for i in range(len(closes))]
     dea_series = ema(dif_series, signal)
     dif = dif_series[-1]
     dea = dea_series[-1]
+    prev_dif = dif_series[-2] if len(dif_series) >= 2 else dif
+    prev_dea = dea_series[-2] if len(dea_series) >= 2 else dea
     hist = 2 * (dif - dea)
-    return dif, dea, hist
+    return dif, dea, hist, prev_dif, prev_dea
 
 
 def boll(closes: Sequence[float], period: int, std_mult: float) -> tuple[float, float, float]:

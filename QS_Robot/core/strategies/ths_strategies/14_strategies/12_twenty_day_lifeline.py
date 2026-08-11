@@ -1,4 +1,4 @@
-"""策略12：20日线生命线低吸战法
+"""策略12：20日线生命线低吸战法 — 严格数学建模版
 
 来源：同花顺金融大师·策略战法
 逻辑：20日线上方运行 + 均线向上 + 连续3日回调不破 + 缩量收阳
@@ -8,8 +8,10 @@ from core.strategies.ths_strategies._ma_pullback_base import MAPullbackBase
 
 
 class TwentyDayLifelineStrategy(MAPullbackBase):
-    NAME = "20日线生命线低吸"
     ID = "12_twenty_day_lifeline"
+    NAME = "20日线生命线低吸"
+    CATEGORY = "ths_strategies"
+    SOURCE = "同花顺金融大师"
     RISK_LEVEL = "中"
     MA_PERIOD = 20
     PULLBACK_DAYS = 3
