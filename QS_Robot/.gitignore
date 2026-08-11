@@ -7,9 +7,18 @@
 .env.*
 
 # 配置文件（可能含敏感信息）
+config.json
 config.local.json
 config.secret.json
 *.local.json
+
+# 证书与密钥文件
+*.pem
+*.key
+
+# 凭据文件
+credentials
+*.credentials
 
 # 用户数据库（含密码哈希）
 users.json

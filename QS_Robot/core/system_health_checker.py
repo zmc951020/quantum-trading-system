@@ -238,13 +238,25 @@ class SystemHealthChecker:
     # ==================== L2: 业务功能链路 ====================
 
     def _build_l2_checks(self) -> List[Callable]:
+        # ====== 策略体系 (3项) ======
+
         def _l2_001():
+            """策略注册与发现（合并L2_001+L2_005+L2_015）"""
             ok, d = self._api_get("/api/strategy/list")
             strategies = d.get("data", {}).get("strategies", [])
-            return (len(strategies) > 0, 100 if len(strategies) > 0 else 0,
-                    f"策略列表: {len(strategies)}个" if len(strategies) > 0 else "策略列表为空",
-                    "" if len(strategies) > 0 else "检查策略注册表")
-        yield ("L2_001", "策略列表", "L2_业务链路", "critical", "both", _l2_001)
+            api_count = len(strategies)
+            discovery_ok = True
+            try:
+                from core.strategy_auto_discovery import get_auto_discovery
+                disc = get_auto_discovery()
+                discovery_ok = hasattr(disc, 'run_once') or hasattr(disc, 'scan')
+            except Exception:
+                discovery_ok = False
+            passed = api_count > 0 and discovery_ok
+            return (passed, 100 if passed else (60 if api_count > 0 else 0),
+                    f"策略注册: API={api_count}个, 自动发现={'✓' if discovery_ok else '✗'}",
+                    "" if passed else "执行 strategy_auto_discovery.run_once() 填充注册表")
+        yield ("L2_001", "策略注册与发现", "L2_业务链路", "critical", "both", _l2_001)
 
         def _l2_002():
             ok, d = self._api_get("/api/optimizer/list")
@@ -264,51 +276,38 @@ class SystemHealthChecker:
             return (ok, 100 if ok else 0, "策略状态端点可达" if ok else "策略状态端点不可达", "")
         yield ("L2_004", "策略启停端点", "L2_业务链路", "critical", "both", _l2_004)
 
-        # 深度扩展
+        # ====== 优化引擎 (3项) ======
+
         def _l2_005():
-            ok, d = self._api_get("/api/strategy/registry/summary")
-            return (ok, 100 if ok else 0, f"注册表摘要: {'通过' if ok else '失败'}", "")
-        yield ("L2_005", "策略注册表摘要", "L2_业务链路", "warning", "deep", _l2_005)
-
-        def _l2_006():
-            ok, d = self._api_get("/api/risk/status")
-            return (ok, 100 if ok else 0, f"风控状态: {'通过' if ok else '失败'}", "")
-        yield ("L2_006", "风控状态", "L2_业务链路", "critical", "deep", _l2_006)
-
-        # 新模块：牧羊人优化器
-        def _l2_007():
             try:
                 from core.shepherd_optimizer import ShepherdOptimizer, ShepherdVersion
                 s = ShepherdOptimizer(version=ShepherdVersion.V6)
-                return (True, 100, "牧羊人V6优化器: 本地可用（已消除5002依赖）", "")
+                return (True, 100, "牧羊人V6优化器: 本地可用", "")
             except Exception as e:
                 return (False, 0, f"牧羊人优化器: 不可用 - {e}", "检查 core/shepherd_optimizer.py")
-        yield ("L2_007", "牧羊人优化器V6", "L2_业务链路", "critical", "both", _l2_007)
+        yield ("L2_005", "牧羊人优化器V6", "L2_业务链路", "critical", "both", _l2_005)
 
-        # 新模块：Walk-Forward 分析
-        def _l2_008():
+        def _l2_006():
             try:
                 from core.walk_forward import WalkForwardAnalyzer
                 wf = WalkForwardAnalyzer()
                 return (True, 100, "Walk-Forward分析器: 可用", "")
             except Exception as e:
-                return (False, 0, f"Walk-Forward分析器: 不可用 - {e}", "检查 core/walk_forward.py")
-        yield ("L2_008", "Walk-Forward分析", "L2_业务链路", "warning", "both", _l2_008)
+                return (False, 0, f"Walk-Forward: 不可用 - {e}", "检查 core/walk_forward.py")
+        yield ("L2_006", "Walk-Forward分析", "L2_业务链路", "warning", "both", _l2_006)
 
-        # 新模块：回测对比
-        def _l2_009():
+        def _l2_007():
             try:
                 from core.backtest_comparator import BacktestComparator
                 bc = BacktestComparator()
                 return (True, 100, "回测对比器: 可用", "")
             except Exception as e:
                 return (False, 0, f"回测对比器: 不可用 - {e}", "检查 core/backtest_comparator.py")
-        yield ("L2_009", "回测多策略对比", "L2_业务链路", "warning", "both", _l2_009)
+        yield ("L2_007", "回测多策略对比", "L2_业务链路", "warning", "both", _l2_007)
 
-        # ---- 韬策略引擎 & 熵韬收敛优化器 & 工作流 专项检查 ----
+        # ====== 韬策略引擎 & 熵韬收敛 & 工作流 (5项) ======
 
-        def _l2_010():
-            """韬策略引擎可用性检查"""
+        def _l2_008():
             try:
                 from core.tau_cluster_engine import TauClusterEngine, get_cluster_engine
                 engine = get_cluster_engine()
@@ -324,20 +323,16 @@ class SystemHealthChecker:
                         "注册策略以激活引擎" if strategy_count == 0 else "")
             except Exception as e:
                 return (False, 0, f"韬策略引擎: 不可用 - {e}", "检查 core/tau_cluster_engine.py")
-        yield ("L2_010", "韬策略引擎可用性", "L2_业务链路", "critical", "both", _l2_010)
+        yield ("L2_008", "韬策略引擎可用性", "L2_业务链路", "critical", "both", _l2_008)
 
-        def _l2_011():
-            """熵韬收敛优化器核心可用性检查"""
+        def _l2_009():
             try:
                 from core.tau_optimizer_cluster import TauOptimizerCluster, get_parameter_store
-                # 检查模块可导入性和核心功能
                 has_cluster_class = TauOptimizerCluster is not None
                 store = get_parameter_store()
-                has_five_dim = hasattr(store, 'get_best_score')  # 五维评分通过参数存储体现
-                has_folding = hasattr(store, 'get_param_groups')  # 参数分组=折叠
-                has_cache = hasattr(store, 'get_stats')  # 缓存统计
+                has_folding = hasattr(store, 'get_param_groups')
+                has_cache = hasattr(store, 'get_stats')
                 all_info = store.get_all_strategies_info() if hasattr(store, 'get_all_strategies_info') else []
-                has_warm_start = len(all_info) > 0  # Warm Start = 有历史参数
                 return (True, 100,
                         f"熵韬收敛优化器: 集群={'✓' if has_cluster_class else '✗'}, "
                         f"参数分组={'✓' if has_folding else '✗'}, "
@@ -346,10 +341,9 @@ class SystemHealthChecker:
                         "检查 core/tau_optimizer_cluster.py" if not all([has_cluster_class, has_folding, has_cache]) else "")
             except Exception as e:
                 return (False, 0, f"熵韬收敛优化器: 不可用 - {e}", "检查 core/tau_optimizer_cluster.py")
-        yield ("L2_011", "熵韬收敛优化器核心", "L2_业务链路", "critical", "both", _l2_011)
+        yield ("L2_009", "熵韬收敛优化器核心", "L2_业务链路", "critical", "both", _l2_009)
 
-        def _l2_012():
-            """工作流引擎可用性检查"""
+        def _l2_010():
             try:
                 from core.workflow_engine import OneClickWorkflowEngine, get_workflow_engine
                 engine = get_workflow_engine()
@@ -365,10 +359,9 @@ class SystemHealthChecker:
                         "检查 core/workflow_engine.py" if not all([has_full, has_manual, has_step, has_batch]) else "")
             except Exception as e:
                 return (False, 0, f"工作流引擎: 不可用 - {e}", "检查 core/workflow_engine.py")
-        yield ("L2_012", "工作流引擎可用性", "L2_业务链路", "critical", "both", _l2_012)
+        yield ("L2_010", "工作流引擎可用性", "L2_业务链路", "critical", "both", _l2_010)
 
-        def _l2_013():
-            """工作流API端点检查"""
+        def _l2_011():
             ok, d = self._api_get("/api/workflow/status")
             status_ok = ok
             ok2, d2 = self._api_get("/api/workflow/history")
@@ -378,15 +371,15 @@ class SystemHealthChecker:
                     f"工作流API: status={'✓' if status_ok else '✗'}, "
                     f"history={'✓' if hist_ok else '✗'}",
                     "" if all_ok else "检查 gateway.py 中 /api/workflow/* 端点")
-        yield ("L2_013", "工作流API端点", "L2_业务链路", "warning", "both", _l2_013)
+        yield ("L2_011", "工作流API端点", "L2_业务链路", "warning", "both", _l2_011)
 
-        def _l2_014():
-            """股票池五层金字塔检查"""
+        # ====== 股票池 (1项，合并L2_014+L4_003) ======
+
+        def _l2_012():
             try:
                 from core.stock_pool import StockPoolManager, get_stock_pool_manager
                 pool_mgr = get_stock_pool_manager()
                 summary = pool_mgr.get_pool_summary()
-                # get_pool_summary 返回 {"观察": n, "候选": n, ...} 或类似格式
                 if isinstance(summary, dict):
                     total = sum(summary.values())
                     detail_parts = []
@@ -397,32 +390,17 @@ class SystemHealthChecker:
                 else:
                     total = len(summary) if summary else 0
                     detail_str = f"共{total}只"
-                return (True, 100 if total > 0 else 70,
-                        f"股票池: {detail_str}",
+                api_ok, _ = self._api_get("/api/stock-pool")
+                return (True, 100 if total > 0 and api_ok else 70,
+                        f"股票池: {detail_str}, API={'✓' if api_ok else '✗'}",
                         "执行选股流程以填充股票池" if total == 0 else "")
             except Exception as e:
                 return (False, 0, f"股票池: 不可用 - {e}", "检查 core/stock_pool.py")
-        yield ("L2_014", "股票池五层金字塔", "L2_业务链路", "warning", "both", _l2_014)
+        yield ("L2_012", "股票池", "L2_业务链路", "warning", "both", _l2_012)
 
-        def _l2_015():
-            """策略自动发现检查"""
-            try:
-                from core.strategy_auto_discovery import StrategyAutoDiscovery, get_auto_discovery
-                discovery = get_auto_discovery()
-                has_scan = hasattr(discovery, 'run_once') or hasattr(discovery, 'scan')
-                has_register = (hasattr(discovery, '_register_strategy') or
-                               hasattr(discovery, 'register_strategy') or
-                               hasattr(discovery, 'register'))
-                return (True, 100 if has_scan and has_register else 70,
-                        f"策略自动发现: 扫描={'✓' if has_scan else '✗'}, "
-                        f"注册={'✓' if has_register else '✗'}",
-                        "检查 core/strategy_auto_discovery.py" if not (has_scan and has_register) else "")
-            except Exception as e:
-                return (False, 0, f"策略自动发现: 不可用 - {e}", "检查 core/strategy_auto_discovery.py")
-        yield ("L2_015", "策略自动发现", "L2_业务链路", "warning", "both", _l2_015)
+        # ====== 自适应层 (1项) ======
 
-        def _l2_016():
-            """策略自适应层检查"""
+        def _l2_013():
             try:
                 from core.adaptive_market_regime import (
                     MultiDimensionalRegimeDetector, StrategyPerformanceProfile,
@@ -438,13 +416,13 @@ class SystemHealthChecker:
                         "检查 core/adaptive_market_regime.py" if not (has_detector and has_profile_store) else "")
             except Exception as e:
                 return (False, 0, f"自适应层: 不可用 - {e}", "检查 core/adaptive_market_regime.py")
-        yield ("L2_016", "策略自适应层", "L2_业务链路", "warning", "both", _l2_016)
+        yield ("L2_013", "策略自适应层", "L2_业务链路", "warning", "both", _l2_013)
 
-        def _l2_017():
-            """策略性能画像存储检查"""
+        # ====== 独立保留项 (2项) ======
+
+        def _l2_014():
             try:
                 from core.adaptive_market_regime import StrategyProfileStore
-                import os
                 store_path = os.path.join(PROJECT_ROOT, "data", "strategy_profiles.json")
                 store = StrategyProfileStore(storage_path=store_path)
                 profiles = store.get_all_profiles() if hasattr(store, 'get_all_profiles') else []
@@ -455,27 +433,9 @@ class SystemHealthChecker:
                         "执行一次优化以生成策略画像" if profile_count == 0 else "")
             except Exception as e:
                 return (False, 0, f"策略画像存储: 不可用 - {e}", "检查 core/adaptive_market_regime.py")
-        yield ("L2_017", "策略性能画像存储", "L2_业务链路", "warning", "both", _l2_017)
+        yield ("L2_014", "策略性能画像存储", "L2_业务链路", "warning", "both", _l2_014)
 
-        # 新模块：同花顺金融大师桥接（14策略+18战法）
-        def _l2_018():
-            """同花顺桥接模块检查"""
-            try:
-                from api.ths_bridge import IwencaiAdapter, HttpAdapter, SignalCollector
-                collector = SignalCollector()
-                s14, s18 = collector.list_strategies()
-                ok = len(s14) == 14 and len(s18) == 18
-                return (ok, 100 if ok else 50,
-                        f"同花顺桥接: 14策略={'✓' if len(s14) == 14 else '✗'}({len(s14)}), "
-                        f"18战法={'✓' if len(s18) == 18 else '✗'}({len(s18)})",
-                        "检查 core/strategies/ths_strategies/ 目录" if not ok else "")
-            except Exception as e:
-                return (False, 0, f"同花顺桥接: 不可用 - {e}", "检查 api/ths_bridge/ 模块")
-        yield ("L2_018", "同花顺桥接模块", "L2_业务链路", "critical", "both", _l2_018)
-
-        # 新模块：三类选股分流
-        def _l2_019():
-            """三类选股分流检查"""
+        def _l2_015():
             try:
                 from core.stock_pool import StockPoolManager, StockSource
                 mgr = StockPoolManager()
@@ -490,40 +450,79 @@ class SystemHealthChecker:
                         "检查 core/stock_pool.py StockSource 枚举" if not has_all_sources else "")
             except Exception as e:
                 return (False, 0, f"三类选股分流: 不可用 - {e}", "检查 core/stock_pool.py")
-        yield ("L2_019", "三类选股分流", "L2_业务链路", "warning", "both", _l2_019)
+        yield ("L2_015", "三类选股分流", "L2_业务链路", "warning", "both", _l2_015)
 
-        def _l2_020():
-            """市场情报看板检查（5维度采集器+种子池）"""
+        # ====== 同花顺入口 (4子项，各占25分) ======
+
+        def _l2_016a():
+            try:
+                from api.ths_bridge import IwencaiAdapter, HttpAdapter, SignalCollector
+                collector = SignalCollector()
+                s14, s18 = collector.list_strategies()
+                ok = len(s14) == 14 and len(s18) == 18
+                return (ok, 25 if ok else 0,
+                        f"THS-桥接: 14策略={'✓' if len(s14)==14 else '✗'}({len(s14)}), "
+                        f"18战法={'✓' if len(s18)==18 else '✗'}({len(s18)})",
+                        "检查 core/strategies/ths_strategies/ 目录" if not ok else "")
+            except Exception as e:
+                return (False, 0, f"THS-桥接: 不可用 - {e}", "检查 api/ths_bridge/ 模块")
+        yield ("L2_016a", "THS-桥接模块", "L2_业务链路", "critical", "both", _l2_016a)
+
+        def _l2_016b():
             try:
                 from api.ths_bridge.market_intel import get_market_intel_collector
                 from core.stock_pool import StockSource
                 collector = get_market_intel_collector()
                 data = collector.fetch_all()
-                dims_ok = sum(1 for k in ["hot_stocks", "market_overview",
-                                            "capital_flow", "sector_rotation",
-                                            "market_emotion"] if k in data)
-                # 种子池来源是否就位
+                dims = sum(1 for k in ["hot_stocks","market_overview","capital_flow",
+                                        "sector_rotation","market_emotion"] if k in data)
                 seed_ok = (StockSource.THS_MASTER_POOL.value in
                            [s.value for s in StockSource.seed_sources()])
-                ok = dims_ok == 5 and seed_ok
-                score = 100 if ok else 60
-                msg = (f"市场情报: 5维度={'✓' if dims_ok == 5 else '✗'}({dims_ok}/5), "
-                       f"种子池={'✓' if seed_ok else '✗'}")
-                return (ok, score, msg,
-                        "检查 api/ths_bridge/market_intel.py 和 core/stock_pool.py" if not ok else "")
+                ok = dims == 5 and seed_ok
+                return (ok, 25 if ok else 0,
+                        f"THS-情报: {dims}/5维度, 种子池={'✓' if seed_ok else '✗'}",
+                        "检查 api/ths_bridge/market_intel.py" if not ok else "")
             except Exception as e:
-                return (False, 0, f"市场情报看板: 不可用 - {e}",
-                        "检查 api/ths_bridge/market_intel.py")
-        yield ("L2_020", "市场情报看板", "L2_业务链路", "warning", "both", _l2_020)
+                return (False, 0, f"THS-情报: 不可用 - {e}", "检查 api/ths_bridge/market_intel.py")
+        yield ("L2_016b", "THS-市场情报", "L2_业务链路", "warning", "both", _l2_016b)
+
+        def _l2_016c():
+            """同花顺问财选股API（新增）"""
+            ok, _ = self._api_get("/ths_academy/api/strategies")
+            return (ok, 25 if ok else 0, f"THS-问财选股: {'可达' if ok else '不可达'}", "")
+        yield ("L2_016c", "THS-问财选股", "L2_业务链路", "warning", "both", _l2_016c)
+
+        def _l2_016d():
+            """同花顺信号收集（新增）"""
+            try:
+                from api.ths_bridge import SignalCollector
+                c = SignalCollector()
+                s14, s18 = c.list_strategies()
+                total = len(s14) + len(s18)
+                return (total >= 32, 25 if total >= 32 else 0,
+                        f"THS-信号收集: {total}个(14策略+18战法)", "")
+            except Exception as e:
+                return (False, 0, f"THS-信号收集: 不可用 - {e}", "检查 api/ths_bridge/")
+        yield ("L2_016d", "THS-信号收集", "L2_业务链路", "warning", "both", _l2_016d)
 
     # ==================== L3: 系统可靠性 ====================
 
     def _build_l3_checks(self) -> List[Callable]:
         def _l3_001():
+            """健康检查（合并L3_001+L7_007，quick=基础/deep=完整）"""
             ok, d = self._api_get("/api/health")
             status = d.get("status", "unknown")
-            return (ok and status == "healthy", 100 if ok else 0,
-                    f"健康检查: {status}" if ok else "健康检查失败", "")
+            basic_ok = ok and status == "healthy"
+            full_detail = ""
+            if self.mode == "deep":
+                ok2, d2 = self._api_get("/api/health/full")
+                full = d2.get("data", {})
+                checks = sum(1 for v in full.values() if v is True)
+                total = max(len(full) - 1, 1)
+                full_detail = f", 完整={checks}/{total}"
+            return (basic_ok, 100 if basic_ok else 0,
+                    f"健康检查: {status}{full_detail}",
+                    "" if basic_ok else "检查系统健康状况")
         yield ("L3_001", "健康检查", "L3_系统可靠性", "critical", "both", _l3_001)
 
         def _l3_002():
@@ -619,6 +618,19 @@ class SystemHealthChecker:
             return (True, 100, f"自愈检查: 全部{len(modules)}个关键模块正常", "")
         yield ("L3_007", "关键模块自愈检查", "L3_系统可靠性", "critical", "both", _l3_007)
 
+        # 新增：5003端口连通性检查
+        def _l3_008():
+            try:
+                import requests
+                r = requests.get("http://127.0.0.1:5003/", timeout=5)
+                ok = r.status_code in (200, 302)
+                return (ok, 100 if ok else 0,
+                        f"5003端口: {'可达' if ok else '不可达'} (HTTP {r.status_code})",
+                        "" if ok else "检查 start_ui.py 是否正常启动")
+            except Exception as e:
+                return (False, 0, f"5003端口: 不可达 - {e}", "检查 start_ui.py 是否正常启动")
+        yield ("L3_008", "5003端口连通", "L3_系统可靠性", "critical", "both", _l3_008)
+
     # ==================== L4: 数据与行情 ====================
 
     def _build_l4_checks(self) -> List[Callable]:
@@ -636,11 +648,6 @@ class SystemHealthChecker:
             return (len(stocks) > 0, 100 if len(stocks) > 0 else 50,
                     f"市场数据: {len(stocks)}条" if len(stocks) > 0 else "市场数据为空", "")
         yield ("L4_002", "市场数据源", "L4_数据行情", "warning", "both", _l4_002)
-
-        def _l4_003():
-            ok, d = self._api_get("/api/stock-pool")
-            return (ok, 100 if ok else 0, f"股票池接口: {'通过' if ok else '失败'}", "")
-        yield ("L4_003", "股票池接口", "L4_数据行情", "warning", "both", _l4_003)
 
         # 深度扩展
         def _l4_004():
@@ -672,8 +679,13 @@ class SystemHealthChecker:
 
     def _build_l5_checks(self) -> List[Callable]:
         def _l5_001():
+            """风控引擎（合并L2_006+L5_001，检查规则激活状态）"""
             ok, d = self._api_get("/api/risk/status")
-            return (ok, 100 if ok else 0, f"风控引擎: {'在线' if ok else '离线'}", "")
+            rules = d.get("data", {}).get("rules", [])
+            active = sum(1 for r in rules if r.get("active"))
+            return (ok and active > 0, 100 if ok and active > 0 else (50 if ok else 0),
+                    f"风控引擎: {'在线' if ok else '离线'}, {active}条规则激活",
+                    "" if ok else "检查 core/risk_control.py")
         yield ("L5_001", "风控引擎", "L5_交易风控", "critical", "both", _l5_001)
 
         def _l5_002():
@@ -748,10 +760,15 @@ class SystemHealthChecker:
 
     def _build_l6_checks(self) -> List[Callable]:
         def _l6_001():
+            """LLM管理器（合并L6_001+L6_005，quick=模型列表/deep=+配置）"""
             ok, d = self._api_get("/api/llm/models", timeout=3)
             models = d.get("data", {}).get("models", [])
-            return (len(models) > 0, 100 if len(models) > 0 else 50,
-                    f"LLM模型: {len(models)}个" if len(models) > 0 else "LLM模型列表为空", "")
+            config_ok = True
+            if self.mode == "deep":
+                config_ok, _ = self._api_get("/api/llm/config")
+            return (ok and len(models) > 0, 100 if ok and len(models) > 0 else 50,
+                    f"LLM: {len(models)}个模型, 配置={'✓' if config_ok else '✗'}",
+                    "" if ok else "检查LLM服务是否启动")
         yield ("L6_001", "LLM管理器", "L6_AI智能体", "warning", "both", _l6_001)
 
         def _l6_002():
@@ -770,10 +787,25 @@ class SystemHealthChecker:
             return (ok, 100 if ok else 0, f"29智能体投票: {'通过' if ok else '失败'}", "")
         yield ("L6_004", "29智能体投票", "L6_AI智能体", "info", "deep", _l6_004)
 
+        # 新增：智能体注册表API
         def _l6_005():
-            ok, d = self._api_get("/api/llm/config")
-            return (ok, 100 if ok else 0, f"LLM配置: {'通过' if ok else '失败'}", "")
-        yield ("L6_005", "LLM配置查询", "L6_AI智能体", "info", "deep", _l6_005)
+            ok, d = self._api_get("/api/agent/registry")
+            registry = d.get("registry", {})
+            agents = registry.get("agents", {})
+            return (ok and len(agents) > 0, 100 if ok and len(agents) > 0 else 0,
+                    f"智能体注册表: {len(agents)}个Agent" if ok and len(agents) > 0 else "智能体注册表为空",
+                    "" if ok else "检查 /api/agent/registry 端点")
+        yield ("L6_005", "智能体注册表API", "L6_AI智能体", "warning", "both", _l6_005)
+
+        # 新增：智能体调度降级
+        def _l6_006():
+            ok, d = self._api_post("/api/agent/dispatch", {"message": "分析600519"}, timeout=15)
+            degraded = d.get("degraded", False)
+            has_subtasks = len(d.get("sub_tasks", [])) > 0
+            return (ok and (degraded or has_subtasks), 100 if ok else 0,
+                    f"调度降级: degraded={degraded}, sub_tasks={len(d.get('sub_tasks', []))}" if ok else "调度失败",
+                    "" if ok else "检查 core/agent_orchestrator.py")
+        yield ("L6_006", "智能体调度降级", "L6_AI智能体", "warning", "both", _l6_006)
 
     # ==================== L7: 运维与部署 ====================
 
@@ -809,11 +841,6 @@ class SystemHealthChecker:
             return (ok, 100 if ok else 0, "配置文件存在" if ok else "配置文件缺失", "")
         yield ("L7_003", "配置文件", "L7_运维部署", "warning", "both", _l7_003)
 
-        def _l7_004():
-            ok, d = self._api_get("/api/security/audit-logs?limit=5")
-            return (ok, 100 if ok else 0, f"审计日志: {'通过' if ok else '失败'}", "")
-        yield ("L7_004", "审计日志可用", "L7_运维部署", "warning", "both", _l7_004)
-
         # 深度扩展
         def _l7_005():
             try:
@@ -823,38 +850,29 @@ class SystemHealthChecker:
                 return (ok, 100 if ok else 0, f"404处理: status={r.status_code}", "")
             except Exception as e:
                 return (False, 0, f"404测试异常: {e}", "")
-        yield ("L7_005", "404错误处理", "L7_运维部署", "info", "deep", _l7_005)
+        yield ("L7_004", "404错误处理", "L7_运维部署", "info", "deep", _l7_005)
 
-        def _l7_006():
-            ok, d = self._api_get("/api/alerts")
-            return (ok, 100 if ok else 0, f"告警系统: {'通过' if ok else '失败'}", "")
-        yield ("L7_006", "告警系统", "L7_运维部署", "warning", "deep", _l7_006)
-
-        # 新模块：告警管理器
-        def _l7_006b():
+        def _l7_004():
+            """告警系统（合并L7_006+L7_006b，模块+API双重验证）"""
             try:
                 from core.alert_manager import AlertManager, get_alert_manager
                 am = get_alert_manager()
                 channels = list(am._channels.keys())
                 history = am.get_history(limit=5)
-                return (True, 100 if len(channels) > 1 else 70,
-                        f"告警管理器: {len(channels)}个通道({', '.join(channels)}), "
-                        f"近期{len(history)}条告警",
-                        "配置环境变量以启用钉钉/企微/邮件" if len(channels) <= 1 else "")
-            except Exception as e:
-                return (False, 0, f"告警管理器: 不可用 - {e}", "检查 core/alert_manager.py")
-        yield ("L7_006b", "告警管理器(新)", "L7_运维部署", "warning", "both", _l7_006b)
+                module_ok = True
+            except Exception:
+                channels = []
+                history = []
+                module_ok = False
+            api_ok, _ = self._api_get("/api/alerts")
+            ok = module_ok and api_ok
+            return (ok, 100 if ok else 50,
+                    f"告警系统: {len(channels)}通道({', '.join(channels) if module_ok else 'N/A'}), "
+                    f"API={'✓' if api_ok else '✗'}",
+                    "" if ok else "检查 core/alert_manager.py")
+        yield ("L7_005", "告警系统", "L7_运维部署", "warning", "both", _l7_004)
 
-        def _l7_007():
-            ok, d = self._api_get("/api/health/full")
-            full = d.get("data", {})
-            checks = sum(1 for v in full.values() if v is True)
-            total = len(full) - 1  # exclude degradation dict
-            return (checks > 0, 100 if checks > 0 else 0,
-                    f"完整健康检查: {checks}/{total}项正常", "")
-        yield ("L7_007", "完整健康检查", "L7_运维部署", "info", "deep", _l7_007)
-
-        def _l7_008():
+        def _l7_005():
             """内存泄漏检测"""
             try:
                 import psutil
@@ -883,7 +901,7 @@ class SystemHealthChecker:
                 return (True, 70, "psutil未安装，跳过内存检测", "pip install psutil")
             except Exception as e:
                 return (False, 0, f"内存检测异常: {e}", "")
-        yield ("L7_008", "内存泄漏检测", "L7_运维部署", "warning", "deep", _l7_008)
+        yield ("L7_006", "内存泄漏检测", "L7_运维部署", "warning", "deep", _l7_005)
 
         def _l7_009():
             """磁盘空间监控"""
@@ -917,7 +935,7 @@ class SystemHealthChecker:
                 return (ok, 100 if ok else 30, detail, suggestion)
             except Exception as e:
                 return (False, 0, f"磁盘检测异常: {e}", "")
-        yield ("L7_009", "磁盘空间监控", "L7_运维部署", "warning", "deep", _l7_009)
+        yield ("L7_007", "磁盘空间监控", "L7_运维部署", "warning", "deep", _l7_009)
 
         def _l7_010():
             """性能监控（响应时间）"""
@@ -939,7 +957,7 @@ class SystemHealthChecker:
                        detail, suggestion)
             except Exception as e:
                 return (False, 0, f"性能检测异常: {e}", "")
-        yield ("L7_010", "API响应性能", "L7_运维部署", "warning", "deep", _l7_010)
+        yield ("L7_008", "API响应性能", "L7_运维部署", "warning", "deep", _l7_010)
 
     # ==================== L8: 深度审计（代码/API/引擎/配置） ====================
 

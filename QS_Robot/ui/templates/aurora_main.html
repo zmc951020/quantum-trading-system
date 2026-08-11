@@ -300,6 +300,96 @@
             transform: scale(1.1);
             box-shadow: 0 8px 35px rgba(102, 126, 234, 0.5);
         }
+
+        /* 策略矩阵集群内嵌样式（aurora_main专用） */
+        .cluster-warning {
+            background: linear-gradient(90deg, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.05) 100%);
+            border: 1px solid #f59e0b;
+            border-left: 4px solid #f59e0b;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            color: #fbbf24;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+        .cluster-warning strong { color: #fcd34d; }
+        .cluster-ctrl {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: rgba(10, 14, 26, 0.5);
+            border-radius: 10px;
+            border: 1px solid rgba(107, 165, 247, 0.15);
+            font-size: 13px;
+        }
+        .cluster-ctrl label { color: #8ba3c7; display: flex; align-items: center; gap: 6px; }
+        .cluster-ctrl input, .cluster-ctrl select {
+            background: rgba(10, 14, 26, 0.7);
+            border: 1px solid rgba(107, 165, 247, 0.3);
+            border-radius: 6px;
+            color: #e8e8e8;
+            padding: 5px 8px;
+            font-size: 13px;
+        }
+        .cluster-sub-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        @media (max-width: 900px) { .cluster-sub-grid { grid-template-columns: 1fr; } }
+        .cluster-decision-card {
+            background: rgba(22, 33, 62, 0.8);
+            border: 1px solid rgba(107, 165, 247, 0.3);
+            border-radius: 12px;
+            padding: 18px;
+            min-height: 140px;
+        }
+        .decision-action {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .action-buy { color: #10b981; }
+        .action-sell { color: #ef4444; }
+        .action-hold { color: #9ca3af; }
+        .cluster-signal-bar {
+            background: rgba(22, 33, 62, 0.8);
+            border: 1px solid rgba(107, 165, 247, 0.3);
+            border-radius: 12px;
+            padding: 18px;
+        }
+        .signal-bar {
+            display: flex;
+            height: 36px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(10, 14, 26, 0.5);
+        }
+        .signal-bar > div {
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 12px; font-weight: 600;
+            transition: width 0.5s ease;
+        }
+        .sig-buy { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
+        .sig-sell { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+        .sig-neutral { background: linear-gradient(90deg, #6b7280 0%, #4b5563 100%); }
+        .sig-none { background: linear-gradient(90deg, #374151 0%, #1f2937 100%); color: #6b7280; }
+        .badge-backtest {
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge-pending { background: rgba(245,158,11,0.18); color: #fbbf24; border: 1px solid #f59e0b; }
+        .badge-pass { background: rgba(16,185,129,0.18); color: #10b981; border: 1px solid #10b981; }
+        .badge-fail { background: rgba(239,68,68,0.18); color: #ef4444; border: 1px solid #ef4444; }
+        .badge-error { background: rgba(107,114,128,0.25); color: #9ca3af; border: 1px dashed #6b7280; cursor: help; }
     </style>
 </head>
 <body>
@@ -339,6 +429,76 @@
         <!-- 核心模块入口 -->
         <div class="modules-grid" id="modules-grid">
             <!-- 动态加载 -->
+        </div>
+
+        <!-- 三入口策略矩阵集群（内嵌模块，5003端口原生UI） -->
+        <div class="section" id="cluster-matrix-section">
+            <div class="section-header">
+                <h2 class="section-title">🧩 策略矩阵集群</h2>
+                <span style="font-size:12px;color:#8ba3c7;">三入口 · 32策略真实加载 · 4模式共振</span>
+            </div>
+
+            <!-- 不可关闭的黄色研发警示横幅 -->
+            <div class="cluster-warning">
+                ⚠️ <strong>研发预览警告</strong>：32 策略矩阵未完成 3 年真实 A 股历史回测验证，
+                所有集群决策结果仅供研发预览与策略调试，<strong>严禁直接用于任何实盘交易</strong>！
+                回测进度：<span id="backtest-progress">0/32 通过</span>
+            </div>
+
+            <!-- 三个入口 Tab 切换 -->
+            <div class="tab-nav" id="cluster-tabs">
+                <button class="tab-btn active" onclick="switchClusterTab('ths')">📈 金融大师32策略<span class="tab-count">(32)</span></button>
+                <button class="tab-btn" onclick="switchClusterTab('custom')">🎯 自创策略集群<span class="tab-count">(N)</span></button>
+                <button class="tab-btn" onclick="switchClusterTab('vibe')">🤖 港大Vibe 28智能体<span class="tab-count">(28)</span></button>
+            </div>
+
+            <!-- 评估控制条 -->
+            <div class="cluster-ctrl">
+                <label>标的代码 <input type="text" id="cluster-code" value="600519.SH" style="width:120px;"></label>
+                <label>共振模式
+                    <select id="cluster-mode" style="width:90px;">
+                        <option value="vote">vote 投票</option>
+                        <option value="weight">weight 加权</option>
+                        <option value="and">and 全通过</option>
+                        <option value="or">or 任一</option>
+                    </select>
+                </label>
+                <label>动作阈值 <input type="number" id="cluster-threshold" value="0.15" step="0.05" min="0" max="1" style="width:70px;"></label>
+                <button class="btn btn-primary" onclick="runClusterEval()">▶ 评估集群</button>
+                <button class="btn" onclick="runClusterEvalMock()" style="background:rgba(245,158,11,0.2);color:#fbbf24;border-color:#f59e0b;">🧪 Mock(seed=42)</button>
+                <button class="btn" onclick="loadClusterStrategies()">↻ 刷新策略列表</button>
+                <span id="cluster-elapsed" style="color:#8ba3c7;font-size:12px;"></span>
+            </div>
+
+            <!-- 决策卡 + 信号分布条 -->
+            <div class="cluster-sub-grid">
+                <div class="cluster-decision-card" id="cluster-decision">
+                    <div style="color:#8ba3c7;font-size:13px;">尚未评估，点击 [▶ 评估集群] 开始</div>
+                </div>
+                <div class="cluster-signal-bar">
+                    <div style="color:#8ba3c7;font-size:13px;margin-bottom:8px;">信号分布（看多/看空/中性/无信号）</div>
+                    <div id="cluster-signal-bar" class="signal-bar"></div>
+                </div>
+            </div>
+
+            <!-- 策略明细表（每策略一行，含 3 色回测徽章） -->
+            <table class="strategy-table" id="cluster-strategy-table">
+                <thead>
+                    <tr>
+                        <th style="width:18%">策略ID</th>
+                        <th style="width:22%">策略名</th>
+                        <th style="width:8%">动作</th>
+                        <th style="width:10%">置信度</th>
+                        <th style="width:10%">建议仓位</th>
+                        <th style="width:10%">回测状态</th>
+                        <th style="width:10%">夏普(回测)</th>
+                        <th style="width:12%">最大回撤</th>
+                    </tr>
+                </thead>
+                <tbody id="cluster-strategy-body">
+                    <tr><td colspan="8" style="text-align:center;color:#8ba3c7;">点击 [↻ 刷新策略列表] 加载</td></tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- 策略标签库 -->
@@ -624,10 +784,254 @@
                 .catch(e => console.error('加载优化器失败:', e));
         }
 
+        // ==================== 策略矩阵集群（5003端口内嵌） ====================
+        let _clusterCurrentTab = 'ths';
+        const _CLUSTER_API = {
+            ths: { list: '/api/cluster/ths/strategies', eval: '/api/cluster/ths/evaluate' },
+            custom: { list: '/api/cluster/custom/strategies', eval: '/api/cluster/custom/evaluate' },
+            vibe: { list: '/api/vibe/agents/list', eval: '/api/vibe/agents/evaluate' },
+        };
+
+        function switchClusterTab(tab) {
+            _clusterCurrentTab = tab;
+            document.querySelectorAll('#cluster-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.querySelector(`#cluster-tabs .tab-btn[onclick*="'${tab}'"]`);
+            if (btn) btn.classList.add('active');
+            loadClusterStrategies();
+        }
+
+        async function loadClusterStrategies() {
+            const body = document.getElementById('cluster-strategy-body');
+            body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8ba3c7;">加载中...</td></tr>';
+            try {
+                const resp = await fetch(_CLUSTER_API[_clusterCurrentTab].list);
+                const data = await resp.json();
+                if (!data.ok && data.success !== true) throw new Error(data.error || '加载失败');
+                const list = data.data?.items || data.data?.strategies || data.data?.agents || [];
+                _renderClusterTable(Array.isArray(list) ? list : []);
+            } catch (e) {
+                body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ef4444;">❌ ${e.message}</td></tr>`;
+            }
+        }
+
+        function _renderClusterTable(list) {
+            const body = document.getElementById('cluster-strategy-body');
+            if (!list.length) {
+                body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8ba3c7;">暂无策略</td></tr>';
+                return;
+            }
+            let passCount = 0;
+            body.innerHTML = list.map(s => {
+                const id = s.id || s.ID || '';
+                const name = s.name || s.NAME || '';
+                const bt = s.backtest_status || 'pending';
+                const badge = _badgeHtml(bt, s.error_message);
+                if (bt === 'pass') ++passCount;
+                const sharpe = s.sharpe_ratio != null
+                    ? `<b style="color:${s.sharpe_ratio >= 1 ? '#10b981' : '#f59e0b'};">${Number(s.sharpe_ratio).toFixed(2)}</b>`
+                    : '<span style="color:#6b7280;">--</span>';
+                const dd = s.max_drawdown != null
+                    ? `<b style="color:${s.max_drawdown <= 0.2 ? '#10b981' : '#ef4444'};">${(s.max_drawdown * 100).toFixed(1)}%</b>`
+                    : '<span style="color:#6b7280;">--</span>';
+                return `<tr>
+                    <td>${id}</td><td>${name}</td>
+                    <td><span style="color:#8ba3c7;">--</span></td>
+                    <td><span style="color:#8ba3c7;">--</span></td>
+                    <td><span style="color:#8ba3c7;">--</span></td>
+                    <td>${badge}</td>
+                    <td>${sharpe}</td>
+                    <td>${dd}</td>
+                </tr>`;
+            }).join('');
+            document.getElementById('backtest-progress').textContent = `${passCount}/${list.length} 通过`;
+        }
+
+        function _badgeHtml(status, errorMessage) {
+            if (status === 'pass') return '<span class="badge-backtest badge-pass">🟢 回测通过</span>';
+            if (status === 'fail') return '<span class="badge-backtest badge-fail">🔴 回测失败</span>';
+            if (status === 'error') {
+                const tip = (errorMessage || '策略运行报错').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                return `<span class="badge-backtest badge-error" title="${tip}">⚠️ 运行报错</span>`;
+            }
+            return '<span class="badge-backtest badge-pending">🟡 待回测</span>';
+        }
+
+        async function runClusterEval() {
+            const code = document.getElementById('cluster-code').value.trim();
+            const mode = document.getElementById('cluster-mode').value;
+            const threshold = parseFloat(document.getElementById('cluster-threshold').value) || 0.15;
+            const elapsedEl = document.getElementById('cluster-elapsed');
+            const decisionEl = document.getElementById('cluster-decision');
+            decisionEl.innerHTML = '<div style="color:#8ba3c7;">评估中...</div>';
+            elapsedEl.textContent = '评估中...';
+            const t0 = performance.now();
+            try {
+                const bars = _generateMockBars(120);
+                const payload = { bars, params: {}, detail: true, market_regime: 'unknown', mode, action_threshold: threshold, code };
+                const resp = await fetch(_CLUSTER_API[_clusterCurrentTab].eval, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (!data.ok && data.success !== true) throw new Error(data.error || '评估失败');
+                _renderClusterDecision(data.data || data);
+                elapsedEl.textContent = `耗时 ${((performance.now() - t0).toFixed(1))} ms`;
+            } catch (e) {
+                decisionEl.innerHTML = `<div style="color:#ef4444;">❌ ${e.message}</div>`;
+                elapsedEl.textContent = '评估失败';
+            }
+        }
+
+        async function runClusterEvalMock(seed = 42) {
+            // 🧪 使用构造好的mock数据验证页面渲染（12BUY/6SELL/14NONE + 6pass/4fail/22pending徽章）
+            const elapsedEl = document.getElementById('cluster-elapsed');
+            const decisionEl = document.getElementById('cluster-decision');
+            decisionEl.innerHTML = '<div style="color:#8ba3c7;">加载mock数据...</div>';
+            elapsedEl.textContent = 'mock加载中...';
+            try {
+                let resp = null;
+                try {
+                    resp = await fetch(`/api/cluster/ths/mock_eval?seed=${seed}`);
+                } catch (_) { }
+                let payload;
+                if (resp && resp.ok) {
+                    const d = await resp.json();
+                    payload = (d.data || d);
+                } else {
+                    payload = _fallbackMockData(seed);
+                }
+                _renderClusterDecision(payload);
+                elapsedEl.textContent = `mock模式 seed=${seed}`;
+                decisionEl.innerHTML += '<div style="color:#fbbf24;font-size:11px;margin-top:8px;">🧪 展示用mock数据，非真实评估结果</div>';
+            } catch (e) {
+                decisionEl.innerHTML = `<div style="color:#ef4444;">❌ ${e.message}</div>`;
+                elapsedEl.textContent = 'mock失败';
+            }
+        }
+
+        function _fallbackMockData(seed) {
+            // 后端mock路由不可用时的备用，保证前端渲染始终可验证
+            const actions = (['BUY']).fill('BUY', 0, 12).concat(['SELL']).fill('SELL', 0, 6).concat(['NONE']).fill('NONE', 0, 14);
+            const names = ['MACD顺势波段','周线突破战法','5句口诀抓龙头','龙虎榜跟庄','多头排列回踩低吸','EXPMA双金叉','MACD零轴二次金叉','DMI+ADX强趋势','BOLL上轨突破','5日线超低短吸','10日线波段滚动','20日线生命线低吸','60日线牛熊分界','四线多头共振','动态股池回测闭环','主力量价操盘','跟随量化趋势','问财AI选股','筹码单峰密集','龙虎榜量化席位','北向资金跟随','成交量阶梯','市场情绪温度计','板块轮动导出','智能画线形态识别','条件预警状态机','15/30分钟超短','Level-2逐笔分析','金字塔加码仓位','一阳穿三线','网格交易套利','主力筹码控盘综合'];
+            const bt = (['pass']).fill('pass',0,6).concat(['fail']).fill('fail',0,4).concat(['pending']).fill('pending',0,22);
+            const shuffled = (arr, s) => { const a=[...arr]; const r = (n) => (s=Math.sin(s*9301+49297)*233280, (s-Math.floor(s))*n|0); for (let i=a.length-1;i>0;i--) { const j=r(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+            const acts = shuffled(actions, seed), bts = shuffled(bt, seed+1);
+            const detail = names.map((n,i) => {
+                const a = acts[i], b = bts[i], conf = a==='NONE'?0:0.3+((i*seed*7)%70)/100;
+                return { id: `id_${i+1}`, name: n, signal: a==='NONE'?null:{action:a,confidence:conf},
+                    action: a==='NONE'?'HOLD':a, confidence: conf, position_ratio: a==='NONE'?0:0.05+(i%10)/40,
+                    backtest_status: b, sharpe_ratio: b==='pass'?1.2+i*0.08:(b==='fail'?-0.3:null),
+                    max_drawdown: b==='pass'?0.08+i*0.006:(b==='fail'?0.35:null) }; });
+            const buy=acts.filter(x=>x==='BUY').length, sell=acts.filter(x=>x==='SELL').length, none=32-buy-sell;
+            const dir = (buy-sell)/32;
+            return { action: dir>0.2?'BUY':(dir<-0.2?'SELL':'HOLD'), direction:dir, confidence:0.7, position_ratio:0.18, consensus:0.66,
+                bullish:buy, bearish:sell, neutral:0, suppressed:none,
+                signal_counts:{buy,sell,neutral:0,none:none}, strategy_detail:detail, total_signals:buy+sell, weights:{},
+                market_regime:'bull_demo_fallback', elapsed_ms:0.0, seed, is_mock:true, fallback:true };
+        }
+
+        function _renderClusterDecision(d) {
+            const decision = d.decision || d;
+            const action = (decision.action || 'HOLD').toUpperCase();
+            const dir = parseFloat(decision.direction || 0);
+            const conf = (parseFloat(decision.confidence || 0) * 100).toFixed(1);
+            const pos = (parseFloat(decision.position_ratio || decision.position || 0) * 100).toFixed(1);
+            const consensus = (parseFloat(decision.consensus_ratio || decision.consensus || 0) * 100).toFixed(1);
+            const actionCls = action === 'BUY' ? 'action-buy' : action === 'SELL' ? 'action-sell' : 'action-hold';
+            const icon = action === 'BUY' ? '🟢 BUY' : action === 'SELL' ? '🔴 SELL' : '⚪ HOLD';
+            const counts = _normalizeSignalCounts(d, decision);
+            const total = (counts.buy + counts.sell + counts.neutral + counts.none) || 1;
+            const detail = Array.isArray(d.strategy_detail) ? d.strategy_detail
+                         : (Array.isArray(d.strategy_details) ? d.strategy_details : []);
+            document.getElementById('cluster-decision').innerHTML = `
+                <div class="decision-action ${actionCls}">${icon}</div>
+                <div style="color:#8ba3c7;font-size:13px;line-height:1.9;">
+                    方向值 <b style="color:#e8e8e8;">${dir.toFixed(4)}</b> · 置信度 <b style="color:#e8e8e8;">${conf}%</b><br>
+                    建议仓位 <b style="color:#fbbf24;">${pos}%</b> · 共识度 <b style="color:#e8e8e8;">${consensus}%</b><br>
+                    参与策略 <b style="color:#6ba5f7;">${counts.buy + counts.sell + counts.neutral}/${total}</b>
+                </div>`;
+            _renderSignalBar(counts);
+            _renderClusterDetailTable(detail);
+        }
+
+        function _normalizeSignalCounts(d, decision) {
+            // 后端返回格式可能为 {bullish/bearish/neutral/suppressed} 或 {buy/sell/neutral/none}
+            if (d.signal_counts) return d.signal_counts;
+            const bull = d.bullish != null ? d.bullish : (decision.bullish || 0);
+            const bear = d.bearish != null ? d.bearish : (decision.bearish || 0);
+            const neu = d.neutral != null ? d.neutral : (decision.neutral || 0);
+            const supp = Array.isArray(d.suppressed) ? d.suppressed.length : (d.suppressed || 0);
+            return { buy: bull, sell: bear, neutral: neu, none: supp };
+        }
+
+        function _renderSignalBar(c) {
+            const total = c.buy + c.sell + c.neutral + c.none || 1;
+            const pct = v => ((v / total) * 100).toFixed(1);
+            document.getElementById('cluster-signal-bar').innerHTML = `
+                <div class="sig-buy" style="width:${pct(c.buy)}%">🟢 ${c.buy}</div>
+                <div class="sig-sell" style="width:${pct(c.sell)}%">🔴 ${c.sell}</div>
+                <div class="sig-neutral" style="width:${pct(c.neutral)}%">⚪ ${c.neutral}</div>
+                <div class="sig-none" style="width:${pct(c.none)}%">⏭️ ${c.none}</div>`;
+        }
+
+        function _renderClusterDetailTable(details) {
+            const body = document.getElementById('cluster-strategy-body');
+            if (!details.length) {
+                body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8ba3c7;">无策略明细（仅返回汇总）</td></tr>';
+                return;
+            }
+            let passCount = 0;
+            body.innerHTML = details.map(s => {
+                const sig = s.signal || {};
+                const act = (s.action || sig.action || 'HOLD').toString().toUpperCase();
+                const actCls = act === 'BUY' ? 'action-buy' : act === 'SELL' ? 'action-sell' : '';
+                const confRaw = s.confidence != null ? s.confidence : sig.confidence;
+                const conf = confRaw != null ? (confRaw * 100).toFixed(0) + '%' : '--';
+                const pos = s.position_ratio != null ? (s.position_ratio * 100).toFixed(1) + '%' : '--';
+                // 徽章自动切换：backtest_status字段（由后端回测结果填充）
+                const bt = s.backtest_status || 'pending';
+                if (bt === 'pass') ++passCount;
+                const sharpe = s.sharpe_ratio != null
+                    ? `<b style="color:${Number(s.sharpe_ratio) >= 1 ? '#10b981' : (Number(s.sharpe_ratio) >= 0 ? '#f59e0b' : '#ef4444')};">${Number(s.sharpe_ratio).toFixed(2)}</b>`
+                    : '<span style="color:#6b7280;">--</span>';
+                const dd = s.max_drawdown != null
+                    ? `<b style="color:${Number(s.max_drawdown) <= 0.2 ? '#10b981' : (Number(s.max_drawdown) <= 0.4 ? '#f59e0b' : '#ef4444')};">${(Number(s.max_drawdown) * 100).toFixed(1)}%</b>`
+                    : '<span style="color:#6b7280;">--</span>';
+                return `<tr>
+                    <td>${s.id || s.ID || ''}</td>
+                    <td>${s.name || s.NAME || ''}</td>
+                    <td><b class="${actCls}">${act}</b></td>
+                    <td>${conf}</td>
+                    <td>${pos}</td>
+                    <td>${_badgeHtml(bt, s.error_message)}</td>
+                    <td>${sharpe}</td>
+                    <td>${dd}</td>
+                </tr>`;
+            }).join('');
+            document.getElementById('backtest-progress').textContent = `${passCount}/${details.length} 通过`;
+        }
+
+        function _generateMockBars(n) {
+            const bars = [];
+            let price = 100.0;
+            for (let i = 0; i < n; i++) {
+                const drift = i >= n - 30 ? 0.0012 : 0;
+                const shock = (Math.random() - 0.5) * 0.02;
+                const ret = drift + shock;
+                price = Math.max(5, price * (1 + ret));
+                const open = price * (1 + (Math.random() - 0.5) * 0.008);
+                const high = Math.max(price, open) * (1 + Math.abs(Math.random() - 0.5) * 0.012);
+                const low = Math.min(price, open) * (1 - Math.abs(Math.random() - 0.5) * 0.012);
+                const vol = Math.floor(2000000 * (1 + Math.abs(ret) * 40 + Math.random() * 0.6));
+                bars.push({ datetime: `2026-01-${10 + i % 20}`, open, high, low, close: price, volume: vol, amount: vol * price });
+            }
+            return bars;
+        }
+
         // 初始加载
         document.addEventListener('DOMContentLoaded', function() {
             loadStrategies();
             loadOptimizers();
+            loadClusterStrategies();
         });
     </script>
 

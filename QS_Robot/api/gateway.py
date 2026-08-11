@@ -14,6 +14,8 @@ API 网关 — 直接导入模式（豆包方案A）
 
 from flask import Blueprint, request, jsonify, g
 from functools import wraps
+import os
+import time
 from typing import Optional
 from .aurora_core_adapter import get_aurora_adapter, AuroraCoreAdapter, AURORA_BACKEND
 from .response_formatter import APIResponse
@@ -1438,6 +1440,158 @@ def health_scheduler():
     else:
         result = checker.get_scheduler_status()
     return jsonify({"success": True, "data": result})
+
+
+@api_gateway.route('/health/check/l2', methods=['POST'])
+@require_auth
+def health_check_l2():
+    """L2业务功能链路专项巡检"""
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "quick")
+    try:
+        from core.l2_inspector import L2Inspector
+        inspector = L2Inspector(mode=mode)
+        report = inspector.run()
+        return jsonify({
+            "success": True,
+            "data": {
+                "timestamp": report.timestamp,
+                "mode": report.mode,
+                "overall_score": report.overall_score,
+                "overall_status": "healthy" if report.overall_score >= 80 else "warning",
+                "total_checks": report.total,
+                "passed_checks": report.passed,
+                "failed_checks": report.failed,
+                "categories": report.categories,
+                "items": report.items,
+                "elapsed_seconds": report.elapsed_seconds,
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"L2巡检异常: {e}"}), 500
+
+
+@api_gateway.route('/health/check/three_entry', methods=['POST'])
+@require_auth
+def health_check_three_entry():
+    """三大入口自动化流程链路验收"""
+    try:
+        import importlib.util, sys
+        spec = importlib.util.spec_from_file_location(
+            "_verify_three_entries",
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "_verify_three_entries.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        results = []
+        passed = 0
+        failed = 0
+        check_names = [
+            ("基础连通-5002", "verify_closed_n1"),
+            ("基础连通-5003", "verify_closed_n2"),
+            ("基础连通-认证", "verify_closed_n3"),
+            ("基础连通-拦截", "verify_closed_n4"),
+            ("基础连通-性能", "verify_closed_n5"),
+            ("原始策略-n1", "verify_original_n1"),
+            ("原始策略-n2", "verify_original_n2"),
+            ("原始策略-n3", "verify_original_n3"),
+            ("原始策略-n4", "verify_original_n4"),
+            ("原始策略-n5", "verify_original_n5"),
+            ("Vibe入口-n1", "verify_vibe_n1"),
+            ("Vibe入口-n2", "verify_vibe_n2"),
+            ("Vibe入口-n3", "verify_vibe_n3"),
+            ("Vibe入口-n4", "verify_vibe_n4"),
+            ("Vibe入口-n5", "verify_vibe_n5"),
+            ("同花顺-n1", "verify_ths_n1"),
+            ("同花顺-n2", "verify_ths_n2"),
+            ("同花顺-n3", "verify_ths_n3"),
+            ("同花顺-n4", "verify_ths_n4"),
+            ("同花顺-n5", "verify_ths_n5"),
+            ("资源约束-n1", "verify_resource_n1"),
+            ("资源约束-n2", "verify_resource_n2"),
+        ]
+
+        for name, fn_name in check_names:
+            try:
+                fn = getattr(mod, fn_name, None)
+                if fn:
+                    result = fn()
+                    if isinstance(result, dict):
+                        p = result.get("passed", False)
+                        detail = result.get("detail", "")
+                    else:
+                        p, detail = result
+                    results.append({"name": name, "passed": p, "detail": str(detail)})
+                    if p: passed += 1
+                    else: failed += 1
+            except Exception as e:
+                results.append({"name": name, "passed": False, "detail": str(e)})
+                failed += 1
+
+        total = passed + failed
+        return jsonify({
+            "success": True,
+            "data": {
+                "overall_score": round(passed / total * 100, 1) if total > 0 else 0,
+                "passed_checks": passed,
+                "failed_checks": failed,
+                "total_checks": total,
+                "elapsed_seconds": 0,
+                "results": results,
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"三大入口验收异常: {e}"}), 500
+
+
+@api_gateway.route('/health/auto-fix', methods=['POST'])
+@require_auth
+def health_auto_fix():
+    """自动优化：根据巡检报告生成修复建议并尝试执行"""
+    data = request.get_json(silent=True) or {}
+    report = data.get("report", {})
+    fixes = []
+
+    # 1. 策略注册表为空 → 触发自动发现
+    try:
+        from core.strategy_auto_discovery import get_auto_discovery
+        disc = get_auto_discovery()
+        if hasattr(disc, 'run_once'):
+            disc.run_once()
+            fixes.append({"action": "策略自动发现", "result": "已触发策略注册扫描"})
+    except Exception as e:
+        fixes.append({"action": "策略自动发现", "result": f"跳过: {e}"})
+
+    # 2. 检查是否有失败的L2项需要修复
+    modes = report.get("modes", [])
+    for m in modes:
+        if m.get("failed", 0) > 0:
+            if m.get("label") == "快速巡检" or m.get("label") == "深度巡检":
+                fixes.append({"action": "巡检报告", "result": f"{m['label']}: {m['failed']}项失败，建议查看详细日志"})
+
+    # 3. 清理过期日志
+    try:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+        if os.path.exists(log_dir):
+            old_logs = [f for f in os.listdir(log_dir) if f.endswith('.log') and
+                       os.path.getmtime(os.path.join(log_dir, f)) < time.time() - 7 * 86400]
+            if old_logs:
+                for f in old_logs[:3]:
+                    os.remove(os.path.join(log_dir, f))
+                fixes.append({"action": "日志清理", "result": f"已清理 {len(old_logs[:3])} 个过期日志"})
+    except Exception:
+        pass
+
+    if not fixes:
+        fixes.append({"action": "系统状态", "result": "所有检查项正常，无需优化"})
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "message": f"自动优化完成，执行了 {len(fixes)} 项操作",
+            "fixes": fixes,
+        }
+    })
 
 
 # ============================================================

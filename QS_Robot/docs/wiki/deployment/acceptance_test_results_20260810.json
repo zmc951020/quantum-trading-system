@@ -1,0 +1,232 @@
+{
+  "total": 32,
+  "passed": 30,
+  "failed": 2,
+  "pass_rate": 93.8,
+  "results": [
+    {
+      "category": "基础可用性",
+      "name": "服务端口可达",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 286.9
+    },
+    {
+      "category": "基础可用性",
+      "name": "用户认证登录",
+      "passed": true,
+      "detail": "登录成功",
+      "elapsed_ms": 545.0
+    },
+    {
+      "category": "基础可用性",
+      "name": "系统状态API",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 58.1
+    },
+    {
+      "category": "基础可用性",
+      "name": "API网关响应",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 43.2
+    },
+    {
+      "category": "基础可用性",
+      "name": "维护界面可访问",
+      "passed": true,
+      "detail": "维护界面加载成功",
+      "elapsed_ms": 152.0
+    },
+    {
+      "category": "一键巡检",
+      "name": "快速巡检执行",
+      "passed": true,
+      "detail": "评分=81.0",
+      "elapsed_ms": 13272.8
+    },
+    {
+      "category": "一键巡检",
+      "name": "深度巡检执行",
+      "passed": true,
+      "detail": "评分=86.9",
+      "elapsed_ms": 82205.9
+    },
+    {
+      "category": "一键巡检",
+      "name": "L2业务链路巡检",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 2941.9
+    },
+    {
+      "category": "一键巡检",
+      "name": "三大入口验收",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 2258.7
+    },
+    {
+      "category": "一键巡检",
+      "name": "自动修复功能",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 180.9
+    },
+    {
+      "category": "一键巡检",
+      "name": "巡检报告列表",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 108.1
+    },
+    {
+      "category": "架构层",
+      "name": "安全与认证层",
+      "passed": true,
+      "detail": "状态=healthy, 评分=100.0",
+      "elapsed_ms": 14201.2
+    },
+    {
+      "category": "架构层",
+      "name": "业务功能链路层",
+      "passed": true,
+      "detail": "状态=healthy, 评分=80.5",
+      "elapsed_ms": 13282.3
+    },
+    {
+      "category": "架构层",
+      "name": "系统可靠性层",
+      "passed": false,
+      "detail": "状态=critical, 评分=80.0",
+      "elapsed_ms": 17783.1
+    },
+    {
+      "category": "架构层",
+      "name": "数据与行情层",
+      "passed": true,
+      "detail": "状态=healthy, 评分=93.3",
+      "elapsed_ms": 11582.2
+    },
+    {
+      "category": "架构层",
+      "name": "交易与风控层",
+      "passed": false,
+      "detail": "状态=critical, 评分=87.0",
+      "elapsed_ms": 11932.6
+    },
+    {
+      "category": "架构层",
+      "name": "AI与智能体层",
+      "passed": true,
+      "detail": "状态=warning, 评分=40.0",
+      "elapsed_ms": 14275.4
+    },
+    {
+      "category": "架构层",
+      "name": "运维与部署层",
+      "passed": true,
+      "detail": "状态=healthy, 评分=100.0",
+      "elapsed_ms": 11816.5
+    },
+    {
+      "category": "策略模块",
+      "name": "策略列表API",
+      "passed": true,
+      "detail": "31个策略",
+      "elapsed_ms": 79.9
+    },
+    {
+      "category": "策略模块",
+      "name": "策略注册表",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 117.6
+    },
+    {
+      "category": "策略模块",
+      "name": "风控状态API",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 104.7
+    },
+    {
+      "category": "策略模块",
+      "name": "优化器列表",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 119.8
+    },
+    {
+      "category": "策略模块",
+      "name": "工作流状态",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 74.6
+    },
+    {
+      "category": "安全配置",
+      "name": "安全配置API",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 93.5
+    },
+    {
+      "category": "安全配置",
+      "name": "CSRF Token",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 228.7
+    },
+    {
+      "category": "安全配置",
+      "name": "安全状态检查",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 399.8
+    },
+    {
+      "category": "安全配置",
+      "name": "未登录拒绝访问",
+      "passed": true,
+      "detail": "HTTP 401 (应401)",
+      "elapsed_ms": 101.8
+    },
+    {
+      "category": "安全配置",
+      "name": "审计日志",
+      "passed": true,
+      "detail": "HTTP 200",
+      "elapsed_ms": 147.3
+    },
+    {
+      "category": "性能基准",
+      "name": "快速巡检耗时",
+      "passed": true,
+      "detail": "17.9s (目标<60s)",
+      "elapsed_ms": 17875.8
+    },
+    {
+      "category": "性能基准",
+      "name": "API响应时间",
+      "passed": true,
+      "detail": "190ms (目标<500ms)",
+      "elapsed_ms": 190.0
+    },
+    {
+      "category": "性能基准",
+      "name": "策略列表响应",
+      "passed": true,
+      "detail": "237ms (目标<1000ms)",
+      "elapsed_ms": 236.7
+    },
+    {
+      "category": "性能基准",
+      "name": "并发请求稳定性",
+      "passed": true,
+      "detail": "5/5 并发成功",
+      "elapsed_ms": 261.0
+    }
+  ]
+}
