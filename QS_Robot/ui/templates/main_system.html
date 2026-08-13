@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QS Robot V2.0 - 量化策略管理平台</title>
     <style>
+        :root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
         /* ========== 全局基础样式 ========== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
-            background: #0a0e1a;
-            color: #e8e8e8;
+            background: var(--bg-deep);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -19,7 +20,7 @@
 
         /* ========== 顶部状态栏 ========== */
         .top-status-bar {
-            background: linear-gradient(135deg, #16213e 0%, #0a0e1a 100%);
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-deep) 100%);
             padding: 12px 30px;
             display: flex;
             justify-content: space-between;
@@ -41,7 +42,7 @@
             gap: 10px;
             font-size: 20px;
             font-weight: 700;
-            color: #6ba5f7;
+            color: var(--accent-blue);
         }
         .brand-icon { font-size: 28px; }
         .brand-subtitle {
@@ -64,7 +65,7 @@
             padding: 6px 12px;
             background: rgba(107, 165, 247, 0.08);
             border-radius: 20px;
-            border: 1px solid rgba(107, 165, 247, 0.2);
+            border: 1px solid var(--border-subtle);
         }
         .status-dot {
             width: 8px;
@@ -83,7 +84,7 @@
 
         /* ========== Tab 导航栏 ========== */
         .tabs-nav {
-            background: #16213e;
+            background: var(--bg-card);
             padding: 0 30px;
             display: flex;
             gap: 4px;
@@ -115,7 +116,7 @@
             background: rgba(107, 165, 247, 0.08);
         }
         .tab-btn.active {
-            color: #6ba5f7;
+            color: var(--accent-blue);
             border-bottom: 3px solid #667eea;
             background: rgba(102, 126, 234, 0.1);
         }
@@ -139,7 +140,7 @@
 
         /* ========== 通用卡片/面板样式 ========== */
         .panel {
-            background: #16213e;
+            background: var(--bg-card);
             border-radius: 12px;
             padding: 22px;
             margin-bottom: 20px;
@@ -150,7 +151,7 @@
         .panel-title {
             font-size: 17px;
             font-weight: 600;
-            color: #6ba5f7;
+            color: var(--accent-blue);
             margin-bottom: 18px;
             display: flex;
             align-items: center;
@@ -194,10 +195,10 @@
         .form-input, .form-select {
             width: 100%;
             padding: 10px 14px;
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border: 1px solid #0f3460;
             border-radius: 8px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             font-size: 14px;
             transition: all 0.3s;
             outline: none;
@@ -268,7 +269,7 @@
             margin-bottom: 25px;
         }
         .stat-card {
-            background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+            background: linear-gradient(135deg, var(--bg-card) 0%, #0f3460 100%);
             border-radius: 14px;
             padding: 22px;
             border: 1px solid #0f3460;
@@ -319,7 +320,7 @@
 
         /* 进度条 */
         .progress-bar-container {
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 8px;
             height: 8px;
             overflow: hidden;
@@ -339,7 +340,7 @@
         .data-table {
             width: 100%;
             border-collapse: collapse;
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 10px;
             overflow: hidden;
         }
@@ -359,7 +360,7 @@
         .data-table td {
             padding: 14px 16px;
             font-size: 14px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             border-bottom: 1px solid #0f3460;
         }
         .data-table tbody tr {
@@ -385,7 +386,7 @@
         .badge-running { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
         .badge-stopped { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
         .badge-paused { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
-        .badge-info { background: rgba(107, 165, 247, 0.15); color: #6ba5f7; border: 1px solid rgba(107, 165, 247, 0.3); }
+        .badge-info { background: rgba(107, 165, 247, 0.15); color: var(--accent-blue); border: 1px solid rgba(107, 165, 247, 0.3); }
         .badge-watch { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
         .badge-candidate { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
         .badge-testing { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
@@ -414,7 +415,7 @@
             margin-bottom: 20px;
         }
         .result-card {
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 10px;
             padding: 18px;
             text-align: center;
@@ -428,7 +429,7 @@
         .result-card-value {
             font-size: 24px;
             font-weight: 700;
-            color: #6ba5f7;
+            color: var(--accent-blue);
         }
         .result-card-value.positive { color: #10b981; }
         .result-card-value.negative { color: #ef4444; }
@@ -440,7 +441,7 @@
             gap: 12px;
         }
         .param-item {
-            background: #0a0e1a;
+            background: var(--bg-deep);
             padding: 14px;
             border-radius: 8px;
             border-left: 3px solid #667eea;
@@ -456,7 +457,7 @@
             margin-bottom: 20px;
         }
         .pool-track {
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 12px;
             padding: 18px;
             border: 2px solid #0f3460;
@@ -464,8 +465,8 @@
         }
         .pool-track:hover { border-color: #667eea; transform: translateY(-2px); }
         .pool-track-icon { font-size: 28px; margin-bottom: 8px; }
-        .pool-track-name { font-size: 14px; font-weight: 600; color: #e8e8e8; margin-bottom: 4px; }
-        .pool-track-count { font-size: 28px; font-weight: 700; color: #6ba5f7; }
+        .pool-track-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .pool-track-count { font-size: 28px; font-weight: 700; color: var(--accent-blue); }
         .pool-track-desc { font-size: 11px; color: #8ba3c7; margin-top: 6px; }
 
         /* ========== 系统监控模块状态 ========== */
@@ -475,7 +476,7 @@
             gap: 15px;
         }
         .module-card {
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 12px;
             padding: 18px;
             border: 1px solid #0f3460;
@@ -502,7 +503,7 @@
 
         /* ========== 聊天界面 ========== */
         .chat-container {
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 12px;
             height: 550px;
             display: flex;
@@ -546,12 +547,12 @@
         .message.user .message-avatar { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
 
         .message-content {
-            background: #16213e;
+            background: var(--bg-card);
             padding: 12px 16px;
             border-radius: 12px;
             font-size: 14px;
             line-height: 1.6;
-            color: #e8e8e8;
+            color: var(--text-primary);
             border: 1px solid #0f3460;
         }
         .message.user .message-content {
@@ -567,7 +568,7 @@
 
         .chat-input-area {
             padding: 15px;
-            background: #16213e;
+            background: var(--bg-card);
             border-top: 1px solid #0f3460;
             display: flex;
             gap: 10px;
@@ -575,10 +576,10 @@
         .chat-input {
             flex: 1;
             padding: 12px 16px;
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border: 1px solid #0f3460;
             border-radius: 8px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             font-size: 14px;
             font-family: inherit;
             outline: none;
@@ -588,7 +589,7 @@
 
         .quick-replies {
             padding: 10px 15px;
-            background: #16213e;
+            background: var(--bg-card);
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
@@ -612,7 +613,7 @@
 
         /* ========== 底部操作栏 ========== */
         .bottom-bar {
-            background: linear-gradient(135deg, #16213e 0%, #0a0e1a 100%);
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-deep) 100%);
             padding: 14px 30px;
             display: flex;
             justify-content: space-between;
@@ -627,7 +628,7 @@
         /* ========== 状态提示条 ========== */
         .info-bar {
             background: rgba(107, 165, 247, 0.08);
-            border: 1px solid rgba(107, 165, 247, 0.2);
+            border: 1px solid var(--border-subtle);
             border-radius: 8px;
             padding: 12px 18px;
             margin-bottom: 20px;
@@ -651,11 +652,11 @@
             gap: 15px;
             align-items: center;
             padding: 12px 14px;
-            background: #0a0e1a;
+            background: var(--bg-deep);
             border-radius: 8px;
             margin-bottom: 8px;
         }
-        .indicator-name { font-size: 14px; font-weight: 600; color: #6ba5f7; }
+        .indicator-name { font-size: 14px; font-weight: 600; color: var(--accent-blue); }
         .indicator-bar {
             height: 8px;
             background: #0f3460;
@@ -704,7 +705,7 @@
 
         /* 滚动条 */
         ::-webkit-scrollbar { width: 10px; height: 10px; }
-        ::-webkit-scrollbar-track { background: #0a0e1a; }
+        ::-webkit-scrollbar-track { background: var(--bg-deep); }
         ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 5px; }
         ::-webkit-scrollbar-thumb:hover { background: #2a3f5f; }
 
@@ -724,7 +725,7 @@
 <body>
     <!-- 统一导航栏 -->
     <nav class="navbar" style="background: linear-gradient(135deg, #1a2744 0%, #0d1526 100%); padding: 12px 30px; border-bottom: 2px solid #2a3f5f; display: flex; justify-content: space-between; align-items: center;">
-        <a href="/main_system" class="nav-brand" style="font-size: 18px; font-weight: 600; color: #6ba5f7; display: flex; align-items: center; gap: 10px; text-decoration: none;">
+        <a href="/main_system" class="nav-brand" style="font-size: 18px; font-weight: 600; color: var(--accent-blue); display: flex; align-items: center; gap: 10px; text-decoration: none;">
             <span>🎯</span>
             <span>Aurora 量化</span>
         </a>
@@ -750,7 +751,7 @@
             <a href="/main_system" style="color: #fff; text-decoration: none; display: flex; align-items: center; gap: 10px;">
             <div class="brand" style="cursor: pointer;">
                 <span class="brand-icon" style="font-size: 28px;">🎯</span>
-                <span style="font-size: 20px; font-weight: 700; color: #6ba5f7;">Aurora 量化</span>
+                <span style="font-size: 20px; font-weight: 700; color: var(--accent-blue);">Aurora 量化</span>
                 <span class="brand-subtitle">V2.0 · 量化策略管理平台</span>
             </div>
             </a>
@@ -777,15 +778,15 @@
     <!-- ========== 跨页导航栏（返回控制台/其他页面） ========== -->
     <div style="background: #0f2847; padding: 10px 30px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #0f3460;">
         <span style="color: #8ba3c7; font-size: 13px; margin-right: 8px;">🚀 系统导航:</span>
-        <a href="/dashboard" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🏠 控制台</a>
+        <a href="/dashboard" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🏠 控制台</a>
         <a href="/main_system" style="color: #fff; text-decoration: none; padding: 6px 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 6px; font-size: 13px; font-weight: 500;">🏛️ 主系统</a>
-        <a href="/stock_pool" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">📈 股票池</a>
-        <a href="/technical_analysis" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">📊 技术分析</a>
-        <a href="/vibe_analysis" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🧠 Vibe智能体</a>
-        <a href="/cline-agent" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🤖 Cline智能体</a>
-        <a href="/model-switch" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🔄 模型切换</a>
-        <a href="/chat" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">💬 智能助手</a>
-        <a href="/maintenance" style="color: #e8e8e8; text-decoration: none; padding: 6px 14px; background: #16213e; border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🔧 系统维护</a>
+        <a href="/stock_pool" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">📈 股票池</a>
+        <a href="/technical_analysis" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">📊 技术分析</a>
+        <a href="/vibe_analysis" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🧠 Vibe智能体</a>
+        <a href="/cline-agent" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🤖 Cline智能体</a>
+        <a href="/model-switch" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🔄 模型切换</a>
+        <a href="/chat" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">💬 智能助手</a>
+        <a href="/maintenance" style="color: var(--text-primary); text-decoration: none; padding: 6px 14px; background: var(--bg-card); border-radius: 6px; font-size: 13px; border: 1px solid #0f3460;">🔧 系统维护</a>
     </div>
 
     <!-- ========== Tab 导航栏 ========== -->

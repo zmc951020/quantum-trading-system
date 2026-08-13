@@ -6,15 +6,16 @@
     <title>Cline智能体 - Aurora量化交易系统</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background: #0a0e1a;
-            color: #e8e8e8;
+            background: var(--bg-deep);
+            color: var(--text-primary);
             min-height: 100vh;
         }
 
         .navbar {
-            background: linear-gradient(135deg, #1a2744 0%, #0d1526 100%);
+            background: linear-gradient(135deg, var(--bg-panel) 0%, #0d1526 100%);
             padding: 12px 30px;
             border-bottom: 2px solid #2a3f5f;
             display: flex;
@@ -25,7 +26,7 @@
         .nav-brand {
             font-size: 18px;
             font-weight: 600;
-            color: #6ba5f7;
+            color: var(--accent-blue);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -47,7 +48,7 @@
 
         .nav-links a:hover, .nav-links a.active {
             color: #fff;
-            background: #1a2744;
+            background: var(--bg-panel);
         }
 
         .main-container {
@@ -84,7 +85,7 @@
 
         .model-item {
             padding: 10px 12px;
-            background: #1a2744;
+            background: var(--bg-panel);
             border: 1px solid #2a3f5f;
             border-radius: 8px;
             cursor: pointer;
@@ -106,7 +107,7 @@
 
         .model-name {
             font-size: 13px;
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .model-provider {
@@ -119,7 +120,7 @@
 
         .provider-status {
             padding: 12px;
-            background: #1a2744;
+            background: var(--bg-panel);
             border-radius: 8px;
             border: 1px solid #2a3f5f;
         }
@@ -154,12 +155,12 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: #0a0e1a;
+            background: var(--bg-deep);
         }
 
         .chat-header {
             padding: 20px 30px;
-            background: #1a2744;
+            background: var(--bg-panel);
             border-bottom: 1px solid #2a3f5f;
             display: flex;
             justify-content: space-between;
@@ -169,7 +170,7 @@
         .chat-title {
             font-size: 16px;
             font-weight: 600;
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .chat-subtitle {
@@ -194,7 +195,7 @@
 
         .btn-secondary {
             background: #2a3f5f;
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .btn-secondary:hover {
@@ -254,13 +255,13 @@
         }
 
         .message-content {
-            background: #1a2744;
+            background: var(--bg-panel);
             border: 1px solid #2a3f5f;
             border-radius: 12px;
             padding: 14px 18px;
             line-height: 1.6;
             font-size: 14px;
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .message.user .message-content {
@@ -277,7 +278,7 @@
 
         .input-area {
             padding: 20px 30px;
-            background: #1a2744;
+            background: var(--bg-panel);
             border-top: 1px solid #2a3f5f;
         }
 
@@ -293,7 +294,7 @@
             border: 1px solid #2a3f5f;
             border-radius: 12px;
             padding: 14px 18px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             font-size: 14px;
             font-family: inherit;
             resize: none;
@@ -445,12 +446,12 @@
                 <div style="margin-bottom: 8px;">
                     <input type="text" id="symbolInput" placeholder="股票代码 (如600519)" 
                            style="width: 100%; padding: 8px 10px; background: #0d1526; border: 1px solid #2a3f5f; 
-                                  border-radius: 6px; color: #e8e8e8; font-size: 13px; margin-bottom: 6px;">
+                                  border-radius: 6px; color: var(--text-primary); font-size: 13px; margin-bottom: 6px;">
                 </div>
                 <div style="margin-bottom: 8px;">
                     <select id="groupSelect" onchange="onGroupSelect()"
                             style="width: 100%; padding: 8px 10px; background: #0d1526; border: 1px solid #2a3f5f;
-                                   border-radius: 6px; color: #e8e8e8; font-size: 13px;">
+                                   border-radius: 6px; color: var(--text-primary); font-size: 13px;">
                         <option value="">-- 选择Agent组 --</option>
                     </select>
                 </div>
@@ -496,7 +497,7 @@
                 <div style="margin-bottom: 6px;">
                     <select id="envSelect" onchange="switchEnvironment()"
                             style="width: 100%; padding: 8px 10px; background: #0d1526; border: 1px solid #2a3f5f;
-                                   border-radius: 6px; color: #e8e8e8; font-size: 13px;">
+                                   border-radius: 6px; color: var(--text-primary); font-size: 13px;">
                         <option value="simulation">🟢 模拟环境</option>
                         <option value="live">🔴 实盘环境</option>
                     </select>
@@ -579,13 +580,13 @@
         <!-- 代码预览面板（右侧可展开） -->
         <div id="codePreviewPanel" style="display: none; width: 420px; background: #0d1526; border-left: 1px solid #2a3f5f; 
                  flex-direction: column; overflow: hidden;">
-            <div style="padding: 12px 16px; background: #1a2744; border-bottom: 1px solid #2a3f5f; 
+            <div style="padding: 12px 16px; background: var(--bg-panel); border-bottom: 1px solid #2a3f5f; 
                      display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #e8e8e8; font-size: 14px; font-weight: 600;">💻 代码预览</span>
+                <span style="color: var(--text-primary); font-size: 14px; font-weight: 600;">💻 代码预览</span>
                 <div style="display: flex; gap: 8px;">
                     <select id="codeFileSelect" onchange="loadCodeFile()"
                             style="padding: 4px 8px; background: #0d1526; border: 1px solid #2a3f5f; 
-                                   border-radius: 4px; color: #e8e8e8; font-size: 12px;">
+                                   border-radius: 4px; color: var(--text-primary); font-size: 12px;">
                         <option value="">-- 选择文件 --</option>
                     </select>
                     <button class="btn btn-secondary" onclick="saveCodeFile()" style="padding: 4px 10px; font-size: 12px;">💾 保存</button>
@@ -593,11 +594,11 @@
                 </div>
             </div>
             <textarea id="codeEditor" 
-                      style="flex: 1; width: 100%; padding: 12px; background: #0a0e1a; border: none; 
+                      style="flex: 1; width: 100%; padding: 12px; background: var(--bg-deep); border: none; 
                              color: #00ff88; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; 
                              resize: none; outline: none; line-height: 1.5;"
                       placeholder="Cline修改的代码将实时显示在此处..."></textarea>
-            <div id="codeStatus" style="padding: 8px 16px; background: #1a2744; border-top: 1px solid #2a3f5f; 
+            <div id="codeStatus" style="padding: 8px 16px; background: var(--bg-panel); border-top: 1px solid #2a3f5f; 
                      font-size: 11px; color: #5a6a85;">
                 就绪 - 等待Cline代码输出
             </div>

@@ -4,6 +4,8 @@ let strategyChart = null;
 document.addEventListener('DOMContentLoaded', function() {
     initEventListeners();
     loadPoolSummary();
+    loadCandidateStocks();
+    loadPushLog();
 });
 
 function initEventListeners() {
@@ -263,3 +265,163 @@ function renderStrategyChart(simulated) {
 function formatPercent(value) {
     return typeof value === 'number' ? value.toFixed(2) : '0.00';
 }
+
+// ========== 候选池股票列表 ==========
+
+async function loadCandidateStocks() {
+    try {
+        const resp = await fetch('/api/stock_pool/get_pool/candidate');
+        const data = await resp.json();
+        if (data.success) {
+            renderCandidateTable(data.data);
+        }
+    } catch (error) {
+        console.error('Error loading candidate stocks:', error);
+    }
+}
+
+function renderCandidateTable(stocks) {
+    const tbody = document.getElementById('candidate-table-body');
+    if (!stocks || stocks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;">暂无候选股票 — 请从集群选股页面推入</td></tr>';
+        return;
+    }
+    tbody.innerHTML = stocks.map(s => `
+        <tr>
+            <td><span class="stock-name">${s.code}</span></td>
+            <td>${s.name || s.code}</td>
+            <td>${(s.goodness || 0).toFixed(3)}</td>
+            <td><span class="strategy-name">${s.source || '--'}</span></td>
+            <td>
+                <button class="action-btn btn-tune" onclick="openStrategyTuning('${s.code}')" title="策略参数优化">🔧 调参</button>
+                <button class="action-btn btn-backtest" onclick="openBacktest('${s.code}')" title="回测验证">📉 回测</button>
+                <button class="action-btn btn-promote" onclick="promoteToLive('${s.code}')" title="推入实盘池">💰 实盘</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ========== 股票操作 ==========
+
+function openStrategyTuning(code) {
+    // 跳转到策略优化系统，传入股票代码
+    if (confirm(`即将对 ${code} 进行策略参数优化，是否继续？\n\n系统将使用历史数据对32个策略进行参数网格搜索，找到最优参数组合。`)) {
+        window.open(`/strategy_optimizer?code=${code}`, '_blank');
+    }
+}
+
+function openBacktest(code) {
+    if (confirm(`即将对 ${code} 进行回测验证，是否继续？\n\n系统将使用近3年历史数据运行32个策略，评估夏普比率、最大回撤和胜率。`)) {
+        window.open(`/backtest?code=${code}`, '_blank');
+    }
+}
+
+async function promoteToLive(code) {
+    if (!confirm(`确认将 ${code} 推入实盘池？\n\n⚠️ 实盘交易仅限本地机操作，需注册登录用户身份\n⚠️ 请确保已完成回测验证和风控评估`)) {
+        return;
+    }
+    try {
+        const resp = await fetch('/cluster_selector/api/push_to_pool', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                stocks: [{code: code, name: code, goodness: 0}],
+                level: 'testing',
+                u: 0, n: 5,
+            }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            alert(`✅ ${code} 已推入测试池，请继续执行回测验证后手动升级到实盘池`);
+            loadCandidateStocks();
+            loadPoolSummary();
+        }
+    } catch (error) {
+        console.error('Error promoting:', error);
+        alert('操作失败: ' + error.message);
+    }
+}
+
+// ========== 操作日志 ==========
+
+async function loadPushLog() {
+    try {
+        const resp = await fetch('/cluster_selector/api/push_log?limit=20');
+        const data = await resp.json();
+        if (data.success) {
+            renderPushLog(data.data);
+        }
+    } catch (error) {
+        console.error('Error loading push log:', error);
+    }
+}
+
+function renderPushLog(logs) {
+    const tbody = document.getElementById('push-log-table-body');
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;">暂无操作日志</td></tr>';
+        return;
+    }
+    tbody.innerHTML = logs.reverse().map(log => `
+        <tr>
+            <td style="font-size:11px;color:#94a3b8;">${(log.timestamp || '').substring(11, 19)}</td>
+            <td><span class="strategy-name">${log.source || '--'}</span></td>
+            <td style="font-size:11px;">u=${log.u} n=${log.n} → ${log.target_level}</td>
+            <td>
+                <span style="color:#4caf50;">✅${log.pushed}</span>
+                ${log.skipped > 0 ? `<span style="color:#f59e0b;"> ⏭️${log.skipped}</span>` : ''}
+                ${(log.codes || []).slice(0, 3).join(', ')}${(log.codes || []).length > 3 ? ' ...' : ''}
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ========== 五级流转进度条 ==========
+
+async function updateFlowProgress() {
+    try {
+        const resp = await fetch('/api/stock_pool/summary');
+        const data = await resp.json();
+        if (!data.success) return;
+        const pools = data.data?.pools || data.data || {};
+        const levels = { select: '0', candidate: '0', testing: '0', prelive: '0', live: '0' };
+        if (pools.candidate) levels.candidate = String(pools.candidate);
+        if (pools.classified) levels.testing = String(pools.classified);
+        if (pools.watchlist || pools.adaptive) levels.prelive = String(pools.watchlist || pools.adaptive || 0);
+        if (pools.trading) levels.live = String(pools.trading);
+        if (pools.candidate && pools.classified) levels.select = String(Number(pools.candidate || 0) + Number(pools.classified || 0));
+        else levels.select = levels.candidate;
+        for (const [key, val] of Object.entries(levels)) {
+            var el = document.getElementById('flow-' + key);
+            if (el) el.textContent = val;
+        }
+    } catch (e) {
+        console.error('Flow progress update failed:', e);
+    }
+}
+
+async function runStockPoolAutoFlow() {
+    var steps = document.querySelectorAll('.flow-step');
+    steps.forEach(function(s) { s.style.background = '#1a2744'; });
+    if (steps[0]) steps[0].style.background = 'rgba(99,102,241,0.3)';
+    try {
+        var resp = await fetch('/api/stock_pool/auto_flow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+        var data = await resp.json();
+        if (data.success) {
+            var count = data.data?.flowed || 0;
+            steps.forEach(function(s, i) {
+                if (i <= Math.min(count, 4)) s.style.background = 'rgba(0,200,83,0.3)';
+            });
+            alert('✅ 自动流转完成: ' + count + ' 只股票进入下一级');
+        } else {
+            alert('❌ 流转失败: ' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('❌ 请求失败: ' + e.message);
+    }
+    updateFlowProgress();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(updateFlowProgress, 500);
+});

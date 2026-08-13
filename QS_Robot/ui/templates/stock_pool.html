@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>股票池智能管理系统</title>
     <link rel="stylesheet" href="/static/css/stock_pool.css">
+<style>
+:root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
+</style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -132,6 +135,71 @@
                             <span class="pool-name">实盘池</span>
                             <span class="pool-count" id="pool-trading">0</span>
                         </div>
+                    </div>
+                </div>
+                <!-- 五级流转进度条 -->
+                <div style="margin-top:15px;background:#0d1526;border-radius:8px;padding:12px 16px;">
+                    <div style="color:#8ba3c7;font-size:12px;margin-bottom:8px;">📊 策略流转进度: 选股 → 入池 → 测试 → 预实盘 → 实盘</div>
+                    <div id="flow-progress-bar" style="display:flex;gap:4px;align-items:center;">
+                        <div class="flow-step" data-step="select" style="flex:1;background:#1a2744;border-radius:4px;padding:6px;text-align:center;color:#8ba3c7;font-size:11px;">🔍 选股<div id="flow-select" style="font-size:16px;color:#6366f1;">-</div></div>
+                        <span style="color:#4a5568;">→</span>
+                        <div class="flow-step" data-step="candidate" style="flex:1;background:#1a2744;border-radius:4px;padding:6px;text-align:center;color:#8ba3c7;font-size:11px;">📥 候选池<div id="flow-candidate" style="font-size:16px;color:#6366f1;">-</div></div>
+                        <span style="color:#4a5568;">→</span>
+                        <div class="flow-step" data-step="testing" style="flex:1;background:#1a2744;border-radius:4px;padding:6px;text-align:center;color:#8ba3c7;font-size:11px;">🧪 测试池<div id="flow-testing" style="font-size:16px;color:#f59e0b;">-</div></div>
+                        <span style="color:#4a5568;">→</span>
+                        <div class="flow-step" data-step="prelive" style="flex:1;background:#1a2744;border-radius:4px;padding:6px;text-align:center;color:#8ba3c7;font-size:11px;">⚡ 预实盘<div id="flow-prelive" style="font-size:16px;color:#8b5cf6;">-</div></div>
+                        <span style="color:#4a5568;">→</span>
+                        <div class="flow-step" data-step="live" style="flex:1;background:#1a2744;border-radius:4px;padding:6px;text-align:center;color:#8ba3c7;font-size:11px;">💹 实盘<div id="flow-live" style="font-size:16px;color:#ef4444;">-</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 双栏布局 -->
+            <div class="two-columns">
+                <!-- 候选池股票列表 -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>📥 候选池股票</h2>
+                        <span class="section-subtitle">集群选股推入的待验证股票</span>
+                    </div>
+                    <div class="table-container" style="max-height:400px; overflow-y:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>代码</th>
+                                    <th>名称</th>
+                                    <th>优良度</th>
+                                    <th>来源</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="candidate-table-body">
+                                <tr><td colspan="5" style="text-align:center;padding:20px;">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 操作日志 -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>📋 操作日志</h2>
+                        <span class="section-subtitle">最近推入操作记录</span>
+                    </div>
+                    <div class="table-container" style="max-height:400px; overflow-y:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>来源</th>
+                                    <th>参数</th>
+                                    <th>结果</th>
+                                </tr>
+                            </thead>
+                            <tbody id="push-log-table-body">
+                                <tr><td colspan="4" style="text-align:center;padding:20px;">加载中...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

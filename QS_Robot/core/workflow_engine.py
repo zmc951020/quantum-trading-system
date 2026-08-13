@@ -186,6 +186,10 @@ class OneClickWorkflowEngine:
             # 阶段0: Vibe 市场环境分析
             self._run_stage(result, "Vibe市场分析", self._stage_vibe_analysis, name)
 
+            # 阶段0.5: 集群选股扫描（32策略批量海选）
+            self._run_stage(result, "集群选股", self._stage_cluster_select,
+                           stock_pool=stock_pool)
+
             # 阶段1-6: 使用集成总线的完整流程
             self._run_stage(result, "完整自动化流程", self._stage_integration_full,
                            name, stock_pool=stock_pool, fast_mode=fast_mode)
@@ -226,6 +230,10 @@ class OneClickWorkflowEngine:
         self._run_stage(result, "Vibe市场分析", self._stage_vibe_analysis,
                        strategies[0] if strategies else "unknown")
 
+        # 阶段0.5: 集群选股扫描（32策略批量海选）
+        self._run_stage(result, "集群选股", self._stage_cluster_select,
+                       stock_pool=stock_pool)
+
         # 阶段1: 策略发现与注册
         self._run_stage(result, "策略发现", self._stage_discover, strategies)
 
@@ -252,6 +260,7 @@ class OneClickWorkflowEngine:
         """执行单个步骤"""
         step_map = {
             "vibe": self._stage_vibe_analysis,
+            "cluster": self._stage_cluster_select,
             "discover": self._stage_discover,
             "optimize": self._stage_optimize,
             "backtest": self._stage_backtest,
@@ -332,6 +341,83 @@ class OneClickWorkflowEngine:
         except Exception as e:
             logger.warning(f"[Workflow] Vibe分析失败: {e}")
             stage.message = f"Vibe分析异常: {e}"
+
+    def _stage_cluster_select(self, stage: WorkflowStage,
+                              stock_pool: List[str] = None):
+        """阶段0.5: 32策略集群选股扫描 + u/n参数自动调优"""
+        stage.message = "正在执行32策略集群选股..."
+
+        try:
+            from core.cluster_stock_selector import ClusterStockSelector
+
+            selector = ClusterStockSelector()
+            # 加载上次最佳参数
+            best_params = self._load_cluster_params()
+            u = best_params.get("u", 0.5)
+            n = best_params.get("n", 10)
+
+            codes = stock_pool or self._get_default_pool()
+            if not codes:
+                stage.status = "skipped"
+                stage.message = "股票池为空，跳过集群选股"
+                return
+
+            # 先跑自动调参（轻量模式）
+            stage.message = f"自动调参中 (u×n网格)..."
+            tune_result = selector.auto_tune(
+                codes,
+                u_range=(0.0, 1.0, 0.1),
+                n_range=(5, 30, 5),
+            )
+            best = tune_result.get("best", {})
+            if best:
+                u = best.get("u", u)
+                n = best.get("n", n)
+                self._save_cluster_params(u, n, best.get("score", 0))
+                stage.data["auto_tune"] = {
+                    "best_u": u, "best_n": n,
+                    "best_score": best.get("score", 0),
+                    "grid_size": len(tune_result.get("grid", [])),
+                }
+
+            # 用最佳参数执行选股
+            stage.message = f"集群选股中 (u={u}, n={n})..."
+            scan_result = selector.scan(codes, u=u, n=n)
+
+            stage.data["cluster_stocks"] = [
+                {
+                    "rank": i + 1,
+                    "code": s.code,
+                    "goodness": s.goodness,
+                    "low_score": s.low_score,
+                    "hot_score": s.hot_score,
+                    "signal_count": s.signal_count,
+                    "strategies": s.strategy_names[:5],
+                }
+                for i, s in enumerate(scan_result.stocks[:n])
+            ]
+            stage.data["cluster_summary"] = {
+                "total_scanned": scan_result.total_scanned,
+                "passed": scan_result.passed,
+                "avg_score": scan_result.avg_score,
+                "params": {"u": u, "n": n},
+                "elapsed": scan_result.elapsed_seconds,
+            }
+
+            # 自动入池：将选出的股票加入候选池
+            if scan_result.stocks:
+                stock_codes = [s.code for s in scan_result.stocks[:n]]
+                self._push_to_stock_pool(stock_codes, "candidate", stage)
+
+            stage.message = (f"集群选股完成: {scan_result.passed}/{scan_result.total_scanned} 通过, "
+                            f"入选 {len(scan_result.stocks[:n])} 只 (u={u}, n={n})")
+        except ImportError as e:
+            stage.status = "skipped"
+            stage.message = f"集群选股模块不可用: {e}"
+        except Exception as e:
+            logger.warning(f"[Workflow] 集群选股失败: {e}")
+            stage.status = "failed"
+            stage.error = str(e)
 
     def _stage_integration_full(self, stage: WorkflowStage, strategy_name: str,
                                 stock_pool: List[str] = None, fast_mode: bool = False):
@@ -755,6 +841,92 @@ class OneClickWorkflowEngine:
         if result.stages:
             return datetime.fromisoformat(result.stages[0].started_at).timestamp()
         return time.time()
+
+    # ============================================================
+    # 集群选股辅助方法
+    # ============================================================
+
+    _CLUSTER_PARAMS_FILE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "cluster_params.json",
+    )
+
+    def _load_cluster_params(self) -> dict:
+        """加载上次自动调参的最优参数"""
+        try:
+            if os.path.exists(self._CLUSTER_PARAMS_FILE):
+                with open(self._CLUSTER_PARAMS_FILE, encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def _save_cluster_params(self, u: float, n: int, score: float):
+        """持久化最优 u/n 参数"""
+        try:
+            os.makedirs(os.path.dirname(self._CLUSTER_PARAMS_FILE), exist_ok=True)
+            params = {
+                "u": u, "n": n, "score": score,
+                "updated_at": datetime.now().isoformat(),
+            }
+            with open(self._CLUSTER_PARAMS_FILE, "w", encoding="utf-8") as f:
+                json.dump(params, f, ensure_ascii=False, indent=2)
+            logger.info(f"[Workflow] 集群参数已保存: u={u}, n={n}, score={score}")
+        except Exception as e:
+            logger.warning(f"[Workflow] 保存集群参数失败: {e}")
+
+    def _get_default_pool(self) -> list:
+        """获取默认股票池（沪深300 + 自选股）"""
+        codes = []
+        cache_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data", "bus_cache",
+        )
+        if os.path.exists(cache_dir):
+            for fname in os.listdir(cache_dir):
+                if not fname.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(cache_dir, fname), encoding="utf-8") as f:
+                        d = json.load(f)
+                    sym = d.get("data", {}).get("symbol", "")
+                    if sym:
+                        codes.append(sym)
+                except Exception:
+                    pass
+        return codes[:300]
+
+    def _push_to_stock_pool(self, codes: list, level: str, stage: WorkflowStage):
+        """将选股结果推入股票池"""
+        try:
+            from core.stock_pool import get_stock_pool_manager, PoolLevel
+
+            mgr = get_stock_pool_manager()
+            level_map = {
+                "watchlist": PoolLevel.WATCHLIST,
+                "candidate": PoolLevel.CANDIDATE,
+                "testing": PoolLevel.TESTING,
+                "pre_live": PoolLevel.PRELIVE,
+                "live": PoolLevel.LIVE,
+            }
+            pool_level = level_map.get(level, PoolLevel.CANDIDATE)
+
+            added = 0
+            for code in codes:
+                try:
+                    mgr.add_stock(code, level=pool_level, source="cluster_selector")
+                    added += 1
+                except Exception:
+                    pass
+
+            stage.data["pool_push"] = {
+                "level": level,
+                "pushed": added,
+                "total": len(codes),
+            }
+            logger.info(f"[Workflow] 已推入 {added}/{len(codes)} 只股票到 {level} 池")
+        except Exception as e:
+            logger.warning(f"[Workflow] 推入股票池失败: {e}")
 
 
 # ============================================================

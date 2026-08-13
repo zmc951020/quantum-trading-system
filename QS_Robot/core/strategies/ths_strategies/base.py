@@ -46,6 +46,7 @@ class THSBaseStrategy(ABC):
 
     def _log_entry_fail(self, conditions: dict, extra: str = "") -> None:
         """记录入场条件不满足详情"""
+        self._last_entry_conditions = conditions  # 供评分引擎读取
         failed = [k for k, v in conditions.items() if not v]
         if failed:
             self.logger.debug("[%s] 入场未触发 | 失败条件: %s %s", self.NAME, ",".join(failed), extra)
@@ -53,6 +54,10 @@ class THSBaseStrategy(ABC):
     def _log_data_short(self, bars: int, need: int) -> None:
         """数据不足日志"""
         self.logger.debug("[%s] 数据不足 | 当前=%d 需要=%d", self.NAME, bars, need)
+
+    def _apply_meta_filter(self, signal: dict | None, bars: list[dict]) -> dict | None:
+        """元过滤器（默认透传，子类可覆盖）"""
+        return signal
 
     @abstractmethod
     def generate_signal(self, bars: list[dict], params: dict) -> dict | None:

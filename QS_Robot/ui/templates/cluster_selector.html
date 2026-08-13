@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>集群选股器 - 金融大师32策略</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        :root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: var(--bg-deep); color: var(--text-primary); padding: 20px; min-height: 100vh; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center;
+                  margin-bottom: 20px; padding: 16px 24px;
+                  background: linear-gradient(135deg, #1a3a4a, #0d2137); border-radius: 12px;
+                  box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .header h1 { font-size: 22px; color: var(--accent-cyan); }
+        .header-info { display: flex; gap: 20px; align-items: center; font-size: 13px; }
+        .header-info span { color: var(--text-secondary); }
+        .regime-badge { padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .regime-bearish { background: #c62828; color: #fff; }
+        .regime-trending { background: #2e7d32; color: #fff; }
+        .regime-ranging { background: #f57f17; color: #fff; }
+        .regime-volatile { background: #6a1b9a; color: #fff; }
+        .regime-unknown { background: var(--border-subtle); color: #fff; }
+
+        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto;
+                    gap: 16px; margin-bottom: 20px; padding: 20px;
+                    background: var(--bg-panel); border-radius: 12px; align-items: end;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .control-group label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .control-group .val { font-size: 18px; font-weight: 700; color: var(--accent-cyan); margin-left: 8px; }
+        .control-group .hint { font-size: 10px; color: #546e7a; margin-top: 2px; }
+        input[type=range] { width: 100%; accent-color: var(--accent-cyan); }
+        select { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-subtle);
+                 background: #263238; color: var(--text-primary); font-size: 14px; width: 100%; }
+        .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px;
+               font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .btn-primary { background: #0288d1; color: #fff; }
+        .btn-primary:hover { background: #0277bd; }
+        .btn-secondary { background: var(--border-subtle); color: #b0bec5; }
+        .btn-secondary:hover { background: #455a64; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .panel { background: var(--bg-panel); border-radius: 12px; padding: 20px; margin-bottom: 20px;
+                 box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .panel h2 { font-size: 16px; color: var(--accent-cyan); margin-bottom: 16px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--border-subtle);
+             color: var(--text-secondary); font-weight: 600; }
+        td { padding: 8px; border-bottom: 1px solid #263238; }
+        tr:hover td { background: #263238; }
+        .score-high { color: #4caf50; font-weight: 700; }
+        .score-mid { color: #ff9800; font-weight: 700; }
+        .score-low { color: #f44336; font-weight: 700; }
+        .strat-tag { display: inline-block; padding: 2px 8px; margin: 1px;
+                     background: var(--border-subtle); border-radius: 4px; font-size: 11px; }
+
+        .heatmap-container { height: 420px; }
+        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+        .error { padding: 12px; background: #4a1c1c; color: #ef9a9a; border-radius: 8px;
+                 margin-bottom: 16px; display: none; }
+
+        .nav-back { margin-bottom: 12px; }
+        .nav-back a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+        .nav-back a:hover { color: var(--accent-cyan); }
+
+        .flow-step { text-align:center; padding:12px 16px; background:var(--bg-panel);
+                     border-radius:12px; min-width:100px; border:1px solid var(--border-subtle); }
+        .flow-step:hover { border-color:var(--accent-cyan); box-shadow:0 0 12px rgba(79,195,247,0.2); }
+        .flow-icon { font-size:28px; margin-bottom:6px; }
+        .flow-label { font-size:14px; color:var(--accent-cyan); font-weight:700; }
+        .flow-desc { font-size:11px; color:var(--text-secondary); margin-top:4px; line-height:1.4; }
+        .flow-arrow { color:#546e7a; font-size:24px; font-weight:700; padding:0 4px; }
+
+        .stock-check { width:16px; height:16px; accent-color:var(--accent-cyan); cursor:pointer; }
+        .btn-select-all { background:var(--border-subtle); color:#b0bec5; }
+        .btn-select-all:hover { background:#455a64; }
+        .btn-success { background:#2e7d32; color:#fff; }
+        .btn-success:hover { background:#1b5e20; }
+        .btn-warning { background:#f57f17; color:#fff; }
+        .btn-warning:hover { background:#e65100; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav-back">
+        <a href="/dashboard">← 返回控制台</a>
+    </div>
+
+    <div class="header">
+        <h1>金融大师32策略集群选股器</h1>
+        <div class="header-info">
+            <span>大盘:</span>
+            <span id="regimeBadge" class="regime-badge regime-unknown">--</span>
+            <span>策略:</span>
+            <span style="color:#4fc3f7; font-weight:700;">32</span>
+            <span>上次扫描:</span>
+            <span id="lastScan" style="color:#b0bec5;">--</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>u 热启动放宽 <span id="uVal" class="val">0.50</span></label>
+            <input type="range" id="uSlider" min="0" max="1" step="0.05" value="0.5"
+                   oninput="document.getElementById('uVal').textContent=parseFloat(this.value).toFixed(2)">
+            <div class="hint">0.00=严格(3/3条件) → 1.00=宽松(不强制热启)</div>
+        </div>
+        <div class="control-group">
+            <label>n 优良度排名 <span id="nVal" class="val">10</span></label>
+            <input type="range" id="nSlider" min="1" max="50" step="1" value="10"
+                   oninput="document.getElementById('nVal').textContent=this.value">
+            <div class="hint">n 越小越精选，排除劣势策略所选股票</div>
+        </div>
+        <div class="control-group">
+            <label>股票池</label>
+            <select id="poolSelect">
+                <option value="hs300">沪深300</option>
+                <option value="all">全A股</option>
+                <option value="watchlist">自选股</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="runScan()" id="scanBtn">🚀 执行选股</button>
+        <button class="btn btn-secondary" onclick="runAutoTune()" id="tuneBtn">📊 自动调参</button>
+    </div>
+
+    <div id="errorBox" class="error"></div>
+
+    <div class="panel">
+        <h2>📋 选股结果 <span id="resultCount" style="color:#78909c; font-weight:400;"></span></h2>
+        <div id="resultTable" class="loading">点击「执行选股」开始扫描</div>
+        <div id="actionBar" style="display:none; margin-top:16px; padding-top:16px;
+             border-top:1px solid #37474f; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-select-all" onclick="toggleSelectAll()" id="selectAllBtn" style="background:#37474f;color:#b0bec5;">☐ 全选</button>
+            <button class="btn btn-primary" onclick="pushToPool('candidate')" id="pushCandidateBtn">📥 推入候选池</button>
+            <button class="btn btn-primary" onclick="pushToPool('testing')" id="pushTestingBtn" style="background:#f57f17;">🧪 推入测试池</button>
+            <button class="btn btn-secondary" onclick="batchBacktest()" id="batchBacktestBtn">📉 批量回测</button>
+            <a href="/stock_pool" target="_blank" class="btn btn-secondary" style="text-decoration:none;">📈 查看股票池</a>
+            <span id="actionMsg" style="color:#4caf50; font-size:13px; margin-left:12px;"></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>📊 自动调参热力图 (u × n)</h2>
+        <div id="heatmapChart" class="heatmap-container"></div>
+        <div id="bestParams" style="text-align:center; margin-top:12px; color:#78909c;"></div>
+    </div>
+
+    <div class="panel" style="background:linear-gradient(135deg, #1a3a4a, #0d2137);">
+        <h2>🔄 选股→交易 全链路流程</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:20px 0; flex-wrap:wrap;">
+            <div class="flow-step">
+                <div class="flow-icon">🔍</div>
+                <div class="flow-label">集群选股</div>
+                <div class="flow-desc">32策略扫描<br/>u/n参数调优</div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="flow-icon">📥</div>
+                <div class="flow-label">候选池</div>
+                <div class="flow-desc">PE/市值/流动性<br/>基础筛选</div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="flow-icon">🧪</div>
+                <div class="flow-label">测试池</div>
+                <div class="flow-desc">夏普/回撤/胜率<br/>回测验证</div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="flow-icon">⚙️</div>
+                <div class="flow-label">预实盘池</div>
+                <div class="flow-desc">风控/稳定性<br/>样本外验证</div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="flow-icon">💰</div>
+                <div class="flow-label">实盘池</div>
+                <div class="flow-desc">真实交易<br/>风控监控</div>
+            </div>
+        </div>
+        <div style="margin-top:12px; padding:12px; background:#263238; border-radius:8px; font-size:12px; color:#78909c; line-height:1.8;">
+            <strong style="color:#4fc3f7;">操作指引：</strong><br>
+            1️⃣ 执行选股 → 勾选目标股票 → 点击「推入候选池」<br>
+            2️⃣ 前往 <a href="/stock_pool" style="color:#4fc3f7;">股票池</a> 查看分级状态 → 满足条件后自动升级到测试池<br>
+            3️⃣ 在测试池中执行回测验证（夏普比率/最大回撤/胜率）<br>
+            4️⃣ 回测通过后推入预实盘池 → 最终进入实盘池执行交易<br>
+            <span style="color:#ff9800;">⚠️ 实盘交易仅限本地机操作，需注册登录用户身份</span>
+        </div>
+    </div>
+</div>
+
+<script>
+let heatmapChart = null;
+let currentStocks = [];
+
+function showError(msg) {
+    const el = document.getElementById('errorBox');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 8000);
+}
+
+function showMsg(msg, isError) {
+    const el = document.getElementById('actionMsg');
+    el.textContent = msg;
+    el.style.color = isError ? '#f44336' : '#4caf50';
+    setTimeout(() => el.textContent = '', 5000);
+}
+
+function getParams() {
+    return {
+        pool: document.getElementById('poolSelect').value,
+        u: parseFloat(document.getElementById('uSlider').value),
+        n: parseInt(document.getElementById('nSlider').value),
+    };
+}
+
+async function runScan() {
+    const btn = document.getElementById('scanBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 扫描中...';
+    const params = getParams();
+
+    try {
+        const resp = await fetch('/cluster_selector/api/scan', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(params),
+        });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+
+        currentStocks = data.stocks;
+
+        document.getElementById('regimeBadge').textContent = data.summary.params.regime || '--';
+        document.getElementById('regimeBadge').className =
+            'regime-badge regime-' + (data.summary.params.regime || 'unknown');
+        document.getElementById('lastScan').textContent =
+            new Date().toLocaleTimeString() + ' (' + data.summary.elapsed + 's)';
+        document.getElementById('resultCount').textContent =
+            '共 ' + data.summary.passed + ' 只通过 / ' + data.summary.total_scanned + ' 只扫描 | 平均分: ' + data.summary.avg_score;
+
+        renderTable(data.stocks);
+        document.getElementById('actionBar').style.display = 'flex';
+        document.getElementById('selectAllBtn').textContent = '☐ 全选';
+    } catch (e) {
+        showError('请求失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 执行选股';
+    }
+}
+
+function renderTable(stocks) {
+    if (!stocks || !stocks.length) {
+        document.getElementById('resultTable').innerHTML =
+            '<div class="loading">无符合条件的股票 — 尝试调高 u（放宽热启动）或调大 n（扩大排名范围）</div>';
+        document.getElementById('actionBar').style.display = 'none';
+        return;
+    }
+    let html = `<table><thead><tr>
+        <th style="width:30px;"><input type="checkbox" class="stock-check" onchange="onCheckChange()" id="checkAll"></th>
+        <th>排名</th><th>代码</th><th>优良度</th><th>低位</th><th>热启</th>
+        <th>信号数</th><th>信号强度</th><th>触发策略</th></tr></thead><tbody>`;
+    stocks.forEach((s, idx) => {
+        const cls = s.goodness >= 0.7 ? 'score-high' : s.goodness >= 0.4 ? 'score-mid' : 'score-low';
+        html += `<tr>
+            <td><input type="checkbox" class="stock-check stock-row" data-idx="${idx}" onchange="onCheckChange()"></td>
+            <td>${s.rank}</td>
+            <td>${s.code}</td>
+            <td class="${cls}">${s.goodness.toFixed(3)}</td>
+            <td>${s.low_score}/5</td>
+            <td>${s.hot_score}/3</td>
+            <td>${s.signal_count}</td>
+            <td>${s.avg_strength.toFixed(2)}</td>
+            <td>${(s.strategies||[]).slice(0,5).map(n => '<span class="strat-tag">'+n+'</span>').join('')}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('resultTable').innerHTML = html;
+}
+
+function getSelectedStocks() {
+    const checks = document.querySelectorAll('.stock-row:checked');
+    const indices = [...checks].map(c => parseInt(c.dataset.idx));
+    return indices.map(i => currentStocks[i]).filter(Boolean);
+}
+
+function onCheckChange() {
+    const checks = document.querySelectorAll('.stock-row');
+    const allChecked = [...checks].every(c => c.checked);
+    document.getElementById('checkAll').checked = allChecked;
+    document.getElementById('selectAllBtn').textContent = allChecked ? '☑ 取消全选' : '☐ 全选';
+    updateBtnState();
+}
+
+function toggleSelectAll() {
+    const checks = document.querySelectorAll('.stock-row');
+    const selectAll = ![...checks].every(c => c.checked);
+    checks.forEach(c => c.checked = selectAll);
+    document.getElementById('checkAll').checked = selectAll;
+    document.getElementById('selectAllBtn').textContent = selectAll ? '☑ 取消全选' : '☐ 全选';
+    updateBtnState();
+}
+
+function updateBtnState() {
+    const selected = getSelectedStocks();
+    const hasSelection = selected.length > 0;
+    document.getElementById('pushCandidateBtn').disabled = !hasSelection;
+    document.getElementById('pushTestingBtn').disabled = !hasSelection;
+    document.getElementById('batchBacktestBtn').disabled = !hasSelection;
+}
+
+async function pushToPool(level) {
+    const selected = getSelectedStocks();
+    if (!selected.length) {
+        showMsg('请先勾选股票', true);
+        return;
+    }
+    const params = getParams();
+    const btn = level === 'candidate' ? document.getElementById('pushCandidateBtn') : document.getElementById('pushTestingBtn');
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = '⏳ 入池中...';
+
+    try {
+        const resp = await fetch('/cluster_selector/api/push_to_pool', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({stocks: selected, level: level, u: params.u, n: params.n}),
+        });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+        showMsg(data.message + ' | 下一步: 前往股票池查看');
+    } catch (e) {
+        showMsg('请求失败: ' + e.message, true);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+    }
+}
+
+async function batchBacktest() {
+    const selected = getSelectedStocks();
+    if (!selected.length) {
+        showMsg('请先勾选股票', true);
+        return;
+    }
+    const btn = document.getElementById('batchBacktestBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 回测中...';
+
+    try {
+        const resp = await fetch('/cluster_selector/api/batch_backtest', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({stocks: selected}),
+        });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+        showMsg(data.message);
+        if (confirm(data.message + '\n\n是否打开股票池页面查看回测进度？')) {
+            window.open('/stock_pool', '_blank');
+        }
+    } catch (e) {
+        showMsg('请求失败: ' + e.message, true);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '📉 批量回测';
+    }
+}
+
+async function runAutoTune() {
+    const btn = document.getElementById('tuneBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 调参中...';
+    const params = {
+        pool: document.getElementById('poolSelect').value,
+        u_range: [0.0, 1.0, 0.1],
+        n_range: [5, 30, 5],
+    };
+
+    try {
+        const resp = await fetch('/cluster_selector/api/auto_tune', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(params),
+        });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+
+        document.getElementById('bestParams').innerHTML =
+            '<span style="color:#4fc3f7; font-weight:700;">最佳参数: u=' +
+            data.best.u + ', n=' + data.best.n + '</span> (平均评分: ' + data.best.score.toFixed(4) + ')';
+
+        // 自动设置最佳参数
+        document.getElementById('uSlider').value = data.best.u;
+        document.getElementById('uVal').textContent = data.best.u.toFixed(2);
+        document.getElementById('nSlider').value = data.best.n;
+        document.getElementById('nVal').textContent = data.best.n;
+
+        renderHeatmap(data.grid);
+    } catch (e) {
+        showError('调参失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '📊 自动调参';
+    }
+}
+
+function renderHeatmap(grid) {
+    if (!heatmapChart) {
+        heatmapChart = echarts.init(document.getElementById('heatmapChart'));
+    }
+
+    const uVals = [...new Set(grid.map(g => g.u))].sort((a,b) => a-b);
+    const nVals = [...new Set(grid.map(g => g.n))].sort((a,b) => a-b);
+    const scores = grid.map(g => g.avg_score);
+    const maxScore = Math.max(...scores, 0.01);
+
+    const data = grid.map(g => [uVals.indexOf(g.u), nVals.indexOf(g.n), g.avg_score]);
+
+    heatmapChart.setOption({
+        tooltip: {
+            formatter: function(p) {
+                const u = uVals[p.data[0]];
+                const n = nVals[p.data[1]];
+                const item = grid.find(g => g.u===u && g.n===n);
+                return 'u=' + u + ' n=' + n + '<br/>评分: ' + p.data[2].toFixed(4) +
+                       '<br/>股票数: ' + (item ? item.count : '--');
+            }
+        },
+        grid: { left: '8%', right: '8%', top: '5%', bottom: '10%' },
+        xAxis: {
+            type: 'category', data: nVals.map(String), name: 'n (排名)',
+            nameTextStyle: { color: '#78909c' },
+            axisLabel: { color: '#78909c' }
+        },
+        yAxis: {
+            type: 'category', data: uVals.map(String), name: 'u (热启动)',
+            nameTextStyle: { color: '#78909c' },
+            axisLabel: { color: '#78909c' }
+        },
+        visualMap: {
+            min: 0, max: maxScore, calculable: true,
+            orient: 'horizontal', left: 'center', bottom: 0,
+            inRange: { color: ['#1a237e', '#4fc3f7', '#ffeb3b', '#ff5722'] },
+            textStyle: { color: '#78909c' }
+        },
+        series: [{
+            type: 'heatmap', data: data,
+            label: { show: true, color: '#e0e0e0', fontSize: 10,
+                     formatter: function(p) { return p.data[2].toFixed(2); } },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } },
+        }],
+    });
+}
+
+window.addEventListener('resize', function() {
+    if (heatmapChart) heatmapChart.resize();
+});
+</script>
+</body>
+</html>

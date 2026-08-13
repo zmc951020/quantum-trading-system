@@ -199,7 +199,7 @@ class TaskScheduler:
                  trigger_type: str = "interval", trigger_args: Dict = None,
                  args: List = None, kwargs: Dict = None) -> str:
         """添加任务"""
-        task_id = f"{task_type.value}_{int(time.time())}"
+        task_id = f"{task_type.value}_{int(time.time() * 1000)}_{len(self._tasks)}"
 
         task = Task(
             id=task_id,
@@ -448,7 +448,93 @@ def get_task_scheduler() -> TaskScheduler:
         with _global_scheduler_lock:
             if _global_scheduler is None:
                 _global_scheduler = TaskScheduler()
+                _register_default_tasks(_global_scheduler)
     return _global_scheduler
+
+
+def _register_default_tasks(scheduler: TaskScheduler):
+    """注册盘前/盘中/盘后/巡检 默认定时任务"""
+    # 盘前: 集群选股扫描（交易日09:00）
+    scheduler.schedule_daily_task(
+        name="盘前集群选股扫描",
+        task_type=TaskType.CUSTOM,
+        func=_run_cluster_scan,
+        hour=9, minute=0,
+    )
+    # 盘中: 风控监控（每30分钟）
+    scheduler.schedule_interval_task(
+        name="盘中风控监控",
+        task_type=TaskType.CUSTOM,
+        func=_run_risk_check,
+        minutes=30,
+    )
+    # 盘后: 总结报告（交易日15:30）
+    scheduler.schedule_daily_task(
+        name="盘后总结报告",
+        task_type=TaskType.CUSTOM,
+        func=_run_daily_report,
+        hour=15, minute=30,
+    )
+    # 系统健康巡检（每4小时 = 240分钟）
+    scheduler.schedule_interval_task(
+        name="系统健康巡检",
+        task_type=TaskType.CUSTOM,
+        func=_run_health_check,
+        minutes=240,
+    )
+    print("[TaskScheduler] 默认定时任务已注册: 盘前扫描/盘中监控/盘后报告/健康巡检")
+
+
+def _run_cluster_scan() -> dict:
+    """盘前集群选股扫描"""
+    try:
+        from core.workflow_engine import get_workflow_engine
+        engine = get_workflow_engine()
+        result = engine.run_oneclick(batch_mode=True)
+        return {
+            "success": result.status == "success",
+            "stocks": len(result.final_stock_pool),
+            "signals": len(result.final_signals),
+            "best_strategy": result.best_strategy,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _run_risk_check() -> dict:
+    """盘中风控监控"""
+    try:
+        from core.tau_cluster_engine import get_cluster_engine
+        engine = get_cluster_engine()
+        summary = engine.get_risk_summary()
+        return {"success": True, "alerts": summary.get("total_alerts", 0)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _run_daily_report() -> dict:
+    """盘后总结报告"""
+    try:
+        from core.integration_bus import get_integration_bus
+        bus = get_integration_bus()
+        report = bus.get_workflow_report()
+        return {"success": True, "report": report}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _run_health_check() -> dict:
+    """系统健康巡检"""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["python", "_verify_three_entries.py"],
+            capture_output=True, text=True, timeout=60,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        )
+        return {"success": result.returncode == 0, "output": result.stdout[-200:]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # ============================================================
 # 示例任务

@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora 量化控制台 - 策略优化·港大智能体·股票池管理</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
+<style>
+:root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
+</style>
 </head>
 <body>
     <!-- 顶部导航栏 -->
@@ -27,6 +30,7 @@
                 <a href="/maintenance" class="nav-link">🔧 系统维护</a>
                 <a href="/ths_academy/" class="nav-link">🎓 金融大师学院</a>
                 <a href="/market_intel/" class="nav-link">📊 市场情报</a>
+                <a href="/cluster_selector/" class="nav-link">🔬 集群选股</a>
             </div>
         </div>
     </nav>
@@ -99,12 +103,12 @@
                     <div class="flow-step-title">3. 股票池流转</div>
                     <div class="flow-step-sub">5层分层筛选</div>
                 </div>
-                <div class="flow-step" onclick="alert('进入模拟交易模式 - 人工确认后启动')">
+                <div class="flow-step" onclick="window.location.href='/aurora_main#trading-panel'">
                     <span class="flow-step-icon">💸</span>
                     <div class="flow-step-title">4. 模拟交易</div>
                     <div class="flow-step-sub">零风险验证策略</div>
                 </div>
-                <div class="flow-step" onclick="alert('进入实盘交易模式 - 需人工确认')">
+                <div class="flow-step" onclick="window.location.href='/aurora_main#trading-panel'">
                     <span class="flow-step-icon">🎯</span>
                     <div class="flow-step-title">5. 实盘交易</div>
                     <div class="flow-step-sub">小仓位启动 · 风控监控</div>
@@ -406,30 +410,45 @@
                 { name: '4. 交易配置生成', status: 'pending' }
             ];
 
-            showMessage('🔄 正在调用集成总线 /api/integration/full_workflow...');
+            // 显示进度条
+            const msgBox = document.getElementById('message-box');
+            if (msgBox) {
+                msgBox.innerHTML = '<div style="color:#f0c27b;">🔄 正在调用集成总线 /api/integration/full_workflow...</div>'
+                    + '<div id="flow-progress-steps" style="margin-top:8px;">'
+                    + steps.map(s => '<div style="color:#8ba3c7;font-size:12px;">⏳ ' + s.name + '</div>').join('')
+                    + '</div>';
+                msgBox.style.display = 'block';
+            }
 
             fetch('/api/integration/full_workflow', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategy: '双均线策略', coarse_points: 20, refined_points: 10 })
+                body: JSON.stringify({ strategy: '自适应', coarse_points: 20, refined_points: 10 })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     const wf = data.result || data;
-                    let msg = '✅ 流程完成！\n\n';
-                    if (wf.optimization_report) msg += '📊 优化: ' + (wf.optimization_report.best_score || 'OK') + '\n';
-                    if (wf.stock_pool_report) msg += '📈 股票池: ' + (wf.stock_pool_report.count || 'OK') + ' 只\n';
-                    if (wf.trade_config_report) msg += '💸 交易配置: 已生成\n';
-                    if (!msg.includes('优化')) {
-                        msg += JSON.stringify(wf).slice(0, 200);
+                    let msg = '✅ 完整流程执行成功！\n\n';
+                    msg += '📊 优化报告: ' + (wf.optimization_report?.best_score || '完成') + '\n';
+                    msg += '📈 股票池: ' + (wf.stock_pool_report?.count || '完成') + ' 只\n';
+                    msg += '💸 交易配置: 已生成\n';
+                    msg += '⏱️ 总耗时: ' + (wf.elapsed || 'N/A') + 's';
+                    if (msgBox) {
+                        msgBox.innerHTML = '<div style="color:#00c853;">' + msg.replace(/\n/g, '<br>') + '</div>';
                     }
                     alert(msg);
                 } else {
+                    if (msgBox) {
+                        msgBox.innerHTML = '<div style="color:#ff5252;">⚠️ 流程执行失败: ' + (data.error || data.message || '未知错误') + '</div>';
+                    }
                     alert('⚠️ 流程执行失败: ' + (data.error || data.message || '未知错误'));
                 }
             })
             .catch(err => {
+                if (msgBox) {
+                    msgBox.innerHTML = '<div style="color:#ff5252;">❌ 调用失败: ' + err.message + '</div>';
+                }
                 alert('❌ 调用失败: ' + err.message + '\n\n请确认后端服务正常运行');
             });
         }

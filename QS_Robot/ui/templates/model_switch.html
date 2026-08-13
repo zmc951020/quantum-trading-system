@@ -5,16 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>模型切换 - Aurora量化交易系统</title>
     <style>
+        :root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background: #0a0e1a;
-            color: #e8e8e8;
+            background: var(--bg-deep);
+            color: var(--text-primary);
             min-height: 100vh;
         }
 
         .navbar {
-            background: linear-gradient(135deg, #1a2744 0%, #0d1526 100%);
+            background: linear-gradient(135deg, var(--bg-panel) 0%, #0d1526 100%);
             padding: 12px 30px;
             border-bottom: 2px solid #2a3f5f;
             display: flex;
@@ -25,7 +26,7 @@
         .nav-brand {
             font-size: 18px;
             font-weight: 600;
-            color: #6ba5f7;
+            color: var(--accent-blue);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -47,7 +48,7 @@
 
         .nav-links a:hover, .nav-links a.active {
             color: #fff;
-            background: #1a2744;
+            background: var(--bg-panel);
         }
 
         .main-container {
@@ -57,7 +58,7 @@
         }
 
         .section {
-            background: #1a2744;
+            background: var(--bg-panel);
             border-radius: 12px;
             padding: 25px;
             margin-bottom: 25px;
@@ -67,7 +68,7 @@
         .section-title {
             font-size: 18px;
             font-weight: 600;
-            color: #6ba5f7;
+            color: var(--accent-blue);
             margin-bottom: 20px;
             display: flex;
             align-items: center;
@@ -150,7 +151,7 @@
         .status-value {
             font-size: 24px;
             font-weight: 600;
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .status-subtitle {
@@ -166,7 +167,7 @@
         }
 
         .model-card {
-            background: linear-gradient(135deg, #1a2744 0%, #0d1526 100%);
+            background: linear-gradient(135deg, var(--bg-panel) 0%, #0d1526 100%);
             border: 2px solid #2a3f5f;
             border-radius: 12px;
             padding: 20px;
@@ -207,7 +208,7 @@
         .model-name {
             font-size: 16px;
             font-weight: 600;
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .model-provider {
@@ -244,7 +245,7 @@
 
         .spec-value {
             font-size: 13px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             font-weight: 500;
         }
 
@@ -300,7 +301,7 @@
         }
 
         .provider-tab:hover {
-            color: #e8e8e8;
+            color: var(--text-primary);
         }
 
         .provider-tab.active {
@@ -319,7 +320,7 @@
         .config-title {
             font-size: 14px;
             font-weight: 600;
-            color: #e8e8e8;
+            color: var(--text-primary);
             margin-bottom: 15px;
         }
 
@@ -342,11 +343,11 @@
         }
 
         .config-input {
-            background: #1a2744;
+            background: var(--bg-panel);
             border: 1px solid #2a3f5f;
             border-radius: 8px;
             padding: 10px 12px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             font-size: 13px;
             outline: none;
             transition: border-color 0.3s;
@@ -416,7 +417,7 @@
             background: #2a3f5f;
             border: none;
             border-radius: 8px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             font-size: 14px;
             cursor: pointer;
             transition: all 0.3s;
@@ -448,7 +449,7 @@
             bottom: 30px;
             right: 30px;
             padding: 15px 25px;
-            background: #1a2744;
+            background: var(--bg-panel);
             border: 1px solid #2a3f5f;
             border-radius: 10px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
@@ -463,17 +464,17 @@
 
         .toast.success {
             border-color: #10b981;
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), #1a2744);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), var(--bg-panel));
         }
 
         .toast.error {
             border-color: #ef4444;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), #1a2744);
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), var(--bg-panel));
         }
 
         .toast-message {
             font-size: 14px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             display: flex;
             align-items: center;
             gap: 10px;

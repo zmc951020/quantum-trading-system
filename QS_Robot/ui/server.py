@@ -197,6 +197,22 @@ except Exception as e:
 
 
 # ============================================================
+# 注册金融大师32策略集群选股器蓝图
+# ============================================================
+try:
+    from ui.blueprints.cluster_selector_bp import bp as cluster_selector_bp
+    app.register_blueprint(cluster_selector_bp)
+    print("[Cluster Selector] 32策略集群选股器已注册: /cluster_selector/")
+    print("[Cluster Selector] - /cluster_selector/ -> 选股器可视化页面")
+    print("[Cluster Selector] - /cluster_selector/api/scan -> 选股扫描API")
+    print("[Cluster Selector] - /cluster_selector/api/auto_tune -> 自动调参API")
+except ImportError as e:
+    print(f"[Cluster Selector] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[Cluster Selector] 蓝图注册失败: {e}")
+
+
+# ============================================================
 # 注册三入口策略矩阵集群路由（自创/Vibe智能体/金融大师32策略）
 # 在 5003 端口 aurora_main.html 内嵌，不新增web页
 # ============================================================
@@ -605,9 +621,19 @@ def run_pipeline():
 
 @app.route('/api/stock_pool/pool_summary', methods=['GET'])
 def pool_summary():
-    """获取股票池摘要"""
+    """获取股票池摘要 - 从 core/stock_pool.py 持久化数据读取"""
     try:
-        summary = stock_pool_system.pool_manager.get_pool_summary()
+        from core.stock_pool import get_stock_pool_manager
+        mgr = get_stock_pool_manager()
+        raw = mgr.get_pool_summary()
+        # 映射 PoolLevel 到前端期望的字段名
+        summary = {
+            "candidate": raw.get("candidate", 0),
+            "classified": raw.get("testing", 0),      # 测试池 → classified
+            "watchlist": raw.get("watchlist", 0),
+            "adaptive": raw.get("prelive", 0),         # 预实盘 → adaptive
+            "trading": raw.get("live", 0),             # 实盘 → trading
+        }
         return jsonify({"success": True, "data": summary})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -615,16 +641,36 @@ def pool_summary():
 
 @app.route('/api/stock_pool/get_pool/<pool_type>', methods=['GET'])
 def get_pool(pool_type):
-    """获取指定股票池的股票"""
+    """获取指定股票池的股票 - 从 core/stock_pool.py 持久化数据读取"""
     try:
-        stocks = stock_pool_system.pool_manager.get_pool(pool_type)
+        from core.stock_pool import get_stock_pool_manager, PoolLevel
+        mgr = get_stock_pool_manager()
+        # 前端字段名 → PoolLevel 映射
+        level_map = {
+            "candidate": PoolLevel.CANDIDATE,
+            "classified": PoolLevel.TESTING,
+            "watchlist": PoolLevel.WATCHLIST,
+            "adaptive": PoolLevel.PRELIVE,
+            "trading": PoolLevel.LIVE,
+        }
+        level = level_map.get(pool_type)
+        if not level:
+            return jsonify({"success": False, "error": f"未知池类型: {pool_type}"}), 400
+
+        stocks = mgr.get_pool(level)
         result = []
-        for stock in stocks:
+        for r in stocks:
             result.append({
-                'code': stock.code,
-                'name': stock.name,
-                'price': stock.price,
-                'quality_score': stock.quality_score
+                "code": r.symbol,
+                "name": r.name,
+                "level": r.level.value if hasattr(r.level, 'value') else str(r.level),
+                "source": r.source.value if hasattr(r.source, 'value') else str(r.source),
+                "strategy_name": r.strategy_name,
+                "goodness": r.metadata.get("goodness", 0),
+                "low_score": r.metadata.get("low_score", 0),
+                "hot_score": r.metadata.get("hot_score", 0),
+                "signal_count": r.metadata.get("signal_count", 0),
+                "added_at": r.added_at,
             })
         return jsonify({"success": True, "data": result})
     except Exception as e:

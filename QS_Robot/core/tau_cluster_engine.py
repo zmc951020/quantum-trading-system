@@ -36,6 +36,14 @@ from typing import Dict, List, Optional, Any, Tuple, Callable
 
 logger = logging.getLogger(__name__)
 
+# 实盘风控监控（集群引擎级集成 — 覆盖全部32个策略）
+try:
+    from tools.risk_monitor import RiskMonitor
+    _RISK_MONITOR_AVAILABLE = True
+except ImportError:
+    _RISK_MONITOR_AVAILABLE = False
+    RiskMonitor = None
+
 
 # ============================================================
 # 1. 统一信号数据模型
@@ -752,6 +760,14 @@ class TauClusterEngine:
         self.total_evaluations: int = 0
         self.total_decisions: int = 0
 
+        # 实盘风控监控（集群引擎级 — 覆盖全部32个策略）
+        self.risk_monitor = RiskMonitor() if _RISK_MONITOR_AVAILABLE else None
+        self._risk_enabled = self.config.get("risk_monitor_enabled", True) and _RISK_MONITOR_AVAILABLE
+        if self._risk_enabled:
+            logger.info("[TauCluster] 🔗 实盘风控监控已启用（覆盖全部32个策略）")
+        elif not _RISK_MONITOR_AVAILABLE:
+            logger.info("[TauCluster] ⚠️ RiskMonitor未安装，风控监控已禁用")
+
     # ---- 策略注册 ----
 
     def register_strategy(self, name: str, adapter: StrategySignalAdapter):
@@ -800,6 +816,11 @@ class TauClusterEngine:
         # 更新市场状态
         if current_price:
             self.regime_detector.feed(current_price)
+
+            # 集群级风控监控：喂入实时行情（覆盖全部32个策略）
+            if self._risk_enabled and stock_code and market_data:
+                self._feed_risk_monitor(stock_code, current_price, market_data)
+
         market_regime = self.regime_detector.detect()
 
         # 1. 收集所有策略信号
@@ -826,6 +847,10 @@ class TauClusterEngine:
         # 5. 计算风控参数
         if current_price:
             self._apply_risk_params(decision, current_price, validated_signals)
+
+        # 6. 集群级风控持仓同步（BUY→注册, SELL→平仓）
+        if self._risk_enabled and stock_code and decision.action != "HOLD":
+            self._sync_risk_position(stock_code, decision, current_price)
 
         self._decision_history.append(decision)
         self.total_decisions += 1
@@ -1780,6 +1805,50 @@ class TauClusterEngine:
             signal_sequence=signal_sequence,
             confidence=1.0,
         )
+
+    # ========== 集群级风控监控（覆盖全部32个策略） ==========
+
+    def _feed_risk_monitor(self, stock_code: str, price: float, market_data: dict):
+        """喂入实时行情到风控监控器"""
+        vol = float(market_data.get("volume", 0))
+        tick_time = market_data.get("time", datetime.datetime.now().strftime("%H:%M:%S"))
+        if "prev_close" in market_data and stock_code not in getattr(self, '_rm_fed_stocks', set()):
+            self.risk_monitor.set_prev_close(stock_code, float(market_data["prev_close"]))
+            if not hasattr(self, '_rm_fed_stocks'):
+                self._rm_fed_stocks: set = set()
+            self._rm_fed_stocks.add(stock_code)
+        self.risk_monitor.feed(stock_code, {
+            "price": price, "volume": vol, "time": tick_time,
+        })
+
+    def _sync_risk_position(self, stock_code: str, decision, current_price: float):
+        """同步持仓到风控监控器"""
+        if decision.action == "BUY":
+            self.risk_monitor.open_position(
+                stock_code, current_price,
+                stop_loss_pct=-abs(decision.stop_loss / current_price - 1) if decision.stop_loss else -0.04,
+                take_profit_pct=abs(decision.take_profit / current_price - 1) if decision.take_profit else 0.07,
+            )
+        elif decision.action == "SELL":
+            self.risk_monitor.close_position(stock_code)
+
+    def get_risk_alerts(self, clear: bool = False) -> list:
+        """获取集群风控告警"""
+        if not self._risk_enabled:
+            return []
+        return self.risk_monitor.get_alerts(clear=clear)
+
+    def get_risk_summary(self) -> dict:
+        """获取集群风控摘要"""
+        if not self._risk_enabled:
+            return {"error": "risk_monitor_disabled"}
+        return self.risk_monitor.get_summary()
+
+    def get_position_risk(self) -> list:
+        """获取所有持仓风险状态"""
+        if not self._risk_enabled:
+            return []
+        return self.risk_monitor.get_position_risk()
 
     @staticmethod
     def _calc_max_drawdown(returns: List[float]) -> float:
