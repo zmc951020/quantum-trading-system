@@ -1,0 +1,49 @@
+# QS_Robot Pre-Commit 配置
+# ===========================
+# 安装方式（二选一）:
+#   A. 使用 pre-commit 框架:
+#      pip install pre-commit ruff --target="D:\Program Files\Python314\Lib\site-packages"
+#      pre-commit install
+#   B. 使用手动钩子脚本:
+#      Copy-Item .git\hooks\pre-commit.ps1 .git\hooks\pre-commit
+#
+# 依赖: pytest (必需), ruff (可选, 仅 lint hook 需要)
+# ============================================================
+repos:
+  - repo: local
+    hooks:
+      - id: optimizer-mock-test
+        name: 优化器Mock单元测试
+        entry: python -m pytest tests/test_optimizer_mock_boundary.py -v --tb=short -q
+        language: system
+        files: ^(ui/static/js/optimizer_bridge_mock\.js|tests/test_optimizer_mock_boundary\.py)$
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: optimizer-bridge-log-check
+        name: 优化器桥接日志完整性检查
+        entry: python -c "from core.optimizer_bridge_log_analyzer import generate_mock_logs,parse_logs,analyze;l=generate_mock_logs();e=parse_logs(l);r=analyze(e);print(f'覆盖率:{r[\"coverage\"]} 健康评分:{r[\"health_score\"]}/100');assert r['health_score']>=60"
+        language: system
+        files: ^(ui/templates/aurora_main\.html|core/optimizer_bridge_log_analyzer\.py)$
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: strategy-entry-audit
+        name: 策略入口审查(22节点)
+        entry: python -c "from core.strategy_entry_auditor import StrategyEntryAuditor;a=StrategyEntryAuditor();r=a.run_all();print(f'通过率:{r[\"pass_rate\"]}');assert '100.0' in str(r['pass_rate']),f'审查未通过:{r[\"pass_rate\"]}'"
+        language: system
+        files: ^(core/strategy_entry_auditor\.py|api/gateway\.py|core/aurora_core_adapter\.py)$
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: python-lint
+        name: Python Lint (ruff - 需 pip install ruff)
+        entry: python -m ruff check --select=E,F,W --ignore=E501,W503
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        verbose: true
+        # 若 ruff 未安装，此 hook 会跳过不阻塞提交

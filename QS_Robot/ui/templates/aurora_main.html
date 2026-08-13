@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora 量化系统 - 主系统</title>
     <style>
+        :root { --bg-deep: #0a0e1a; --bg-card: #111827; --bg-panel: #1a2744; --accent-blue: #4facfe; --accent-cyan: #00d4ff; --accent-gold: #f0c27b; --text-primary: #e0e6ed; --text-secondary: #8899aa; --border-subtle: rgba(107, 165, 247, 0.2); --success: #00c853; --danger: #ff5252; --warning: #ffab40; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
-            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f3a 50%, #0a0e1a 100%);
-            color: #e8e8e8;
+            background: linear-gradient(135deg, var(--bg-deep) 0%, #1a1f3a 50%, var(--bg-deep) 100%);
+            color: var(--text-primary);
             min-height: 100vh;
         }
 
@@ -21,7 +22,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(107, 165, 247, 0.2);
+            border-bottom: 1px solid var(--border-subtle);
             position: sticky;
             top: 0;
             z-index: 1000;
@@ -32,7 +33,7 @@
             gap: 12px;
             font-size: 22px;
             font-weight: 700;
-            color: #6ba5f7;
+            color: var(--accent-blue);
         }
         .nav-brand-icon { font-size: 30px; }
         .nav-menu {
@@ -55,8 +56,8 @@
             background: rgba(107, 165, 247, 0.15);
         }
         .nav-link.active {
-            color: #6ba5f7;
-            background: rgba(107, 165, 247, 0.2);
+            color: var(--accent-blue);
+            background: var(--border-subtle);
         }
 
         /* 主内容区 */
@@ -90,14 +91,14 @@
         }
         .module-card {
             background: rgba(22, 33, 62, 0.8);
-            border: 1px solid rgba(107, 165, 247, 0.2);
+            border: 1px solid var(--border-subtle);
             border-radius: 16px;
             padding: 25px;
             transition: all 0.3s;
             cursor: pointer;
         }
         .module-card:hover {
-            border-color: #6ba5f7;
+            border-color: var(--accent-blue);
             transform: translateY(-2px);
             box-shadow: 0 10px 40px rgba(107, 165, 247, 0.15);
         }
@@ -126,13 +127,13 @@
             padding: 6px 12px;
             background: rgba(107, 165, 247, 0.1);
             border-radius: 6px;
-            color: #6ba5f7;
+            color: var(--accent-blue);
         }
 
         /* 策略标签库 */
         .section {
             background: rgba(22, 33, 62, 0.8);
-            border: 1px solid rgba(107, 165, 247, 0.2);
+            border: 1px solid var(--border-subtle);
             border-radius: 16px;
             padding: 25px;
             margin-bottom: 20px;
@@ -173,7 +174,7 @@
         .tab-btn:hover { background: rgba(107, 165, 247, 0.15); color: #fff; }
         .tab-btn.active {
             background: rgba(107, 165, 247, 0.25);
-            color: #6ba5f7;
+            color: var(--accent-blue);
             border-color: rgba(107, 165, 247, 0.5);
         }
         .tab-count {
@@ -211,7 +212,7 @@
             border-radius: 12px;
             font-size: 12px;
             background: rgba(107, 165, 247, 0.15);
-            color: #6ba5f7;
+            color: var(--accent-blue);
         }
         .strategy-status {
             padding: 4px 12px;
@@ -239,7 +240,7 @@
         }
         .optimizer-card {
             background: rgba(10, 14, 26, 0.6);
-            border: 1px solid rgba(107, 165, 247, 0.2);
+            border: 1px solid var(--border-subtle);
             border-radius: 12px;
             padding: 20px;
             text-align: center;
@@ -331,7 +332,7 @@
             background: rgba(10, 14, 26, 0.7);
             border: 1px solid rgba(107, 165, 247, 0.3);
             border-radius: 6px;
-            color: #e8e8e8;
+            color: var(--text-primary);
             padding: 5px 8px;
             font-size: 13px;
         }
@@ -537,10 +538,66 @@
         <div class="section">
             <div class="section-header">
                 <h2 class="section-title">🔬 优化器标签库</h2>
-                <button class="btn btn-primary" onclick="navigateTo('/optimizer')">管理优化器</button>
+                <button class="btn btn-primary" onclick="openOptimizerBridge()">策略-优化器关联</button>
             </div>
             <div class="optimizer-grid" id="optimizer-grid">
                 <div class="optimizer-card"><div class="optimizer-name">加载中...</div></div>
+            </div>
+        </div>
+
+        <!-- 策略-优化器桥接面板 -->
+        <div class="section" id="optimizer-bridge" style="display:none;">
+            <div class="section-header">
+                <h2 class="section-title">🔗 策略-优化器直接关联</h2>
+                <button class="btn" onclick="document.getElementById('optimizer-bridge').style.display='none'">关闭</button>
+            </div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:280px;">
+                    <h4 style="color:#00d4ff;margin-bottom:10px;">选择策略</h4>
+                    <select id="bridge-strategy" style="width:100%;padding:8px;background:#111827;color:#e0e6ed;border:1px solid #2a3f5f;border-radius:6px;" onchange="onBridgeStrategyChange()">
+                        <option value="">-- 选择策略 --</option>
+                    </select>
+                    <div id="bridge-strategy-info" style="margin-top:10px;color:#8ba3c7;font-size:13px;"></div>
+                </div>
+                <div style="flex:1;min-width:280px;">
+                    <h4 style="color:#00d4ff;margin-bottom:10px;">选择优化器</h4>
+                    <select id="bridge-optimizer" style="width:100%;padding:8px;background:#111827;color:#e0e6ed;border:1px solid #2a3f5f;border-radius:6px;">
+                        <option value="">-- 选择优化器 --</option>
+                    </select>
+                    <div id="bridge-optimizer-info" style="margin-top:10px;color:#8ba3c7;font-size:13px;"></div>
+                </div>
+            </div>
+            <div style="margin-top:15px;display:flex;gap:10px;">
+                <button class="btn btn-primary" onclick="runOptimizerBridge()">▶ 执行优化</button>
+                <button class="btn" onclick="runOptimizerBridgeMock()" style="background:rgba(245,158,11,0.2);color:#fbbf24;border-color:#f59e0b;">🧪 Mock测试</button>
+            </div>
+            <div id="bridge-result" style="margin-top:10px;padding:10px;background:#0d1526;border-radius:6px;color:#8ba3c7;font-size:13px;display:none;"></div>
+        </div>
+
+        <!-- 交易操作面板 -->
+        <div class="section" id="trading-panel">
+            <div class="section-header">
+                <h2 class="section-title">💹 交易操作面板</h2>
+                <span style="font-size:12px;color:#f0c27b;">模拟盘模式</span>
+            </div>
+            <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
+                <label style="color:#8ba3c7;">股票代码
+                    <input type="text" id="trade-symbol" value="600519" style="width:100px;padding:6px;background:#111827;color:#e0e6ed;border:1px solid #2a3f5f;border-radius:4px;">
+                </label>
+                <label style="color:#8ba3c7;">数量(手)
+                    <input type="number" id="trade-qty" value="1" min="1" style="width:80px;padding:6px;background:#111827;color:#e0e6ed;border:1px solid #2a3f5f;border-radius:4px;">
+                </label>
+                <label style="color:#8ba3c7;">价格
+                    <input type="text" id="trade-price" placeholder="市价" style="width:80px;padding:6px;background:#111827;color:#e0e6ed;border:1px solid #2a3f5f;border-radius:4px;">
+                </label>
+                <div style="display:flex;gap:8px;margin-left:10px;">
+                    <button class="btn btn-primary" onclick="quickTrade('buy')" style="background:linear-gradient(135deg,#00c853,#009624);">🟢 买入</button>
+                    <button class="btn btn-primary" onclick="quickTrade('sell')" style="background:linear-gradient(135deg,#ff5252,#d32f2f);">🔴 卖出</button>
+                </div>
+                <button class="btn" onclick="refreshTradeStatus()" style="margin-left:auto;">↻ 刷新持仓</button>
+            </div>
+            <div id="trade-status" style="margin-top:10px;padding:10px;background:#0d1526;border-radius:6px;color:#8ba3c7;font-size:13px;">
+                点击刷新持仓查看当前状态
             </div>
         </div>
     </div>
@@ -1033,9 +1090,179 @@
             loadOptimizers();
             loadClusterStrategies();
         });
+
+        // ==================== 交易面板 ====================
+        function quickTrade(action) {
+            const symbol = document.getElementById('trade-symbol').value.trim();
+            const qty = parseInt(document.getElementById('trade-qty').value) || 1;
+            const price = document.getElementById('trade-price').value.trim();
+            if (!symbol) { alert('请输入股票代码'); return; }
+            const payload = { symbol: symbol, action: action, quantity: qty * 100, mode: 'simulation' };
+            if (price) payload.price = parseFloat(price);
+            const status = document.getElementById('trade-status');
+            status.innerHTML = `<span style="color:#f0c27b;">⏳ 正在${action === 'buy' ? '买入' : '卖出'} ${symbol} ${qty}手...</span>`;
+            fetch('/api/trade/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success) {
+                        status.innerHTML = `<span style="color:#00c853;">✅ ${action === 'buy' ? '买入' : '卖出'}成功: ${symbol} ${qty}手 @ ${d.data?.price || '市价'} | 订单ID: ${d.data?.order_id || 'N/A'}</span>`;
+                    } else {
+                        status.innerHTML = `<span style="color:#ff5252;">❌ ${d.error || '交易失败'}</span>`;
+                    }
+                })
+                .catch(e => { status.innerHTML = `<span style="color:#ff5252;">❌ 请求失败: ${e.message}</span>`; });
+        }
+
+        function refreshTradeStatus() {
+            const status = document.getElementById('trade-status');
+            status.innerHTML = '<span style="color:#f0c27b;">⏳ 加载持仓中...</span>';
+            fetch('/api/trade/positions')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success && d.data?.positions?.length) {
+                        const rows = d.data.positions.map(p =>
+                            `<tr><td>${p.symbol}</td><td>${p.quantity}</td><td>${p.avg_price}</td><td style="color:${p.pnl >= 0 ? '#00c853' : '#ff5252'}">${p.pnl?.toFixed(2) || '0'}</td></tr>`
+                        ).join('');
+                        status.innerHTML = `<table style="width:100%;color:#e0e6ed;"><tr style="color:#8ba3c7;"><th>代码</th><th>持仓</th><th>均价</th><th>盈亏</th></tr>${rows}</table>`;
+                    } else {
+                        status.innerHTML = '<span style="color:#8ba3c7;">当前无持仓</span>';
+                    }
+                })
+                .catch(e => { status.innerHTML = `<span style="color:#ff5252;">❌ 加载失败: ${e.message}</span>`; });
+        }
+
+        // ==================== 策略-优化器桥接 ====================
+        function openOptimizerBridge() {
+            console.log('[OptimizerBridge] 面板打开...');
+            const panel = document.getElementById('optimizer-bridge');
+            const wasHidden = panel.style.display === 'none';
+            panel.style.display = wasHidden ? 'block' : 'none';
+            console.log('[OptimizerBridge] 面板状态:', wasHidden ? 'block(打开)' : 'none(关闭)');
+            if (wasHidden) {
+                populateBridgeSelects();
+            } else {
+                console.log('[OptimizerBridge] 面板已关闭');
+            }
+        }
+
+        function populateBridgeSelects() {
+            console.log('[OptimizerBridge] 开始填充下拉框...');
+            const stratSel = document.getElementById('bridge-strategy');
+            const optSel = document.getElementById('bridge-optimizer');
+            stratSel.innerHTML = '<option value="">-- 选择策略 --</option>';
+            optSel.innerHTML = '<option value="">-- 选择优化器 --</option>';
+            if (allStrategies && allStrategies.length) {
+                console.log('[OptimizerBridge] 策略数据源: allStrategies, 数量=' + allStrategies.length);
+                allStrategies.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.name || s.id;
+                    opt.textContent = formatName(s.name || s.id) + ' (' + (s.strategy_type || 'unknown') + ')';
+                    stratSel.appendChild(opt);
+                });
+            } else {
+                console.warn('[OptimizerBridge] allStrategies为空，策略下拉框仅含默认选项');
+            }
+            fetch('/api/optimizer/list').then(r => r.json()).then(d => {
+                const optimizers = (d.data && d.data.optimizers) ? d.data.optimizers : [];
+                console.log('[OptimizerBridge] 优化器数据源: /api/optimizer/list, 数量=' + optimizers.length);
+                if (optimizers.length === 0) {
+                    console.warn('[OptimizerBridge] 优化器数据源为空，使用默认优化器列表');
+                }
+                optimizers.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.name;
+                    opt.textContent = o.display + ' - ' + (o.description || '');
+                    optSel.appendChild(opt);
+                });
+            }).catch(err => {
+                console.warn('[OptimizerBridge] /api/optimizer/list 请求失败, 使用默认优化器列表: ' + err.message);
+                const defaults = ['tau_optimizer_cluster', 'tau_enhanced_optimizer', 'shepherd_optimizer', 'gyro_optimizer'];
+                defaults.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    optSel.appendChild(opt);
+                });
+            });
+        }
+
+        function onBridgeStrategyChange() {
+            const name = document.getElementById('bridge-strategy').value;
+            const info = document.getElementById('bridge-strategy-info');
+            console.log('[OptimizerBridge] 策略切换:', name || '(空)');
+            if (!name) { info.innerHTML = ''; return; }
+            const s = allStrategies.find(s => (s.name || s.id) === name);
+            if (s) {
+                info.innerHTML = `类型: ${s.strategy_type || 'unknown'} | 版本: ${s.version || 'N/A'} | 评分: ${s.score || 'N/A'}`;
+                console.log('[OptimizerBridge] 策略详情:', {type: s.strategy_type, version: s.version, score: s.score});
+            } else {
+                console.warn('[OptimizerBridge] 未找到策略详情: ' + name);
+                info.innerHTML = '策略信息未加载';
+            }
+        }
+
+        function runOptimizerBridge() {
+            const strategy = document.getElementById('bridge-strategy').value;
+            const optimizer = document.getElementById('bridge-optimizer').value;
+            const result = document.getElementById('bridge-result');
+            console.log('[OptimizerBridge] 执行优化: 策略=' + (strategy || '(空)') + ', 优化器=' + (optimizer || '(空)'));
+            if (!strategy || !optimizer) {
+                console.warn('[OptimizerBridge] 参数不完整, 终止执行');
+                alert('请选择策略和优化器');
+                return;
+            }
+            result.style.display = 'block';
+            const t0 = performance.now();
+            result.innerHTML = `<span style="color:#f0c27b;">⏳ 正在使用 ${optimizer} 优化 ${formatName(strategy)}...</span>`;
+            fetch('/api/tau/optimize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy_name: strategy, optimizer_name: optimizer, fast_mode: true })
+            })
+            .then(r => r.json())
+            .then(d => {
+                const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+                console.log('[OptimizerBridge] API响应: success=' + d.success + ', 耗时=' + elapsed + 's');
+                if (d.success) {
+                    console.log('[OptimizerBridge] 优化成功: 夏普=' + (d.data?.sharpe || 'N/A') + ', 参数=' + JSON.stringify(d.data?.best_params || {}));
+                    result.innerHTML = `<span style="color:#00c853;">✅ 优化完成: ${formatName(strategy)} | 最佳参数: ${JSON.stringify(d.data?.best_params || {})} | 夏普: ${d.data?.sharpe || 'N/A'} | 耗时: ${elapsed}s</span>`;
+                } else {
+                    console.error('[OptimizerBridge] 优化失败:', d.error || 'unknown');
+                    result.innerHTML = `<span style="color:#ff5252;">❌ ${d.error || '优化失败'}</span>`;
+                }
+            })
+            .catch(e => {
+                console.error('[OptimizerBridge] 网络错误:', e.message);
+                result.innerHTML = `<span style="color:#ff5252;">❌ 请求失败: ${e.message}</span>`;
+            });
+        }
+
+        function runOptimizerBridgeMock() {
+            let strategy = document.getElementById('bridge-strategy').value;
+            let optimizer = document.getElementById('bridge-optimizer').value;
+            const result = document.getElementById('bridge-result');
+            result.style.display = 'block';
+            if (!strategy) {
+                console.log('[OptimizerBridge Mock] 策略未选择, 使用默认: mock_strategy');
+                strategy = 'mock_strategy';
+            }
+            if (!optimizer) {
+                console.log('[OptimizerBridge Mock] 优化器未选择, 使用默认: tau_cluster');
+                optimizer = 'tau_cluster';
+            }
+            console.log('[OptimizerBridge Mock] 生成Mock数据: 策略=' + strategy + ', 优化器=' + optimizer);
+            const mockData = generateOptimizerMockResult(strategy, optimizer);
+            console.log('[OptimizerBridge Mock] Mock结果:', mockData);
+            const mockSharpe = mockData.sharpe.toFixed(2);
+            const mockDrawdown = mockData.drawdown.toFixed(1);
+            const html = `<span style="color:#00c853;">✅ Mock优化完成: ${formatName(strategy)} x ${optimizer} | 最佳夏普: ${mockSharpe} | 最大回撤: ${mockDrawdown}% | 迭代: ${mockData.iterations}轮</span>`;
+            console.log('[OptimizerBridge Mock] 结果渲染:', html.substring(0, 80) + '...');
+            result.innerHTML = html;
+        }
     </script>
 
     <!-- 机器人浮标脚本 -->
+    <script src="/static/js/optimizer_bridge_mock.js"></script>
     <script src="/static/robot-widget.js"></script>
 </body>
 </html>
