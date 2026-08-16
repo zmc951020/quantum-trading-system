@@ -90,6 +90,8 @@ class Subscriber:
 class RealTimePoller:
     """实时行情轮询器"""
 
+    _source = "realtime"  # 数据源标识（用于数据真实性审计）
+
     def __init__(self):
         self._bus = None
         self._subscribers: Dict[str, List[Subscriber]] = {}

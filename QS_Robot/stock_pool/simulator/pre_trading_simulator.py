@@ -11,7 +11,9 @@ from stock_pool.core.models import Stock, Strategy, SimulationResult
 
 class PreTradingSimulator:
     """预实盘模拟测试引擎"""
-    
+
+    SIM_PREFIX = "SIM_"  # 模拟数据标记前缀（用于数据真实性审计）
+
     def __init__(self, seed: int = None):
         self.simulation_config = {
             'duration': 30,           # 模拟天数

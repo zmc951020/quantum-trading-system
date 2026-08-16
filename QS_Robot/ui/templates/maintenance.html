@@ -787,6 +787,19 @@
                 </div>
             </div>
 
+            <!-- 巡检历史趋势图 -->
+            <div id="trend-section" style="margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h4 style="margin: 0; color: var(--text-primary);">📈 巡检评分趋势</h4>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span id="trend-summary" style="font-size: 12px; color: var(--text-secondary);"></span>
+                        <button class="btn btn-outline btn-sm" onclick="loadTrendChart()" style="font-size: 11px;">🔄 刷新</button>
+                    </div>
+                </div>
+                <div id="trend-chart" style="width: 100%; height: 280px; background: var(--bg-panel); border-radius: 10px; border: 1px solid var(--border-subtle);"></div>
+                <div id="escalation-banner" style="display: none; margin-top: 10px; padding: 10px 16px; border-radius: 8px; font-size: 13px;"></div>
+            </div>
+
             <!-- 巡检中加载动画 -->
             <div id="health-loading" style="display: none; text-align: center; padding: 40px;">
                 <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
@@ -1588,11 +1601,17 @@
                 if (d.success && d.data) {
                     schedulerRunning = d.data.running || false;
                     updateSchedulerUI();
+                    updateEscalationBanner(d.data);
                     if (d.data.last_report) {
                         document.getElementById('last-check-time').textContent =
                             '上次巡检: ' + new Date(d.data.last_report.timestamp).toLocaleTimeString();
                     }
+                    if (d.data.last_check_time) {
+                        document.getElementById('last-check-time').textContent =
+                            '上次巡检: ' + new Date(d.data.last_check_time).toLocaleString();
+                    }
                 }
+                loadTrendChart();
             });
         }
 
@@ -1602,8 +1621,9 @@
             if (schedulerRunning) {
                 btn.textContent = '⏸️ 关闭定时巡检';
                 btn.className = 'btn btn-danger';
-                status.textContent = '定时巡检: 运行中';
+                status.textContent = '定时巡检: 运行中 (盘前09:00深度 | 盘中/30min快速 | 盘后15:30深度 | 每4h健康)';
                 status.style.color = 'var(--success)';
+                status.title = '交易时段感知模式：盘前09:00深度巡检、盘中每30分钟快速巡检、盘后15:30深度巡检、每4小时健康巡检';
             } else {
                 btn.textContent = '⏰ 开启定时巡检';
                 btn.className = 'btn btn-success';
@@ -1612,11 +1632,136 @@
             }
         }
 
+        // ========== 巡检趋势图 ==========
+        let trendChart = null;
+
+        function loadTrendChart() {
+            fetch('/api/health/trend?limit=50')
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success || !d.data || !d.data.trends.length) {
+                        document.getElementById('trend-summary').textContent = '暂无趋势数据';
+                        return;
+                    }
+                    const trends = d.data.trends;
+                    const summary = d.data.summary;
+                    const timestamps = trends.map(t => {
+                        const dt = new Date(t.timestamp);
+                        return `${dt.getMonth()+1}/${dt.getDate()} ${dt.getHours()}:${String(dt.getMinutes()).padStart(2,'0')}`;
+                    });
+                    const scores = trends.map(t => t.score);
+                    const labels = trends.map(t => t.label || '');
+                    const statuses = trends.map(t => t.status);
+
+                    // 趋势摘要
+                    const dirEmoji = summary.trend_direction === 'up' ? '↗️' :
+                                    summary.trend_direction === 'down' ? '↘️' : '→';
+                    const dirColor = summary.trend_direction === 'up' ? 'var(--success)' :
+                                    summary.trend_direction === 'down' ? 'var(--danger)' : 'var(--text-secondary)';
+                    document.getElementById('trend-summary').innerHTML =
+                        `均分: <b>${summary.avg_score}</b> | 最新: <b>${summary.latest_score}</b> | ` +
+                        `方向: <span style="color:${dirColor}">${dirEmoji} ${summary.trend_direction}</span> | ` +
+                        `健康:${summary.healthy_count} 警告:${summary.warning_count} 严重:${summary.critical_count}`;
+
+                    if (!trendChart) {
+                        const dom = document.getElementById('trend-chart');
+                        trendChart = echarts.init(dom, 'dark');
+                    }
+
+                    const option = {
+                        tooltip: {
+                            trigger: 'axis',
+                            formatter: function(params) {
+                                const p = params[0];
+                                const idx = p.dataIndex;
+                                const status = statuses[idx];
+                                const statusColor = status === 'healthy' ? '#00c853' :
+                                                   status === 'warning' ? '#ffab40' : '#ff5252';
+                                const label = labels[idx] ? `<br/>类型: ${labels[idx]}` : '';
+                                return `<b>${p.axisValue}</b><br/>评分: <span style="color:${statusColor};font-weight:bold">${p.value}</span>${label}<br/>状态: ${status}`;
+                            }
+                        },
+                        grid: { top: 20, right: 30, bottom: 40, left: 50 },
+                        xAxis: {
+                            type: 'category',
+                            data: timestamps,
+                            axisLabel: { fontSize: 10, rotate: 45, color: '#8899aa' },
+                            axisLine: { lineStyle: { color: 'rgba(107,165,247,0.2)' } }
+                        },
+                        yAxis: {
+                            type: 'value',
+                            min: 0, max: 100,
+                            axisLabel: { fontSize: 11, color: '#8899aa' },
+                            splitLine: { lineStyle: { color: 'rgba(107,165,247,0.1)' } },
+                            axisLine: { lineStyle: { color: 'rgba(107,165,247,0.2)' } }
+                        },
+                        series: [{
+                            data: scores.map((s, i) => ({
+                                value: s,
+                                itemStyle: {
+                                    color: statuses[i] === 'healthy' ? '#00c853' :
+                                           statuses[i] === 'warning' ? '#ffab40' : '#ff5252'
+                                }
+                            })),
+                            type: 'line',
+                            smooth: true,
+                            lineStyle: { color: '#4facfe', width: 2 },
+                            areaStyle: {
+                                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                    { offset: 0, color: 'rgba(79,172,254,0.3)' },
+                                    { offset: 1, color: 'rgba(79,172,254,0.02)' }
+                                ])
+                            },
+                            markLine: {
+                                silent: true,
+                                data: [
+                                    { yAxis: 80, lineStyle: { color: '#00c853', type: 'dashed' }, label: { formatter: '健康线80', fontSize: 10 } },
+                                    { yAxis: 60, lineStyle: { color: '#ffab40', type: 'dashed' }, label: { formatter: '警戒线60', fontSize: 10 } }
+                                ],
+                                symbol: 'none'
+                            }
+                        }]
+                    };
+                    trendChart.setOption(option, true);
+                })
+                .catch(e => console.error('趋势加载失败:', e));
+        }
+
+        // 窗口大小变化时调整图表
+        window.addEventListener('resize', function() {
+            if (trendChart) trendChart.resize();
+        });
+
+        // 巡检完成后刷新趋势图
+        function updateEscalationBanner(schedulerData) {
+            const banner = document.getElementById('escalation-banner');
+            const failures = schedulerData.consecutive_failures || 0;
+            if (failures >= 4) {
+                banner.style.display = 'block';
+                banner.style.background = 'rgba(255,82,82,0.15)';
+                banner.style.borderLeft = '4px solid var(--danger)';
+                banner.innerHTML = `🚨 <strong>紧急告警</strong>：连续 ${failures} 次巡检失败！已触发紧急通知，请立即检查系统状态。`;
+            } else if (failures >= 2) {
+                banner.style.display = 'block';
+                banner.style.background = 'rgba(255,171,64,0.15)';
+                banner.style.borderLeft = '4px solid var(--warning)';
+                banner.innerHTML = `⚠️ <strong>警告升级</strong>：连续 ${failures} 次巡检异常，已升级为严重告警。`;
+            } else if (failures >= 1) {
+                banner.style.display = 'block';
+                banner.style.background = 'rgba(240,194,123,0.1)';
+                banner.style.borderLeft = '4px solid var(--accent-gold)';
+                banner.innerHTML = `⚠️ 最近一次巡检发现异常，请关注巡检报告中的失败项。`;
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
         // 初始加载
         document.addEventListener('DOMContentLoaded', function() {
             loadMonitorData();
             loadIPWhitelist();
             loadAuditLogs();
+            loadTrendChart();
         });
     </script>
 </body>

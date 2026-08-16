@@ -50,5 +50,45 @@ print(f"访问地址: http://localhost:{shell_port}")
 print("按 Ctrl+C 停止服务器")
 print("=" * 60 + "\n")
 
-app.run(host='0.0.0.0', port=shell_port, debug=True, use_reloader=False)
+# ── 断电保护：注册退出信号处理 ──
+import signal
+import atexit
+
+def _save_system_state():
+    """保存系统运行状态，用于断电后恢复"""
+    state_file = os.path.join(current_dir, "data", "system_state.json")
+    try:
+        os.makedirs(os.path.dirname(state_file), exist_ok=True)
+        import json
+        from datetime import datetime
+        state = {
+            "last_shutdown": datetime.now().isoformat(),
+            "status": "shutdown",
+            "port": shell_port
+        }
+        with open(state_file, 'w', encoding='utf-8') as f:
+            json.dump(state, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def _check_previous_crash():
+    """检查上次是否异常退出"""
+    state_file = os.path.join(current_dir, "data", "system_state.json")
+    try:
+        if os.path.exists(state_file):
+            import json
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            if state.get("status") != "shutdown":
+                print(f"[WARN] 检测到上次异常退出: {state.get('last_shutdown', 'unknown')}")
+                print("[WARN] 系统将尝试恢复，请检查持仓和策略状态")
+    except Exception:
+        pass
+
+_check_previous_crash()
+atexit.register(_save_system_state)
+signal.signal(signal.SIGTERM, lambda *_: _save_system_state() or sys.exit(0))
+signal.signal(signal.SIGINT, lambda *_: _save_system_state() or sys.exit(0))
+
+app.run(host='127.0.0.1', port=shell_port, debug=True, use_reloader=False)
 

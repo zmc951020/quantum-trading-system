@@ -6,7 +6,7 @@
 为 agent_registry.py 中注册的 16 位专家 + 13 项 Trae-cn 技能提供执行方法。
 
 使用方式：
-    from core.expert_team_bridge import ExpertTeamAnalyzer
+    from core.expert_team_bridge import ExpertTeamAnalyzer  # noqa: F811
     analyzer = ExpertTeamAnalyzer(symbol, kline_data)
     result = analyzer.expert_architect_auditor()
 """

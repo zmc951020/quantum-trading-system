@@ -25,10 +25,10 @@ from .response_formatter import transform_aurora_response
 # Aurora API基础地址
 AURORA_BASE_URL = os.environ.get('AURORA_BASE_URL', 'http://127.0.0.1:5002')
 
-# 默认登录凭证（从环境变量读取，避免硬编码）
+# 默认登录凭证（必须通过环境变量配置，开发环境可使用 .env 文件）
 DEFAULT_CREDENTIALS = {
     "username": os.environ.get('AURORA_USERNAME', 'admin'),
-    "password": os.environ.get('AURORA_PASSWORD', 'admin123')
+    "password": os.environ.get('AURORA_PASSWORD', '')
 }
 
 

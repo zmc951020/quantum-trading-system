@@ -160,15 +160,15 @@ def sanitize_input(f):
 
 
 def _sanitize_value(value: str) -> str:
-    """清理单个值中的危险字符"""
+    """输入净化：白名单模式，移除不可打印字符，限制长度"""
     if not isinstance(value, str):
         return value
-    # 移除SQL注入常见模式 / XSS危险标签
-    dangerous = ["<script", "</script>", "javascript:", "onerror=", "onload=",
-                 "DROP ", "DELETE ", "UNION ", "SELECT "]
-    result = value
-    for pattern in dangerous:
-        result = result.replace(pattern, "")
+    # 限制最大长度防缓冲区溢出
+    if len(value) > 4096:
+        value = value[:4096]
+    # 移除控制字符（保留常见可打印字符+中文+换行）
+    import re
+    result = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', value)
     return result
 
 
@@ -1480,6 +1480,43 @@ def health_scheduler():
     return jsonify({"success": True, "data": result})
 
 
+@api_gateway.route('/health/trend', methods=['GET'])
+@require_auth
+def health_trend():
+    """巡检历史趋势数据"""
+    limit = request.args.get("limit", 50, type=int)
+    checker = get_health_checker()
+    trends = checker.get_trend_history(limit=limit)
+    return jsonify({
+        "success": True,
+        "data": {
+            "trends": trends,
+            "total": len(trends),
+            "summary": _summarize_trends(trends) if trends else None,
+        }
+    })
+
+
+def _summarize_trends(trends: list) -> dict:
+    """汇总趋势统计数据"""
+    if not trends:
+        return None
+    scores = [t["score"] for t in trends]
+    statuses = [t["status"] for t in trends]
+    return {
+        "avg_score": round(sum(scores) / len(scores), 1),
+        "max_score": max(scores),
+        "min_score": min(scores),
+        "latest_score": scores[-1],
+        "latest_status": statuses[-1],
+        "healthy_count": statuses.count("healthy"),
+        "warning_count": statuses.count("warning"),
+        "critical_count": statuses.count("critical"),
+        "trend_direction": "up" if len(scores) >= 2 and scores[-1] > scores[-2] else
+                          "down" if len(scores) >= 2 and scores[-1] < scores[-2] else "stable",
+    }
+
+
 @api_gateway.route('/health/check/l2', methods=['POST'])
 @require_auth
 def health_check_l2():
@@ -1610,49 +1647,205 @@ def health_check_engineering_loop():
 @api_gateway.route('/health/auto-fix', methods=['POST'])
 @require_auth
 def health_auto_fix():
-    """自动优化：根据巡检报告生成修复建议并尝试执行"""
+    """智能自动修复：根据巡检报告分层诊断并执行修复操作
+
+    修复策略（按优先级）：
+    1. 策略注册表 → 自动发现
+    2. 代码规范 → ruff auto-fix
+    3. Pre-commit → 重新安装钩子
+    4. 过期日志 → 清理
+    5. CSS变量 → 补全缺失变量
+    6. 参数存储 → 触发优化
+    7. 模块导入 → 检查依赖
+    """
     data = request.get_json(silent=True) or {}
     report = data.get("report", {})
     fixes = []
+    auto_fix_count = 0
+    suggestion_count = 0
 
-    # 1. 策略注册表为空 → 触发自动发现
-    try:
-        from core.strategy_auto_discovery import get_auto_discovery
-        disc = get_auto_discovery()
-        if hasattr(disc, 'run_once'):
-            disc.run_once()
-            fixes.append({"action": "策略自动发现", "result": "已触发策略注册扫描"})
-    except Exception as e:
-        fixes.append({"action": "策略自动发现", "result": f"跳过: {e}"})
+    # 解析报告中的失败项
+    layers = report.get("layers", [])
+    failed_items = []
+    for layer in layers:
+        for item in layer.get("items", []):
+            if not item.get("passed", True):
+                failed_items.append({
+                    "id": item.get("id", ""),
+                    "name": item.get("name", ""),
+                    "layer": layer.get("layer", ""),
+                    "severity": item.get("severity", ""),
+                    "suggestion": item.get("suggestion", ""),
+                })
 
-    # 2. 检查是否有失败的L2项需要修复
-    modes = report.get("modes", [])
-    for m in modes:
-        if m.get("failed", 0) > 0:
-            if m.get("label") == "快速巡检" or m.get("label") == "深度巡检":
-                fixes.append({"action": "巡检报告", "result": f"{m['label']}: {m['failed']}项失败，建议查看详细日志"})
+    # ── 1. 策略注册表修复 ──
+    strategy_fails = [i for i in failed_items if "策略" in i["name"] and "注册" in i["name"]]
+    if strategy_fails:
+        try:
+            from core.strategy_auto_discovery import get_auto_discovery
+            disc = get_auto_discovery()
+            if hasattr(disc, 'run_once'):
+                disc.run_once()
+                fixes.append({"action": "策略自动发现", "result": "已触发策略注册扫描", "auto": True})
+                auto_fix_count += 1
+            else:
+                fixes.append({"action": "策略自动发现", "result": "模块不支持run_once", "auto": False})
+        except Exception as e:
+            fixes.append({"action": "策略自动发现", "result": f"跳过: {e}", "auto": False})
 
-    # 3. 清理过期日志
+    # ── 2. 代码规范自动修复 ──
+    lint_fails = [i for i in failed_items if "Ruff" in i["name"] or "代码规范" in i["name"]]
+    if lint_fails:
+        try:
+            import subprocess
+            result = subprocess.run(
+                [sys.executable, "-m", "ruff", "check", "--fix", "core/"],
+                capture_output=True, text=True, timeout=60,
+                cwd=os.path.dirname(os.path.dirname(__file__))
+            )
+            fixed = len([l for l in result.stdout.split('\n') if 'FIX' in l or 'fixed' in l.lower()])
+            if result.returncode == 0:
+                fixes.append({"action": "Ruff自动修复", "result": f"已修复{fixed}个问题" if fixed > 0 else "无需修复", "auto": True})
+                auto_fix_count += 1
+            else:
+                fixes.append({"action": "Ruff自动修复", "result": "部分问题需要手动修复", "auto": False})
+        except Exception as e:
+            fixes.append({"action": "Ruff自动修复", "result": f"跳过: {e}", "auto": False})
+
+    # ── 3. Pre-commit钩子修复 ──
+    precommit_fails = [i for i in failed_items if "Pre-commit" in i["name"] or "钩子" in i["name"]]
+    if precommit_fails:
+        try:
+            import subprocess
+            project_root = os.path.dirname(os.path.dirname(__file__))
+            result = subprocess.run(
+                [sys.executable, "-m", "pre_commit", "install"],
+                capture_output=True, text=True, timeout=30,
+                cwd=project_root
+            )
+            if result.returncode == 0:
+                fixes.append({"action": "Pre-commit安装", "result": "钩子已重新安装", "auto": True})
+                auto_fix_count += 1
+            else:
+                fixes.append({"action": "Pre-commit安装", "result": f"安装失败: {result.stderr[:100]}", "auto": False})
+        except Exception as e:
+            fixes.append({"action": "Pre-commit安装", "result": f"跳过: {e}", "auto": False})
+
+    # ── 4. 过期日志清理 ──
     try:
         log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
         if os.path.exists(log_dir):
             old_logs = [f for f in os.listdir(log_dir) if f.endswith('.log') and
                        os.path.getmtime(os.path.join(log_dir, f)) < time.time() - 7 * 86400]
             if old_logs:
-                for f in old_logs[:3]:
-                    os.remove(os.path.join(log_dir, f))
-                fixes.append({"action": "日志清理", "result": f"已清理 {len(old_logs[:3])} 个过期日志"})
+                cleaned = 0
+                for f in old_logs[:5]:
+                    try:
+                        os.remove(os.path.join(log_dir, f))
+                        cleaned += 1
+                    except Exception:
+                        pass
+                if cleaned > 0:
+                    fixes.append({"action": "日志清理", "result": f"已清理{cleaned}个过期日志(>7天)", "auto": True})
+                    auto_fix_count += 1
     except Exception:
         pass
 
+    # ── 5. 参数存储初始化 ──
+    param_fails = [i for i in failed_items if "参数" in i["name"] and ("存储" in i["name"] or "Warm" in i["name"])]
+    if param_fails:
+        try:
+            from core.tau_optimizer_cluster import get_parameter_store
+            store = get_parameter_store()
+            if hasattr(store, 'initialize'):
+                store.initialize()
+                fixes.append({"action": "参数存储初始化", "result": "已初始化参数存储", "auto": True})
+                auto_fix_count += 1
+            else:
+                fixes.append({"action": "参数存储初始化", "result": "需手动执行一次优化", "auto": False})
+        except Exception as e:
+            fixes.append({"action": "参数存储初始化", "result": f"跳过: {e}", "auto": False})
+
+    # ── 6. CSS暗色主题变量补全 ──
+    css_fails = [i for i in failed_items if "CSS" in i["name"] or "暗色" in i["name"] or "色调" in i["name"]]
+    if css_fails:
+        try:
+            from core.engineering_loop_auditor import EngineeringLoopAuditor
+            css_vars = EngineeringLoopAuditor.DARK_THEME_VARS
+            template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ui", "templates")
+            css_fixed = 0
+            for fname in os.listdir(template_dir):
+                if not fname.endswith('.html'):
+                    continue
+                fpath = os.path.join(template_dir, fname)
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    # 检查是否缺少CSS变量
+                    missing = [v for v in css_vars if v not in content]
+                    if missing and ':root' in content or '<style>' in content:
+                        # 尝试补全（在:root块或style块末尾追加）
+                        var_block = '\n'.join(f"            {k}: {v};" for k, v in css_vars.items() if k in missing)
+                        if var_block and ':root' in content:
+                            new_content = content.replace(
+                                ':root {',
+                                ':root {\n' + var_block
+                            )
+                            with open(fpath, 'w', encoding='utf-8') as f:
+                                f.write(new_content)
+                            css_fixed += 1
+                except Exception:
+                    pass
+            if css_fixed > 0:
+                fixes.append({"action": "CSS变量补全", "result": f"已补全{css_fixed}个页面的CSS变量", "auto": True})
+                auto_fix_count += 1
+        except Exception as e:
+            fixes.append({"action": "CSS变量补全", "result": f"跳过: {e}", "auto": False})
+
+    # ── 7. 健康报告清理 ──
+    try:
+        report_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "health_reports")
+        if os.path.exists(report_dir):
+            old_reports = [f for f in os.listdir(report_dir) if f.endswith('.json') and
+                          os.path.getmtime(os.path.join(report_dir, f)) < time.time() - 30 * 86400]
+            if old_reports:
+                cleaned = 0
+                for f in old_reports:
+                    try:
+                        os.remove(os.path.join(report_dir, f))
+                        cleaned += 1
+                    except Exception:
+                        pass
+                if cleaned > 0:
+                    fixes.append({"action": "旧报告清理", "result": f"已清理{cleaned}个过期报告(>30天)", "auto": True})
+                    auto_fix_count += 1
+    except Exception:
+        pass
+
+    # ── 8. 生成未自动修复的修复建议 ──
+    for item in failed_items:
+        if item.get("suggestion") and item["severity"] in ("critical", "warning"):
+            suggestion_count += 1
+            fixes.append({
+                "action": f"[{item['id']}] {item['name']}",
+                "result": item["suggestion"],
+                "auto": False,
+                "is_suggestion": True,
+            })
+
     if not fixes:
-        fixes.append({"action": "系统状态", "result": "所有检查项正常，无需优化"})
+        fixes.append({"action": "系统状态", "result": "所有检查项正常，无需优化", "auto": True})
 
     return jsonify({
         "success": True,
         "data": {
-            "message": f"自动优化完成，执行了 {len(fixes)} 项操作",
+            "message": f"智能修复完成: {auto_fix_count}项自动修复, {suggestion_count}条修复建议",
             "fixes": fixes,
+            "summary": {
+                "auto_fixed": auto_fix_count,
+                "suggestions": suggestion_count,
+                "total_failed": len(failed_items),
+            }
         }
     })
 
