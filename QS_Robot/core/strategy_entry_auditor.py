@@ -260,7 +260,7 @@ class StrategyEntryAuditor:
                         cat = "traditional"
                 if cat:
                     categories_found.add(cat)
-        except:
+        except Exception:
             pass
 
         expected = {"physics", "ml", "traditional", "grid"}
@@ -301,7 +301,7 @@ class StrategyEntryAuditor:
         try:
             from api.aurora_core_adapter import AuroraCoreAdapter
             issues.append("Aurora适配器✅")
-        except:
+        except ImportError:
             issues.append("Aurora适配器❌")
         has_page = os.path.exists(os.path.join(self.project_root, "ui", "templates", "aurora_main.html"))
         issues.append(f"页面={'✓' if has_page else '✗'}")
@@ -310,8 +310,8 @@ class StrategyEntryAuditor:
             engine = get_cluster_engine()
             count = len(engine.get_registered_strategies())
             issues.append(f"集群策略={count}个")
-        except:
-            issues.append("集群策略❌")
+        except Exception as e:
+            issues.append(f"集群策略❌({e})")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
 
@@ -336,12 +336,12 @@ class StrategyEntryAuditor:
             from core.vibe_29_agents import VibeAgentAnalyzer
             methods = [m for m in dir(VibeAgentAnalyzer) if m.endswith('_agent') and not m.startswith('__')]
             issues.append(f"智能体={len(methods)}个")
-        except:
+        except ImportError:
             issues.append("Vibe智能体❌")
         try:
             from core.vibe_integration import VibeIntegration
             issues.append("Vibe集成✅")
-        except:
+        except ImportError:
             issues.append("Vibe集成❌")
         has_page = os.path.exists(os.path.join(self.project_root, "ui", "templates", "vibe_analysis.html"))
         issues.append(f"页面={'✓' if has_page else '✗'}")
@@ -408,12 +408,12 @@ class StrategyEntryAuditor:
             pool = get_stock_pool_manager()
             has_promote = hasattr(pool, 'promote') or hasattr(pool, 'move_to_testing')
             issues.append(f"池流转={'✓' if has_promote else '✗'}")
-        except:
+        except ImportError:
             issues.append("池管理❌")
         try:
             from core.backtest_engine import SimpleBacktestEngine
             issues.append("回测引擎✅")
-        except:
+        except ImportError:
             issues.append("回测引擎❌")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
@@ -528,7 +528,7 @@ class StrategyEntryAuditor:
             try:
                 __import__(f"core.{mod}")
                 issues.append(f"{label}✅")
-            except:
+            except ImportError:
                 issues.append(f"{label}❌")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
@@ -567,7 +567,7 @@ class StrategyEntryAuditor:
         try:
             from core.vibe_integration import VibeIntegration
             issues.append("Vibe集成✅")
-        except:
+        except ImportError:
             issues.append("Vibe集成❌")
         try:
             from core.workflow_engine import get_workflow_engine
@@ -576,12 +576,12 @@ class StrategyEntryAuditor:
             src = inspect.getsource(engine.__class__)
             has_vibe = "vibe" in src.lower()
             issues.append(f"工作流Vibe集成={'✓' if has_vibe else '✗'}")
-        except:
-            issues.append("工作流❌")
+        except Exception as e:
+            issues.append(f"工作流❌({e})")
         try:
             from core.trade_executor import TradeExecutor
             issues.append("交易执行✅")
-        except:
+        except ImportError:
             issues.append("交易执行❌")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
@@ -614,7 +614,7 @@ class StrategyEntryAuditor:
                 m = re.search(pattern, content)
                 if m:
                     return m.group(1)
-        except:
+        except Exception:
             pass
         return ""
 
@@ -625,7 +625,7 @@ class StrategyEntryAuditor:
             adapter = AuroraCoreAdapter()
             strategies = adapter.get_strategy_list() if hasattr(adapter, 'get_strategy_list') else []
             return {s.get("name", "") for s in strategies if isinstance(s, dict)}
-        except:
+        except Exception:
             return set()
 
     def _scan_optimizer_files(self) -> int:

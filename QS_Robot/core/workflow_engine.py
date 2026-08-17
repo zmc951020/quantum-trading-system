@@ -796,8 +796,8 @@ class OneClickWorkflowEngine:
 
         if self._integration_bus is None:
             try:
-                from core.integration_bus import IntegrationBus
-                self._integration_bus = IntegrationBus()
+                from core.integration_bus import StrategyIntegrationBus
+                self._integration_bus = StrategyIntegrationBus()
                 logger.info("[Workflow] IntegrationBus 已加载")
             except ImportError:
                 logger.warning("[Workflow] IntegrationBus 不可用")

@@ -40,6 +40,9 @@ from core.agent_registry import (
 
 logger = logging.getLogger(__name__)
 
+MS_TO_SEC = 1000  # 毫秒转秒
+DEFAULT_SCORE = 50  # 默认评分
+
 # 调度超时配置
 DISPATCH_TIMEOUT = 10  # 调度总超时（秒）
 
@@ -228,7 +231,7 @@ class AgentDispatcher:
             # 1. 解析意图
             t0 = time.time()
             intent = parse_dispatch(message)
-            timing["parse"] = round((time.time() - t0) * 1000, 1)
+            timing["parse"] = round((time.time() - t0) * MS_TO_SEC, 1)
             logger.info(f"[Dispatcher] 解析: symbol={intent.symbol}, mode={intent.mode}, "
                         f"agents={len(intent.agent_ids)}, groups={len(intent.group_ids)} "
                         f"({timing['parse']}ms)")
@@ -239,13 +242,13 @@ class AgentDispatcher:
                     "success": False,
                     "error": "未检测到股票代码，请提供6位数字代码（如：600519）",
                     "intent": {"mode": intent.mode, "agent_ids": intent.agent_ids},
-                    "elapsed_ms": round((time.time() - start_time) * 1000, 0),
+                    "elapsed_ms": round((time.time() - start_time) * MS_TO_SEC, 0),
                 }
 
             # 2. 确定要执行的Agent列表
             t0 = time.time()
             agents_to_run = self._resolve_agents(intent)
-            timing["resolve"] = round((time.time() - t0) * 1000, 1)
+            timing["resolve"] = round((time.time() - t0) * MS_TO_SEC, 1)
 
             # 3. 智能编排：未指定Agent/分组时，自动识别任务意图并分配
             has_explicit_agent = _has_explicit_agent_name(message)
@@ -254,14 +257,14 @@ class AgentDispatcher:
                 logger.info(f"[Dispatcher] 未指定Agent/分组，触发智能编排 ({timing['resolve']}ms)")
                 from core.agent_orchestrator import orchestrate, _check_llm_available
                 llm_ok = _check_llm_available()
-                timing["llm_check"] = round((time.time() - t0) * 1000, 1)
+                timing["llm_check"] = round((time.time() - t0) * MS_TO_SEC, 1)
                 if not llm_ok:
                     logger.warning(f"[Dispatcher] LLM不可用，使用降级编排 ({timing['llm_check']}ms)")
                 t0 = time.time()
                 result = orchestrate(message, intent.symbol)
-                timing["orchestrate"] = round((time.time() - t0) * 1000, 1)
+                timing["orchestrate"] = round((time.time() - t0) * MS_TO_SEC, 1)
                 result["_timing"] = timing
-                result["_elapsed_total"] = round((time.time() - start_time) * 1000, 0)
+                result["_elapsed_total"] = round((time.time() - start_time) * MS_TO_SEC, 0)
                 return result
 
             if not agents_to_run:
@@ -269,13 +272,13 @@ class AgentDispatcher:
                     "success": False,
                     "error": "未匹配到任何Agent，请重新描述需求",
                     "intent": {"mode": intent.mode, "agent_ids": intent.agent_ids},
-                    "elapsed_ms": round((time.time() - start_time) * 1000, 0),
+                    "elapsed_ms": round((time.time() - start_time) * MS_TO_SEC, 0),
                 }
 
             # 3. 获取K线数据
             t0 = time.time()
             kline_data = self._fetch_kline(intent.symbol)
-            timing["fetch_kline"] = round((time.time() - t0) * 1000, 1)
+            timing["fetch_kline"] = round((time.time() - t0) * MS_TO_SEC, 1)
             logger.info(f"[Dispatcher] K线获取: {len(kline_data.get('closes', []))}条 ({timing['fetch_kline']}ms)")
 
             # 4. 按模式执行
@@ -286,7 +289,7 @@ class AgentDispatcher:
                 result = self._execute_skills(intent, kline_data)
             else:
                 result = self._execute_agents(intent, agents_to_run, kline_data)
-            timing["execute"] = round((time.time() - t0) * 1000, 1)
+            timing["execute"] = round((time.time() - t0) * MS_TO_SEC, 1)
 
             # 5. 聚合元数据
             result["success"] = True
@@ -294,9 +297,9 @@ class AgentDispatcher:
             result["mode"] = intent.mode
             result["agents_executed"] = [a.agent_id for a in agents_to_run]
             result["agents_count"] = len(agents_to_run)
-            result["elapsed_ms"] = round((time.time() - start_time) * 1000, 0)
+            result["elapsed_ms"] = round((time.time() - start_time) * MS_TO_SEC, 0)
             result["_timing"] = timing
-            result["_elapsed_total"] = round((time.time() - start_time) * 1000, 0)
+            result["_elapsed_total"] = round((time.time() - start_time) * MS_TO_SEC, 0)
 
             logger.info(f"[Dispatcher] 调度完成: total={result['_elapsed_total']}ms, "
                         f"timing={json_module.dumps(timing, ensure_ascii=False)}")
@@ -304,7 +307,7 @@ class AgentDispatcher:
 
         except Exception as e:
             import traceback
-            elapsed = round((time.time() - start_time) * 1000, 0)
+            elapsed = round((time.time() - start_time) * MS_TO_SEC, 0)
             logger.error(f"[Dispatcher] 调度失败({elapsed}ms): {e}\n{traceback.format_exc()}")
             return {
                 "success": False,
@@ -407,7 +410,7 @@ class AgentDispatcher:
             return {
                 "debate": debate_result,
                 "verdict": debate_result.get("final_vote", {}).get("verdict", "未知"),
-                "weighted_score": debate_result.get("weighted_score", 50),
+                "weighted_score": debate_result.get("weighted_score", DEFAULT_SCORE),
             }
         except Exception as e:
             logger.error(f"辩论执行失败: {e}")
@@ -476,7 +479,7 @@ class AgentDispatcher:
 
         for agent_id, data in agent_results.items():
             result = data.get("result", {})
-            score = result.get("score", 50)
+            score = result.get("score", DEFAULT_SCORE)
             vote = result.get("vote", "观望")
             group = data.get("group", "未知")
 
@@ -495,10 +498,10 @@ class AgentDispatcher:
 
         # 计算组平均
         for g, gs in group_summary.items():
-            gs["avg_score"] = round(sum(gs["scores"]) / len(gs["scores"]), 1) if gs["scores"] else 50
+            gs["avg_score"] = round(sum(gs["scores"]) / len(gs["scores"]), 1) if gs["scores"] else DEFAULT_SCORE
             del gs["scores"]
 
-        avg_score = round(sum(scores) / len(scores), 1) if scores else 50
+        avg_score = round(sum(scores) / len(scores), 1) if scores else DEFAULT_SCORE
         total = sum(votes.values())
         buy_pct = round(votes.get("买入", 0) / total * 100, 1) if total > 0 else 0
         sell_pct = round(votes.get("卖出", 0) / total * 100, 1) if total > 0 else 0
@@ -510,7 +513,7 @@ class AgentDispatcher:
             final_verdict = "谨慎买入"
         elif sell_pct > 50:
             final_verdict = "强烈卖出"
-        elif sell_pct > buy_pct and avg_score < 50:
+        elif sell_pct > buy_pct and avg_score < DEFAULT_SCORE:
             final_verdict = "建议卖出"
         else:
             final_verdict = "观望"
@@ -588,7 +591,7 @@ class Task:
             "created_at": self.created_at,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
-            "elapsed_ms": round((self.completed_at - self.started_at) * 1000, 0) if self.started_at and self.completed_at else None,
+            "elapsed_ms": round((self.completed_at - self.started_at) * MS_TO_SEC, 0) if self.started_at and self.completed_at else None,
             "error": self.error,
             "audit_hash": self.audit_hash,
         }
@@ -635,7 +638,7 @@ class TaskManager:
     def _generate_task_id(self) -> str:
         """生成唯一任务ID"""
         self._task_counter += 1
-        ts = int(time.time() * 1000)
+        ts = int(time.time() * MS_TO_SEC)
         return f"task_{ts}_{self._task_counter}"
 
     def _generate_audit_hash(self, task: Task) -> str:
@@ -779,7 +782,7 @@ class TaskManager:
 
         self._log_audit("TASK_END", task, {
             "status": task.status.value,
-            "elapsed_ms": round((task.completed_at - task.started_at) * 1000, 0) if task.started_at else None,
+            "elapsed_ms": round((task.completed_at - task.started_at) * MS_TO_SEC, 0) if task.started_at else None,
         })
         self._notify_status_change()
 

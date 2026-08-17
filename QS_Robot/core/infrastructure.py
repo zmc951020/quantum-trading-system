@@ -211,17 +211,14 @@ class AnomalyDetector:
             return None
         change_pct = abs((price - prev_close) / prev_close * 100)
         if change_pct > self.THRESHOLDS["price_change_max"]:
-            alert = {
-                "type": "price_anomaly",
-                "severity": "high" if change_pct > 15 else "medium",
-                "symbol": symbol,
-                "price": price,
-                "prev_close": prev_close,
-                "change_pct": round(change_pct, 2),
-                "threshold": self.THRESHOLDS["price_change_max"],
-                "message": f"{symbol} 价格异常波动: {change_pct:+.2f}%",
-                "timestamp": datetime.now().isoformat(),
-            }
+            alert = self._build_alert(
+                "价格波动",
+                {"type": "price_anomaly", "symbol": symbol, "price": price,
+                 "prev_close": prev_close, "change_pct": round(change_pct, 2),
+                 "severity": "high" if change_pct > 15 else "medium"},
+                self.THRESHOLDS["price_change_max"]
+            )
+            alert.update(alert.pop("detail"))
             self._add_alert(alert)
             return alert
         return None
@@ -232,17 +229,14 @@ class AnomalyDetector:
             return None
         ratio = volume / avg_volume
         if ratio > self.THRESHOLDS["volume_spike_ratio"]:
-            alert = {
-                "type": "volume_anomaly",
-                "severity": "medium",
-                "symbol": symbol,
-                "volume": volume,
-                "avg_volume": avg_volume,
-                "ratio": round(ratio, 2),
-                "threshold": self.THRESHOLDS["volume_spike_ratio"],
-                "message": f"{symbol} 成交量异常放大: {ratio:.1f}x 均量",
-                "timestamp": datetime.now().isoformat(),
-            }
+            alert = self._build_alert(
+                "成交量",
+                {"type": "volume_anomaly", "symbol": symbol, "volume": volume,
+                 "avg_volume": avg_volume, "ratio": round(ratio, 2),
+                 "severity": "medium"},
+                self.THRESHOLDS["volume_spike_ratio"]
+            )
+            alert.update(alert.pop("detail"))
             self._add_alert(alert)
             return alert
         return None
@@ -254,17 +248,14 @@ class AnomalyDetector:
             return None
         jump = abs(current_score - prev_score)
         if jump > self.THRESHOLDS["score_jump_max"]:
-            alert = {
-                "type": "score_anomaly",
-                "severity": "medium",
-                "symbol": symbol,
-                "current_score": current_score,
-                "prev_score": prev_score,
-                "jump": round(jump, 2),
-                "threshold": self.THRESHOLDS["score_jump_max"],
-                "message": f"{symbol} 评分突变: {prev_score:.1f} → {current_score:.1f}",
-                "timestamp": datetime.now().isoformat(),
-            }
+            alert = self._build_alert(
+                "评分突变",
+                {"type": "score_anomaly", "symbol": symbol, "current_score": current_score,
+                 "prev_score": prev_score, "jump": round(jump, 2),
+                 "severity": "medium"},
+                self.THRESHOLDS["score_jump_max"]
+            )
+            alert.update(alert.pop("detail"))
             self._add_alert(alert)
             return alert
         return None
@@ -279,17 +270,14 @@ class AnomalyDetector:
             return None
 
         if gap_days > self.THRESHOLDS["data_gap_days"]:
-            alert = {
-                "type": "data_gap",
-                "severity": "high",
-                "symbol": symbol,
-                "gap_days": gap_days,
-                "last_date": last_date,
-                "current_date": current_date,
-                "threshold": self.THRESHOLDS["data_gap_days"],
-                "message": f"{symbol} 数据缺失 {gap_days} 天",
-                "timestamp": datetime.now().isoformat(),
-            }
+            alert = self._build_alert(
+                "数据缺失",
+                {"type": "data_gap", "symbol": symbol, "gap_days": gap_days,
+                 "last_date": last_date, "current_date": current_date,
+                 "severity": "high"},
+                self.THRESHOLDS["data_gap_days"]
+            )
+            alert.update(alert.pop("detail"))
             self._add_alert(alert)
             return alert
         return None
@@ -297,18 +285,26 @@ class AnomalyDetector:
     def check_latency(self, endpoint: str, elapsed_ms: float) -> Optional[Dict]:
         """检测API延迟"""
         if elapsed_ms > self.THRESHOLDS["api_latency_max_ms"]:
-            alert = {
-                "type": "latency_anomaly",
-                "severity": "low",
-                "endpoint": endpoint,
-                "elapsed_ms": elapsed_ms,
-                "threshold": self.THRESHOLDS["api_latency_max_ms"],
-                "message": f"API响应过慢: {endpoint} ({elapsed_ms:.0f}ms)",
-                "timestamp": datetime.now().isoformat(),
-            }
+            alert = self._build_alert(
+                "API延迟",
+                {"type": "latency_anomaly", "endpoint": endpoint,
+                 "elapsed_ms": elapsed_ms, "severity": "low"},
+                self.THRESHOLDS["api_latency_max_ms"]
+            )
+            alert.update(alert.pop("detail"))
             self._add_alert(alert)
             return alert
         return None
+
+    def _build_alert(self, check_name: str, detail: dict, score: float = 0.0) -> dict:
+        """构建标准告警字典"""
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "severity": "warning",
+            "message": f"{check_name} 异常",
+            "threshold": score,
+            "detail": detail,
+        }
 
     def _add_alert(self, alert: Dict):
         with self._lock:

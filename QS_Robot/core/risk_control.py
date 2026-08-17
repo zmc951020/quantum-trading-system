@@ -23,6 +23,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PCT_BASE = 100  # 百分比基数
+DEFAULT_SCORE_THRESHOLD = 50  # 默认评分阈值
+
 # ============================================================
 # 风险等级
 # ============================================================
@@ -147,13 +150,13 @@ class RiskControlEngine:
         
         # 计算各指标得分 (使用可配置系数)
         c = self._coefficients
-        sharpe_score = min(100, max(0, sharpe * c["sharpe_multiplier"]))  # 夏普>2.5得满分
-        dd_score = min(100, max(0, 100 - max_drawdown * c["drawdown_multiplier"]))  # 回撤>33%得0分
-        win_score = min(100, max(0, (win_rate - c["win_rate_offset"]) * c["win_rate_multiplier"]))  # 胜率>70%得满分
-        pf_score = min(100, max(0, profit_factor * c["profit_factor_multiplier"])) if profit_factor > 0 else 50
+        sharpe_score = min(PCT_BASE, max(0, sharpe * c["sharpe_multiplier"]))  # 夏普>2.5得满分
+        dd_score = min(PCT_BASE, max(0, PCT_BASE - max_drawdown * c["drawdown_multiplier"]))  # 回撤>33%得0分
+        win_score = min(PCT_BASE, max(0, (win_rate - c["win_rate_offset"]) * c["win_rate_multiplier"]))  # 胜率>70%得满分
+        pf_score = min(PCT_BASE, max(0, profit_factor * c["profit_factor_multiplier"])) if profit_factor > 0 else DEFAULT_SCORE_THRESHOLD
         
         # 策略稳定性得分（交易次数越多越稳定）
-        stability_score = min(100, total_trades * c["stability_multiplier"])
+        stability_score = min(PCT_BASE, total_trades * c["stability_multiplier"])
         
         avg_score = (sharpe_score + dd_score + win_score + pf_score + stability_score) / 5
         
@@ -182,9 +185,9 @@ class RiskControlEngine:
         
         # 计算得分 (使用可配置系数)
         c = self._coefficients
-        vol_score = min(100, max(0, 100 - volatility * c["volatility_multiplier"]))  # 波动率<0.5得满分
-        beta_score = min(100, max(0, 100 - abs(beta - 1) * c["beta_penalty"]))  # beta=1得满分
-        corr_score = min(100, max(0, c["correlation_offset"] + correlation * c["correlation_multiplier"]))  # 适度相关最好
+        vol_score = min(PCT_BASE, max(0, PCT_BASE - volatility * c["volatility_multiplier"]))  # 波动率<0.5得满分
+        beta_score = min(PCT_BASE, max(0, PCT_BASE - abs(beta - 1) * c["beta_penalty"]))  # beta=1得满分
+        corr_score = min(PCT_BASE, max(0, c["correlation_offset"] + correlation * c["correlation_multiplier"]))  # 适度相关最好
         
         avg_score = (vol_score + beta_score + corr_score) / 3
         
@@ -208,10 +211,10 @@ class RiskControlEngine:
         diversification = position_info.get("diversification", 5)  # 持仓数量
         
         # 计算得分
-        conc_score = min(100, max(0, 100 - concentration))  # 集中度越低越好
-        ind_conc_score = min(100, max(0, 100 - industry_concentration))
-        pos_score = min(100, max(0, 100 - max_position * 5))  # 单票上限<20%得满分
-        div_score = min(100, diversification * 15)  # 持仓越多越分散
+        conc_score = min(PCT_BASE, max(0, PCT_BASE - concentration))  # 集中度越低越好
+        ind_conc_score = min(PCT_BASE, max(0, PCT_BASE - industry_concentration))
+        pos_score = min(PCT_BASE, max(0, PCT_BASE - max_position * 5))  # 单票上限<20%得满分
+        div_score = min(PCT_BASE, diversification * 15)  # 持仓越多越分散
         
         avg_score = (conc_score + ind_conc_score + pos_score + div_score) / 4
         
@@ -238,10 +241,10 @@ class RiskControlEngine:
         
         # 计算得分 (使用可配置系数)
         c = self._coefficients
-        slippage_score = min(100, max(0, 100 - avg_slippage * c["slippage_multiplier"]))
-        liquidity_score = min(100, liquidity * c["liquidity_multiplier"])  # 流动性>2亿得满分
-        cost_score = min(100, max(0, 100 - execution_cost * c["cost_multiplier"]))
-        fill_score = min(100, fill_rate)
+        slippage_score = min(PCT_BASE, max(0, PCT_BASE - avg_slippage * c["slippage_multiplier"]))
+        liquidity_score = min(PCT_BASE, liquidity * c["liquidity_multiplier"])  # 流动性>2亿得满分
+        cost_score = min(PCT_BASE, max(0, PCT_BASE - execution_cost * c["cost_multiplier"]))
+        fill_score = min(PCT_BASE, fill_rate)
         
         avg_score = (slippage_score + liquidity_score + cost_score + fill_score) / 4
         
@@ -369,7 +372,7 @@ class RiskControlEngine:
             return {"passed": False, "reason": f"标的 {symbol} 涨跌停无法交易", "risk_score": 10}
 
         logger.info(f"事前风控通过: {symbol} {side} {volume}@{price}")
-        return {"passed": True, "reason": "事前风控通过", "risk_score": 100}
+        return {"passed": True, "reason": "事前风控通过", "risk_score": PCT_BASE}
 
     def real_time_risk_monitor(self, portfolio: Dict) -> Dict[str, Any]:
         """事中风控：动态波动监控
@@ -418,7 +421,7 @@ class RiskControlEngine:
             alerts.append("行情断流熔断触发，暂停交易")
             risk_scores.append(0)
 
-        avg_score = sum(risk_scores) / len(risk_scores) if risk_scores else 100
+        avg_score = sum(risk_scores) / len(risk_scores) if risk_scores else PCT_BASE
         passed = len(alerts) == 0
 
         if not passed:

@@ -209,7 +209,7 @@ class EngineeringLoopAuditor:
         try:
             from core.backtest_engine import SimpleBacktestEngine
             has_backtest = True
-        except:
+        except ImportError:
             has_backtest = False
         has_verify = os.path.exists(os.path.join(self.project_root, "_verify_three_entries.py"))
         ok = test_count > 0 and has_backtest and has_verify
@@ -222,7 +222,7 @@ class EngineeringLoopAuditor:
         try:
             from api.aurora_core_adapter import AuroraCoreAdapter
             issues.append("Aurora适配器✅")
-        except:
+        except ImportError:
             issues.append("Aurora适配器❌")
         has_page = os.path.exists(os.path.join(self.template_dir, "aurora_main.html"))
         issues.append(f"Aurora页面={'✓' if has_page else '✗'}")
@@ -230,8 +230,8 @@ class EngineeringLoopAuditor:
             from core.tau_cluster_engine import get_cluster_engine
             engine = get_cluster_engine()
             issues.append(f"集群策略={len(engine.get_registered_strategies())}个")
-        except:
-            issues.append("集群策略❌")
+        except Exception as e:
+            issues.append(f"集群策略❌({e})")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
 
@@ -251,12 +251,12 @@ class EngineeringLoopAuditor:
             from core.vibe_29_agents import VibeAgentAnalyzer
             methods = [m for m in dir(VibeAgentAnalyzer) if m.endswith('_agent') and not m.startswith('__')]
             issues.append(f"Vibe智能体={len(methods)}个")
-        except:
+        except ImportError:
             issues.append("Vibe智能体❌")
         try:
             from core.vibe_integration import VibeIntegration
             issues.append("Vibe集成✅")
-        except:
+        except ImportError:
             issues.append("Vibe集成❌")
         has_page = os.path.exists(os.path.join(self.template_dir, "vibe_analysis.html"))
         issues.append(f"Vibe页面={'✓' if has_page else '✗'}")
@@ -283,7 +283,7 @@ class EngineeringLoopAuditor:
             try:
                 __import__(mod)
                 issues.append(f"{label}✅")
-            except:
+            except ImportError:
                 issues.append(f"{label}❌")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
@@ -422,19 +422,19 @@ class EngineeringLoopAuditor:
             src = inspect.getsource(engine._stage_backtest)
             has_sharpe = "sharpe" in src.lower()
             issues.append(f"回测验证={'✓' if has_sharpe else '✗'}")
-        except:
-            issues.append("回测验证❌")
+        except Exception as e:
+            issues.append(f"回测验证❌({e})")
         try:
             from core.integration_bus import get_integration_bus
             bus = get_integration_bus()
             has_auto = hasattr(bus, 'auto_full_workflow')
             issues.append(f"集成总线={'✓' if has_auto else '✗'}")
-        except:
-            issues.append("集成总线❌")
+        except Exception as e:
+            issues.append(f"集成总线❌({e})")
         try:
             from core.trade_executor import TradeExecutor
             issues.append(f"交易执行器={TradeExecutor().mode}")
-        except:
+        except ImportError:
             issues.append("交易执行器❌")
         all_ok = "❌" not in " ".join(issues)
         return all_ok, ", ".join(issues)
@@ -443,12 +443,12 @@ class EngineeringLoopAuditor:
         try:
             from core.risk_control import RiskControlEngine
             rm_ok = True
-        except:
+        except ImportError:
             rm_ok = False
         try:
             from core.alert_manager import AlertManager
             alert_ok = True
-        except:
+        except ImportError:
             alert_ok = False
         has_cooldown = False
         for mod_name in ["integration_bus", "risk_control"]:
@@ -459,7 +459,7 @@ class EngineeringLoopAuditor:
                 has_cooldown = "cooldown" in src.lower() or "冷却" in src
                 if has_cooldown:
                     break
-            except:
+            except Exception:
                 pass
         all_ok = rm_ok and alert_ok and has_cooldown
         return all_ok, f"风控={'✓' if rm_ok else '✗'}, 告警={'✓' if alert_ok else '✗'}, 冷却={'✓' if has_cooldown else '✗'}"
@@ -595,7 +595,7 @@ class EngineeringLoopAuditor:
                     body_match = re.search(r'body\s*\{[^}]*background:\s*[^;]*?(#[0-9a-fA-F]{6})', css_content, re.DOTALL)
                     if body_match and self._is_dark_hex(body_match.group(1)):
                         return True
-                except:
+                except Exception:
                     pass
         return False
 
