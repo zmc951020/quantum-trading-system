@@ -256,6 +256,36 @@
                     <canvas id="strategyChart"></canvas>
                 </div>
             </div>
+
+            <!-- 人工审批面板 -->
+            <div class="section" id="approval-section" style="border: 1px solid var(--warning);">
+                <div class="section-header">
+                    <h2>🛡️ 人工审批队列</h2>
+                    <span class="section-subtitle" id="approval-count">待审批: 0 只</span>
+                    <div style="margin-left: auto; display: flex; gap: 8px;">
+                        <button class="btn btn-approve" onclick="batchApprove()" style="background:#00c853;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;">✅ 全部通过</button>
+                        <button class="btn btn-reject" onclick="batchReject()" style="background:#ff5252;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;">❌ 全部拒绝</button>
+                    </div>
+                </div>
+                <div class="table-container" style="max-height:300px; overflow-y:auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"></th>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>来源</th>
+                                <th>评分</th>
+                                <th>原因</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="approval-table-body">
+                            <tr><td colspan="7" style="text-align:center;padding:20px;color:#8899aa;">暂无待审批股票</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -317,6 +347,110 @@
                 alert('❌ 调用失败，请确保Web服务已启动\n\n错误信息: ' + error.message);
             });
         }
+
+        // ===== 人工审批功能 =====
+
+        function loadPendingApprovals() {
+            fetch('/api/stock_pool/pending_approvals')
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) return;
+                    const pending = data.data || [];
+                    document.getElementById('approval-count').textContent = `待审批: ${pending.length} 只`;
+                    const tbody = document.getElementById('approval-table-body');
+                    if (pending.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#8899aa;">暂无待审批股票</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = pending.map((p, i) => `
+                        <tr>
+                            <td><input type="checkbox" class="approve-check" value="${p.symbol}"></td>
+                            <td><strong>${p.symbol}</strong></td>
+                            <td>${p.name || '-'}</td>
+                            <td><span class="badge badge-${p.source}">${p.source}</span></td>
+                            <td>${(p.score || 0).toFixed(1)}</td>
+                            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${p.reason || '-'}</td>
+                            <td>
+                                <button onclick="approveOne('${p.symbol}')" style="background:#00c853;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:4px;">通过</button>
+                                <button onclick="rejectOne('${p.symbol}')" style="background:#ff5252;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;">拒绝</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                    document.getElementById('select-all').checked = false;
+                })
+                .catch(err => console.error('加载审批列表失败:', err));
+        }
+
+        function toggleSelectAll(cb) {
+            document.querySelectorAll('.approve-check').forEach(c => c.checked = cb.checked);
+        }
+
+        function getSelectedSymbols() {
+            return Array.from(document.querySelectorAll('.approve-check:checked')).map(c => c.value);
+        }
+
+        function approveOne(symbol) {
+            fetch('/api/stock_pool/approve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbol: symbol})
+            }).then(res => res.json()).then(r => {
+                if (r.success) { alert(`✅ ${symbol} 审批通过，已进入候选池`); loadPendingApprovals(); refreshFlowData(); }
+                else alert(`❌ 审批失败: ${r.error}`);
+            });
+        }
+
+        function rejectOne(symbol) {
+            const reason = prompt('拒绝原因（可选）:', '不符合选股标准');
+            if (reason === null) return;
+            fetch('/api/stock_pool/reject', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbol: symbol, reason: reason})
+            }).then(res => res.json()).then(r => {
+                if (r.success) { alert(`❌ ${symbol} 已拒绝`); loadPendingApprovals(); refreshFlowData(); }
+                else alert(`操作失败: ${r.error}`);
+            });
+        }
+
+        function batchApprove() {
+            const symbols = getSelectedSymbols();
+            if (symbols.length === 0) { alert('请先勾选要审批的股票'); return; }
+            if (!confirm(`确认通过 ${symbols.length} 只股票？`)) return;
+            fetch('/api/stock_pool/batch_approve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbols: symbols})
+            }).then(res => res.json()).then(r => {
+                if (r.success) { alert(`✅ 批量审批完成: ${r.approved}/${r.total} 通过`); loadPendingApprovals(); refreshFlowData(); }
+            });
+        }
+
+        function batchReject() {
+            const symbols = getSelectedSymbols();
+            if (symbols.length === 0) { alert('请先勾选要拒绝的股票'); return; }
+            if (!confirm(`确认拒绝 ${symbols.length} 只股票？`)) return;
+            fetch('/api/stock_pool/batch_reject', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbols: symbols, reason: '人工批量拒绝'})
+            }).then(res => res.json()).then(r => {
+                if (r.success) { alert(`❌ 批量拒绝完成: ${r.rejected}/${r.total}`); loadPendingApprovals(); refreshFlowData(); }
+            });
+        }
+
+        function refreshFlowData() {
+            // 刷新股票池数据
+            if (typeof refreshPoolData === 'function') refreshPoolData();
+            if (typeof loadPoolSummary === 'function') loadPoolSummary();
+        }
+
+        // 页面加载时自动加载审批列表
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(loadPendingApprovals, 1500);
+            // 每30秒自动刷新审批列表
+            setInterval(loadPendingApprovals, 30000);
+        });
     </script>
     <script src="/static/js/stock_pool.js"></script>
     <script src="/static/robot-widget.js"></script>

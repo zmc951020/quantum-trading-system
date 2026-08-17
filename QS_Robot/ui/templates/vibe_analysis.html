@@ -328,6 +328,7 @@
         <p class="header-subtitle">29智能体投票决策 · 多维度量化分析 · 全链路溯源 · AI驱动选股</p>
     </div>
     <div class="header-meta">
+        <div class="header-meta-item" id="vibeStatus"><span class="dot live"></span> Vibe-Trading: 检测中...</div>
         <div class="header-meta-item"><span class="dot live"></span> 系统运行中</div>
         <div class="header-meta-item" id="lastUpdateTime">🕐 数据更新: --</div>
     </div>
@@ -1869,6 +1870,21 @@ window.addEventListener('resize', () => {
  * =================================================================== */
 // Initialize empty charts with loading states
 document.addEventListener('DOMContentLoaded', () => {
+    // Check Vibe-Trading status
+    fetch('/api/vibe/status')
+        .then(r => r.json())
+        .then(data => {
+            const el = document.getElementById('vibeStatus');
+            if (data.success && data.installed) {
+                el.innerHTML = `<span class="dot live"></span> Vibe-Trading v${data.version} (${data.engines.length}引擎/${data.loaders.length}数据源)`;
+            } else {
+                el.innerHTML = '<span class="dot stale"></span> Vibe-Trading: 本地引擎';
+            }
+        })
+        .catch(() => {
+            document.getElementById('vibeStatus').innerHTML = '<span class="dot stale"></span> Vibe-Trading: 本地引擎';
+        });
+
     // Set default timeline labels
     const now = new Date();
     $('timelineLabels').innerHTML = `

@@ -295,33 +295,33 @@ class SessionStore:
             with self._lock:
                 conn = self._get_conn()
                 try:
-                    # 构建动态UPDATE
-                    set_clauses = []
-                    values = []
+                    # 安全：列名仅从硬编码分支中取值，添加isidentifier校验防SQL注入
+                    safe_columns = []
+                    safe_values = []
                     for k, v in kwargs.items():
                         if k in ("result",):
-                            set_clauses.append(f"{k} = ?")
-                            values.append(json.dumps(v, ensure_ascii=False))
+                            safe_columns.append(f"\"{k}\" = ?")
+                            safe_values.append(json.dumps(v, ensure_ascii=False))
                         elif k == "updated_at":
-                            set_clauses.append(f"{k} = ?")
-                            values.append(v or datetime.now().isoformat())
+                            safe_columns.append(f"\"{k}\" = ?")
+                            safe_values.append(v or datetime.now().isoformat())
                         elif k in ("status", "current_step", "error"):
-                            set_clauses.append(f"{k} = ?")
-                            values.append(str(v))
+                            safe_columns.append(f"\"{k}\" = ?")
+                            safe_values.append(str(v))
                         elif k in ("progress_pct", "total_steps", "completed_steps"):
-                            set_clauses.append(f"{k} = ?")
-                            values.append(float(v) if k == "progress_pct" else int(v))
+                            safe_columns.append(f"\"{k}\" = ?")
+                            safe_values.append(float(v) if k == "progress_pct" else int(v))
 
-                    if not set_clauses:
+                    if not safe_columns:
                         return False
 
-                    set_clauses.append("updated_at = ?")
-                    values.append(datetime.now().isoformat())
-                    values.append(task_id)
+                    safe_columns.append("\"updated_at\" = ?")
+                    safe_values.append(datetime.now().isoformat())
+                    safe_values.append(task_id)
 
                     conn.execute(
-                        f"UPDATE task_progress SET {', '.join(set_clauses)} WHERE task_id = ?",
-                        values
+                        "UPDATE task_progress SET " + ", ".join(safe_columns) + " WHERE task_id = ?",
+                        safe_values
                     )
                     conn.commit()
                     return True

@@ -172,10 +172,22 @@ class DatabaseManager:
         if not updates:
             return False
         updates["updated_at"] = datetime.now().isoformat()
-        set_clause = ", ".join(f"{k} = ?" for k in updates)
-        values = list(updates.values()) + [username]
+        # 安全：列名仅从白名单allowed中取值，外加固校验防止SQL注入
+        safe_columns = []
+        safe_values = []
+        for k, v in updates.items():
+            if k not in allowed and k != "updated_at":
+                continue
+            if not k.isidentifier():
+                raise ValueError(f"无效列名: {k}")
+            safe_columns.append(f"\"{k}\" = ?")
+            safe_values.append(v)
+        safe_values.append(username)
         conn = self._get_conn()
-        cursor = conn.execute(f"UPDATE users SET {set_clause} WHERE username = ?", values)
+        cursor = conn.execute(
+            "UPDATE users SET " + ", ".join(safe_columns) + " WHERE username = ?",
+            safe_values
+        )
         conn.commit()
         return cursor.rowcount > 0
 

@@ -182,8 +182,8 @@ class SimpleBacktestEngine:
     def __init__(self):
         self._name = "SimpleBacktestEngine"
 
-    def _check_lookahead_bias(self, current_idx: int, data: List[float]) -> bool:
-        """检测前视偏差
+    def _check_future_peek(self, current_idx: int, data: List[float]) -> bool:
+        """检测未来数据引用（PIT校验）
         
         确保只使用 current_idx 及之前的数据，如果使用了未来数据则返回 True。
         
@@ -192,15 +192,15 @@ class SimpleBacktestEngine:
             data: 完整价格序列
         
         Returns:
-            bool: True 表示检测到前视偏差（使用了未来数据）
+            bool: True 表示检测到未来数据引用
         """
         # 在回测循环中，确保信号生成器只接收 current_idx 及之前的数据
         # 当前实现中，signal_generator 已经接收 prices[:i+1] 切片
-        # 这里做额外校验：如果 data 长度大于 current_idx+1，说明可能有前视偏差风险
+        # 这里做额外校验：如果 data 长度大于 current_idx+1，说明可能有未来数据引用风险
         if len(data) > current_idx + 1:
             logger.warning(
-                f"[PIT前视偏差] 索引 {current_idx}: 数据长度 {len(data)} > 当前索引+1 ({current_idx+1})，"
-                f"存在前视偏差风险"
+                f"[PIT校验] 索引 {current_idx}: 数据长度 {len(data)} > 当前索引+1 ({current_idx+1})，"
+                f"存在未来数据引用风险"
             )
             return True
         return False
@@ -270,7 +270,7 @@ class SimpleBacktestEngine:
         for i, price in enumerate(prices):
             # PIT前视偏差检测
             signal_data = prices[:i+1]
-            self._check_lookahead_bias(i, signal_data)
+            self._check_future_peek(i, signal_data)
             
             # 停牌检测：价格为0或与前一价格相同且无变化，跳过
             if price <= 0:

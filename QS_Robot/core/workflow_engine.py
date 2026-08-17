@@ -95,7 +95,8 @@ class OneClickWorkflowEngine:
                      stock_pool: List[str] = None,
                      strategy_names: List[str] = None,
                      fast_mode: bool = False,
-                     batch_mode: bool = False) -> WorkflowResult:
+                     batch_mode: bool = False,
+                     require_approval: bool = False) -> WorkflowResult:
         """一键执行完整工作流
 
         优先使用 integration_bus.auto_full_workflow() 完整链路，
@@ -107,6 +108,7 @@ class OneClickWorkflowEngine:
             strategy_names: 指定策略，None 则自动发现
             fast_mode: 快速模式（跳过部分优化，使用缓存结果）
             batch_mode: 批量模式（不中断，优化所有策略后对比排名）
+            require_approval: 是否需要人工审批（True=推入待审批队列，False=自动入池）
 
         Returns:
             WorkflowResult 完整执行结果
@@ -142,9 +144,9 @@ class OneClickWorkflowEngine:
 
             # 尝试使用 integration_bus.auto_full_workflow 完整链路
             if self._integration_bus and strategies:
-                self._run_full_workflow(result, strategies, stock_pool, fast_mode, batch_mode)
+                self._run_full_workflow(result, strategies, stock_pool, fast_mode, batch_mode, require_approval)
             else:
-                self._run_manual_workflow(result, strategies, stock_pool, fast_mode)
+                self._run_manual_workflow(result, strategies, stock_pool, fast_mode, require_approval)
 
             result.status = "success"
 
@@ -170,10 +172,9 @@ class OneClickWorkflowEngine:
         return result
 
     def _run_full_workflow(self, result: WorkflowResult,
-                           strategies: List[str],
-                           stock_pool: List[str] = None,
-                           fast_mode: bool = False,
-                           batch_mode: bool = False):
+                           strategies: List[str], stock_pool: List[str] = None,
+                           fast_mode: bool = False, batch_mode: bool = False,
+                           require_approval: bool = False):
         """使用 integration_bus.auto_full_workflow() 完整链路
 
         包含: Vibe分析 → 优化 → 持久化 → 股票池匹配 → 流转 → 风控 → 交易配置
@@ -188,11 +189,12 @@ class OneClickWorkflowEngine:
 
             # 阶段0.5: 集群选股扫描（32策略批量海选）
             self._run_stage(result, "集群选股", self._stage_cluster_select,
-                           stock_pool=stock_pool)
+                           stock_pool=stock_pool, require_approval=require_approval)
 
             # 阶段1-6: 使用集成总线的完整流程
             self._run_stage(result, "完整自动化流程", self._stage_integration_full,
-                           name, stock_pool=stock_pool, fast_mode=fast_mode)
+                           name, stock_pool=stock_pool, fast_mode=fast_mode,
+                           require_approval=require_approval)
 
             # 阶段7: 自适应策略
             self._run_stage(result, "自适应策略", self._stage_adapt)
@@ -222,17 +224,16 @@ class OneClickWorkflowEngine:
                        f"最佳={result.best_strategy}")
 
     def _run_manual_workflow(self, result: WorkflowResult,
-                             strategies: List[str],
-                             stock_pool: List[str] = None,
-                             fast_mode: bool = False):
+                             strategies: List[str], stock_pool: List[str] = None,
+                             fast_mode: bool = False, require_approval: bool = False):
         """降级手动 8 阶段流程（integration_bus 不可用时）"""
         # 阶段0: Vibe 市场环境分析
         self._run_stage(result, "Vibe市场分析", self._stage_vibe_analysis,
-                       strategies[0] if strategies else "unknown")
+                       strategies[0] if strategies else None)
 
         # 阶段0.5: 集群选股扫描（32策略批量海选）
         self._run_stage(result, "集群选股", self._stage_cluster_select,
-                       stock_pool=stock_pool)
+                       stock_pool=stock_pool, require_approval=require_approval)
 
         # 阶段1: 策略发现与注册
         self._run_stage(result, "策略发现", self._stage_discover, strategies)
@@ -343,7 +344,8 @@ class OneClickWorkflowEngine:
             stage.message = f"Vibe分析异常: {e}"
 
     def _stage_cluster_select(self, stage: WorkflowStage,
-                              stock_pool: List[str] = None):
+                             stock_pool: List[str] = None,
+                             require_approval: bool = False):
         """阶段0.5: 32策略集群选股扫描 + u/n参数自动调优"""
         stage.message = "正在执行32策略集群选股..."
 
@@ -407,7 +409,7 @@ class OneClickWorkflowEngine:
             # 自动入池：将选出的股票加入候选池
             if scan_result.stocks:
                 stock_codes = [s.code for s in scan_result.stocks[:n]]
-                self._push_to_stock_pool(stock_codes, "candidate", stage)
+                self._push_to_stock_pool(stock_codes, "candidate", stage, require_approval)
 
             stage.message = (f"集群选股完成: {scan_result.passed}/{scan_result.total_scanned} 通过, "
                             f"入选 {len(scan_result.stocks[:n])} 只 (u={u}, n={n})")
@@ -420,7 +422,8 @@ class OneClickWorkflowEngine:
             stage.error = str(e)
 
     def _stage_integration_full(self, stage: WorkflowStage, strategy_name: str,
-                                stock_pool: List[str] = None, fast_mode: bool = False):
+                                stock_pool: List[str] = None, fast_mode: bool = False,
+                                require_approval: bool = False):
         """阶段1-6: 使用集成总线完整流程"""
         stage.message = f"正在执行完整流程: {strategy_name}..."
 
@@ -896,7 +899,7 @@ class OneClickWorkflowEngine:
                     pass
         return codes[:300]
 
-    def _push_to_stock_pool(self, codes: list, level: str, stage: WorkflowStage):
+    def _push_to_stock_pool(self, codes: list, level: str, stage: WorkflowStage, require_approval: bool = False):
         """将选股结果推入股票池"""
         try:
             from core.stock_pool import get_stock_pool_manager, PoolLevel
@@ -908,23 +911,33 @@ class OneClickWorkflowEngine:
                 "testing": PoolLevel.TESTING,
                 "pre_live": PoolLevel.PRELIVE,
                 "live": PoolLevel.LIVE,
+                "pending_approval": PoolLevel.PENDING_APPROVAL,
             }
-            pool_level = level_map.get(level, PoolLevel.CANDIDATE)
+
+            if require_approval:
+                target_level = "pending_approval"
+                pool_level = PoolLevel.PENDING_APPROVAL
+            else:
+                pool_level = level_map.get(level, PoolLevel.CANDIDATE)
 
             added = 0
             for code in codes:
                 try:
-                    mgr.add_stock(code, level=pool_level, source="cluster_selector")
+                    if require_approval:
+                        mgr.add_pending_approval(code, name="", reason=f"工作流自动选股: {stage.name}", score=50)
+                    else:
+                        mgr.add_stock(code, level=pool_level, source="cluster_selector")
                     added += 1
                 except Exception:
                     pass
 
             stage.data["pool_push"] = {
-                "level": level,
+                "level": "pending_approval" if require_approval else level,
                 "pushed": added,
                 "total": len(codes),
+                "require_approval": require_approval,
             }
-            logger.info(f"[Workflow] 已推入 {added}/{len(codes)} 只股票到 {level} 池")
+            logger.info(f"[Workflow] 已推入 {added}/{len(codes)} 只股票到 {'待审批' if require_approval else level} 池")
         except Exception as e:
             logger.warning(f"[Workflow] 推入股票池失败: {e}")
 

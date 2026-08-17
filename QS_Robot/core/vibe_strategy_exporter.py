@@ -107,7 +107,7 @@ class StrategyCodeExporter:
                 default = p.get("value", 0)
                 p_min = p.get("min")
                 p_max = p.get("max")
-                step = p.get("step", 0.01 if p_type == "float" else 1)
+                step = p.get("step") or (0.01 if p_type == "float" else 1)
                 desc = p.get("description", name)
 
                 if p_type == "int":

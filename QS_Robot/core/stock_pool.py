@@ -32,23 +32,24 @@ from enum import Enum
 class PoolLevel(Enum):
     WATCHLIST = "watchlist"       # 观察池：技术分析选中的股票
     CANDIDATE = "candidate"       # 候选池：满足基础筛选条件
+    PENDING_APPROVAL = "pending_approval"  # 待审批：需要人工确认后才能入池
     TESTING = "testing"           # 测试池：正在进行回测验证
     PRELIVE = "prelive"           # 预实盘池：回测通过，等待实盘
     LIVE = "live"                 # 实盘池：真实交易
 
     def __lt__(self, other):
-        order = [PoolLevel.WATCHLIST, PoolLevel.CANDIDATE, PoolLevel.TESTING, 
-                 PoolLevel.PRELIVE, PoolLevel.LIVE]
+        order = [PoolLevel.WATCHLIST, PoolLevel.CANDIDATE, PoolLevel.PENDING_APPROVAL,
+                 PoolLevel.TESTING, PoolLevel.PRELIVE, PoolLevel.LIVE]
         return order.index(self) < order.index(other)
 
     def __gt__(self, other):
-        order = [PoolLevel.WATCHLIST, PoolLevel.CANDIDATE, PoolLevel.TESTING, 
-                 PoolLevel.PRELIVE, PoolLevel.LIVE]
+        order = [PoolLevel.WATCHLIST, PoolLevel.CANDIDATE, PoolLevel.PENDING_APPROVAL,
+                 PoolLevel.TESTING, PoolLevel.PRELIVE, PoolLevel.LIVE]
         return order.index(self) > order.index(other)
 
     def next(self):
-        order = [PoolLevel.WATCHLIST, PoolLevel.CANDIDATE, PoolLevel.TESTING, 
-                 PoolLevel.PRELIVE, PoolLevel.LIVE]
+        order = [PoolLevel.WATCHLIST, PoolLevel.CANDIDATE, PoolLevel.PENDING_APPROVAL,
+                 PoolLevel.TESTING, PoolLevel.PRELIVE, PoolLevel.LIVE]
         idx = order.index(self)
         return order[idx + 1] if idx < len(order) - 1 else self
 
@@ -90,9 +91,10 @@ class StockRecord:
     symbol: str                      # 股票代码
     name: str                        # 股票名称
     level: PoolLevel                 # 当前层级
-    added_at: str                    # 加入时间
-    last_updated: str                # 最后更新时间
+    added_at: str = ""               # 加入时间
+    last_updated: str = ""           # 最后更新时间
     source: StockSource = StockSource.AURORA_NATIVE  # 选股来源（三类分流）
+    score: float = 0.0               # 综合评分
     strategy_name: str = ""          # 产生信号的策略名
     metadata: Dict[str, Any] = field(default_factory=dict)  # 附加信息（PE、行业、财务指标等）
     history: List[Dict[str, Any]] = field(default_factory=list)  # 流转历史
@@ -141,6 +143,11 @@ class StockPoolManager:
         }
         self._load()
 
+    def reload(self):
+        """重新从磁盘加载数据"""
+        self._pools = {}
+        self._load()
+
     def _load(self):
         """从文件加载股票池数据"""
         try:
@@ -149,7 +156,7 @@ class StockPoolManager:
                     data = json.load(f)
                 # StockRecord 期望的字段列表
                 valid_fields = {"symbol", "name", "level", "added_at", "last_updated",
-                                "source", "strategy_name",
+                                "source", "score", "strategy_name",
                                 "metadata", "history", "backtest_results", "risk_score", "strategy_params"}
                 for symbol, record in data.items():
                     # 过滤未知字段，防止旧版本JSON中的废弃字段导致错误
@@ -558,6 +565,94 @@ class StockPoolManager:
         record.last_updated = datetime.now().isoformat()
         self._save()
         return {"success": True}
+
+    # ---------- 人工审批机制 ----------
+
+    def add_pending_approval(self, symbol: str, name: str = "",
+                             source: StockSource = StockSource.VIBE_TRADING,
+                             reason: str = "", score: float = 0,
+                             metadata: Dict = None) -> Dict:
+        """添加股票到待审批队列"""
+        if symbol in self._pools:
+            existing = self._pools[symbol]
+            if existing.level == PoolLevel.PENDING_APPROVAL:
+                return {"success": True, "status": "already_pending"}
+            existing.level = PoolLevel.PENDING_APPROVAL
+            existing.metadata["approval_reason"] = reason
+            existing.metadata["approval_score"] = score
+            existing.last_updated = datetime.now().isoformat()
+        else:
+            record = StockRecord(
+                symbol=symbol, name=name, level=PoolLevel.PENDING_APPROVAL,
+                source=source, score=score,
+                metadata=(metadata or {}) | {"approval_reason": reason, "approval_score": score}
+            )
+            self._pools[symbol] = record
+        self._save()
+        return {"success": True, "status": "pending"}
+
+    def get_pending_approvals(self) -> List[Dict]:
+        """获取待审批股票列表"""
+        pending = []
+        for symbol, record in self._pools.items():
+            if record.level == PoolLevel.PENDING_APPROVAL:
+                pending.append({
+                    "symbol": record.symbol, "name": record.name,
+                    "source": record.source.value, "score": record.score,
+                    "reason": record.metadata.get("approval_reason", ""),
+                    "created_at": record.added_at,
+                    "metadata": record.metadata
+                })
+        return sorted(pending, key=lambda x: x.get("score", 0), reverse=True)
+
+    def approve_stock(self, symbol: str, target_level: PoolLevel = None) -> Dict:
+        """审批通过：将股票从待审批升级到候选池"""
+        if symbol not in self._pools:
+            return {"success": False, "error": "股票不存在"}
+        record = self._pools[symbol]
+        if record.level != PoolLevel.PENDING_APPROVAL:
+            return {"success": False, "error": f"股票不在待审批队列（当前: {record.level.value}）"}
+        record.level = target_level or PoolLevel.CANDIDATE
+        record.metadata["approved_at"] = datetime.now().isoformat()
+        record.metadata["approved_by"] = "human"
+        record.last_updated = datetime.now().isoformat()
+        self._save()
+        return {"success": True, "status": "approved", "new_level": record.level.value}
+
+    def reject_stock(self, symbol: str, reason: str = "") -> Dict:
+        """审批拒绝：将股票移回观察池"""
+        if symbol not in self._pools:
+            return {"success": False, "error": "股票不存在"}
+        record = self._pools[symbol]
+        if record.level != PoolLevel.PENDING_APPROVAL:
+            return {"success": False, "error": f"股票不在待审批队列（当前: {record.level.value}）"}
+        record.level = PoolLevel.WATCHLIST
+        record.metadata["rejected_at"] = datetime.now().isoformat()
+        record.metadata["rejected_reason"] = reason
+        record.metadata["rejected_by"] = "human"
+        record.last_updated = datetime.now().isoformat()
+        self._save()
+        return {"success": True, "status": "rejected"}
+
+    def batch_approve(self, symbols: List[str]) -> Dict:
+        """批量审批通过"""
+        results = []
+        for s in symbols:
+            results.append(self.approve_stock(s))
+        return {"success": True, "total": len(symbols),
+                "approved": sum(1 for r in results if r.get("success")),
+                "failed": sum(1 for r in results if not r.get("success")),
+                "details": results}
+
+    def batch_reject(self, symbols: List[str], reason: str = "") -> Dict:
+        """批量审批拒绝"""
+        results = []
+        for s in symbols:
+            results.append(self.reject_stock(s, reason))
+        return {"success": True, "total": len(symbols),
+                "rejected": sum(1 for r in results if r.get("success")),
+                "failed": sum(1 for r in results if not r.get("success")),
+                "details": results}
 
 # ============================================================
 # 全局单例

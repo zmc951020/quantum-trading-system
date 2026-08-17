@@ -1,6 +1,10 @@
 
-flask
-flask-cors
-requests
-ollama
+flask>=3.0
+flask-cors>=4.0
+requests>=2.31
+numpy>=1.24
+pandas>=2.0
+akshare>=1.14
+pytest>=9.0
+ruff>=0.16
 

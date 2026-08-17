@@ -376,6 +376,36 @@
                     <div id="cline-task-list" style="max-height: 150px; overflow-y: auto; font-size: 12px;"></div>
                 </div>
             </div>
+
+            <!-- Vibe-Trading 全模块分析 -->
+            <div class="panel" style="grid-column: 1 / -1; border: 1px solid #00d4ff;">
+                <div class="panel-header">
+                    <span class="panel-title" style="color: #00d4ff;">🧠 Vibe-Trading 全模块分析 (77个Skill)</span>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="vibe-module-symbol" placeholder="股票代码" value="000001" style="padding:6px 10px;background:#0f0f1a;border:1px solid #2a2a4a;border-radius:4px;color:#fff;font-size:12px;width:100px;">
+                        <select id="vibe-module-category" onchange="filterVibeModules()" style="padding:6px 8px;background:#0f0f1a;border:1px solid #2a2a4a;border-radius:4px;color:#fff;font-size:12px;">
+                            <option value="all">全部分类</option>
+                            <option value="strategy">策略(17)</option>
+                            <option value="fundamental">基本面(8)</option>
+                            <option value="macro_market">宏观市场(10)</option>
+                            <option value="risk">风控(6)</option>
+                            <option value="crypto">加密(7)</option>
+                            <option value="options">期权(5)</option>
+                            <option value="data_sources">数据源(8)</option>
+                            <option value="cross_border">跨境(4)</option>
+                            <option value="alpha">因子(3)</option>
+                            <option value="tools">工具(9)</option>
+                        </select>
+                        <button onclick="runVibeModuleBatch()" style="padding:6px 12px;background:#00d4ff;color:#0d1526;border:none;border-radius:4px;cursor:pointer;font-size:12px;">▶ 批量运行</button>
+                    </div>
+                </div>
+                <div id="vibe-modules-grid" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; max-height: 300px; overflow-y: auto; padding: 8px;">
+                    <span style="color: #5a6a85; font-size: 12px;">加载中...</span>
+                </div>
+                <div id="vibe-module-result" class="analysis-result" style="max-height: 250px; overflow-y: auto;">
+                    💡 点击模块按钮运行单个分析，或点击"批量运行"执行当前分类的所有模块
+                </div>
+            </div>
         </div>
     </main>
 
@@ -835,6 +865,104 @@
 
         // 定时刷新任务进度
         setInterval(refreshTaskProgress, 5000);
+
+        // ============================================================
+        // Vibe-Trading 全模块分析
+        // ============================================================
+        let allVibeModules = {};
+
+        async function loadVibeModules() {
+            try {
+                const resp = await fetch('/api/vibe/modules');
+                const data = await resp.json();
+                if (data.success) {
+                    allVibeModules = data.modules || {};
+                    renderVibeModules();
+                }
+            } catch (e) {
+                document.getElementById('vibe-modules-grid').innerHTML =
+                    '<span style="color:#ff5252;">加载失败，请检查服务是否启动</span>';
+            }
+        }
+
+        function renderVibeModules() {
+            const cat = document.getElementById('vibe-module-category').value;
+            const grid = document.getElementById('vibe-modules-grid');
+            let html = '';
+            for (const [name, info] of Object.entries(allVibeModules)) {
+                if (cat !== 'all' && info.category !== cat) continue;
+                const colorMap = {
+                    strategy: '#4facfe', fundamental: '#43e97b', macro_market: '#f0c27b',
+                    risk: '#ff5252', crypto: '#ff8a65', options: '#ce93d8',
+                    data_sources: '#80cbc4', cross_border: '#a5d6a7', alpha: '#ffd54f', tools: '#90a4ae'
+                };
+                const color = colorMap[info.category] || '#8899aa';
+                html += `<button onclick="runVibeModule('${name}')" title="${info.desc}" 
+                    style="padding:4px 10px;border-radius:4px;border:1px solid ${color};background:transparent;color:${color};cursor:pointer;font-size:11px;white-space:nowrap;">
+                    ${info.desc}</button>`;
+            }
+            grid.innerHTML = html || '<span style="color:#5a6a85;">无模块</span>';
+        }
+
+        function filterVibeModules() { renderVibeModules(); }
+
+        async function runVibeModule(name) {
+            const symbol = document.getElementById('vibe-module-symbol').value.trim() || '000001';
+            const resultEl = document.getElementById('vibe-module-result');
+            resultEl.innerHTML = `<span style="color:#ffd700;">⏳ 运行 ${name} (${symbol})...</span>`;
+            try {
+                const resp = await fetch('/api/vibe/module/' + name, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol: symbol})
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    const s = data.signal_summary || {};
+                    resultEl.innerHTML = `<div style="color:#00d4ff;">✅ ${data.module}: ${data.description}</div>
+                        <div style="margin-top:8px;">信号统计: <span style="color:#43e97b;">做多 ${s.buy||0}</span> | 
+                        <span style="color:#ff5252;">做空 ${s.sell||0}</span> | 
+                        <span style="color:#8899aa;">观望 ${s.hold||0}</span></div>`;
+                } else {
+                    resultEl.innerHTML = `<span style="color:#ff5252;">❌ ${data.error || '运行失败'}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:#ff5252;">❌ 请求失败: ${e.message}</span>`;
+            }
+        }
+
+        async function runVibeModuleBatch() {
+            const cat = document.getElementById('vibe-module-category').value;
+            const symbol = document.getElementById('vibe-module-symbol').value.trim() || '000001';
+            const resultEl = document.getElementById('vibe-module-result');
+            resultEl.innerHTML = '<span style="color:#ffd700;">⏳ 批量运行中...</span>';
+            let modules = [];
+            for (const [name, info] of Object.entries(allVibeModules)) {
+                if (cat === 'all' || info.category === cat) modules.push(name);
+            }
+            let html = '';
+            for (const name of modules.slice(0, 10)) {
+                try {
+                    const resp = await fetch('/api/vibe/module/' + name, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({symbol: symbol})
+                    });
+                    const data = await resp.json();
+                    const s = data.signal_summary || {};
+                    html += `<div style="padding:4px 0;border-bottom:1px solid #1a1a2e;">
+                        <span style="color:#00d4ff;">${data.description||name}</span>:
+                        <span style="color:#43e97b;">多${s.buy||0}</span>/
+                        <span style="color:#ff5252;">空${s.sell||0}</span>/
+                        <span style="color:#8899aa;">观${s.hold||0}</span></div>`;
+                } catch (e) {
+                    html += `<div style="color:#ff5252;">${name}: 失败</div>`;
+                }
+            }
+            resultEl.innerHTML = html;
+        }
+
+        // 页面加载时获取模块列表
+        loadVibeModules();
     </script>
     <script src="/static/robot-widget.js"></script>
 </body>
