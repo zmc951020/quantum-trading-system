@@ -10,18 +10,18 @@ AURORA 系统健康自动化诊断引擎
 - 定时巡检：threading.Timer 驱动，可配置间隔
 - 告警联动：对接 AlertSystem + 桌面通知
 """
-import os
-import sys
 import json
-import time
-import uuid
 import logging
-import threading
+import os
 import subprocess
+import sys
+import threading
+import time
 import traceback
+import uuid
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass, field, asdict
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -16,16 +16,18 @@ QS Robot - 增强型策略管理器（双核统一版 V2.0）
   ✅ 模拟降级策略（Aurora不可用时自动切换）
 """
 
-import sys
-import os
 import json
-import time
+import os
+import sys
 import threading
-import requests
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
+
 # ============================================================
 # Windows控制台UTF-8编码补丁 (解决'gbk' codec无法编码emoji的问题)
 # ============================================================
@@ -341,6 +343,7 @@ class SimulatedFallbackEngine:
         根据策略参数计算有意义的回测指标，使韬定律优化器能够真实优化。
         """
         import random
+
         import numpy as np
 
         # --- 参数感知评分逻辑 ---
@@ -355,7 +358,7 @@ class SimulatedFallbackEngine:
         # 陀螺仪/傅里叶策略：优先使用专用评分模块（避免因参数名称不同而漏评分）
         if is_gyro or is_fourier:
             try:
-                from .tau_optimizer_cluster import GyroModule, FourierRLStrategyModule
+                from .tau_optimizer_cluster import FourierRLStrategyModule, GyroModule
                 if is_gyro:
                     mod = GyroModule()
                 else:
@@ -1064,7 +1067,11 @@ class EnhancedStrategyManager:
         等五层架构才能正常运作。
         """
         try:
-            from .tau_cluster_engine import get_cluster_engine, StrategySignalAdapter, ClusterSignal
+            from .tau_cluster_engine import (
+                ClusterSignal,
+                StrategySignalAdapter,
+                get_cluster_engine,
+            )
 
             engine = get_cluster_engine()
             store = self.parameter_store
@@ -1187,13 +1194,13 @@ class EnhancedStrategyManager:
                 with self._lock:
                     if available:
                         if self._mode != SystemMode.AURORA_LIVE:
-                            print(f"[QS Robot] ✅ Aurora已连接，切换到双核联动模式")
+                            print("[QS Robot] ✅ Aurora已连接，切换到双核联动模式")
                         self._mode = SystemMode.AURORA_LIVE
                     else:
                         if self._mode == SystemMode.AURORA_LIVE:
-                            print(f"[QS Robot] ⚠️ Aurora连接丢失，切换到模拟降级模式")
+                            print("[QS Robot] ⚠️ Aurora连接丢失，切换到模拟降级模式")
                         self._mode = SystemMode.AURORA_FALLBACK
-            except Exception as e:
+            except Exception:
                 with self._lock:
                     self._mode = SystemMode.AURORA_FALLBACK
             self._shutdown_event.wait(30)  # 可中断的sleep
@@ -1601,7 +1608,7 @@ class EnhancedStrategyManager:
                             'pattern_analysis': data.get('pattern_analysis'),
                         }
                     }
-            except Exception as e:
+            except Exception:
                 pass
 
         # 2) 主力模式: 使用熵韬收敛优化器 (EntropyTauOptimizer) 本地执行
@@ -1748,11 +1755,12 @@ class EnhancedStrategyManager:
                   f"(score={prev_score:.4f})")
 
         try:
-            from .tau_optimizer_cluster import (
-                StrategyOptimizerBus,
-                ShepherdRotationModule, FactorSpaceFolding,
-            )
             from .tau_enhanced_optimizer import EntropyTauOptimizer
+            from .tau_optimizer_cluster import (
+                FactorSpaceFolding,
+                ShepherdRotationModule,
+                StrategyOptimizerBus,
+            )
 
             # Step 1: 初始化策略感知总线, 自动匹配标的轮动模块
             bus = StrategyOptimizerBus()
@@ -1894,11 +1902,11 @@ class EnhancedStrategyManager:
                   f"(score={prev_score:.4f})")
 
         try:
-            from .tau_optimizer_cluster import (
-                StrategyOptimizerBus,
-                BernoulliCoandaModule,
-            )
             from .tau_enhanced_optimizer import EntropyTauOptimizer
+            from .tau_optimizer_cluster import (
+                BernoulliCoandaModule,
+                StrategyOptimizerBus,
+            )
 
             # 自动检测并初始化模块
             bus = StrategyOptimizerBus()
@@ -1994,8 +2002,8 @@ class EnhancedStrategyManager:
         start_time = time.time()
         try:
             from .special_forces_evolution import (
-                get_evolution_controller,
                 SpecialForcesEvolutionController,
+                get_evolution_controller,
             )
             controller = get_evolution_controller()
 
@@ -2191,8 +2199,8 @@ class EnhancedStrategyManager:
             (success, message)
         """
         try:
-            from .special_forces_strategy import get_special_forces_strategy
             from .special_forces_evolution import get_evolution_controller
+            from .special_forces_strategy import get_special_forces_strategy
 
             effective_params = None
             if use_optimized_params:
@@ -2262,8 +2270,10 @@ class EnhancedStrategyManager:
         返回: 可用模块信息 + 当前策略推荐的模块
         """
         from .tau_optimizer_cluster import (
-            BernoulliCoandaModule, ShepherdRotationModule, FourierRLStrategyModule,
+            BernoulliCoandaModule,
+            FourierRLStrategyModule,
             GyroModule,
+            ShepherdRotationModule,
         )
         b = BernoulliCoandaModule()
         s = ShepherdRotationModule()
@@ -2570,8 +2580,6 @@ class EnhancedStrategyManager:
 # ============================================================
 # 全局单例
 # ============================================================
-
-import threading
 
 _strategy_manager_instance = None
 _strategy_manager_lock = threading.Lock()

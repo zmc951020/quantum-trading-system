@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 """misc_routes - API网关路由"""
-from flask import request, jsonify
-from api.response_formatter import APIResponse
-from api.aurora_core_adapter import get_aurora_adapter, AURORA_BACKEND
-
-from api.middleware.auth import require_auth
-from api.middleware.csrf import require_csrf
-from api.middleware.rate_limit import rate_limit
-from api.middleware.sanitize import sanitize_input
-from api.middleware.origin import check_origin
-from api.middleware.threat import check_threat
-from api.validators import get_input_validator, get_data_masker
-
 import logging
 import os
 import time
+
+from api.aurora_core_adapter import AURORA_BACKEND, get_aurora_adapter
+from api.middleware.auth import require_auth
+from api.middleware.csrf import require_csrf
+from api.middleware.origin import check_origin
+from api.middleware.rate_limit import rate_limit
+from api.middleware.sanitize import sanitize_input
+from api.middleware.threat import check_threat
+from api.response_formatter import APIResponse
+from api.validators import get_data_masker, get_input_validator
+from flask import jsonify, request
+
 logger = logging.getLogger(__name__)
 
 
@@ -256,14 +256,27 @@ def register_routes(api_gateway):
     @require_auth
     def tau_optimize():
         """韬定律优化 — 前端 /api/tau/optimize 的别名，转发到 /api/optimizer/run"""
-        return optimizer_run()
-
+        return _forward_optimize()
 
     @api_gateway.route('/integration/optimize', methods=['POST'])
     @require_auth
     def integration_optimize():
         """前端 /api/integration/optimize 的别名，转发到 /api/optimizer/run"""
-        return optimizer_run()
+        return _forward_optimize()
+
+    def _forward_optimize():
+        """优化任务转发（2026-10-21 补：原引用 optimizer_routes 内部函数不可达，改为直接转发 adapter）"""
+        data = request.get_json(silent=True) or {}
+        params = data.get("params", {})
+        if not params:
+            params = {k: v for k, v in data.items() if k not in ("strategy", "strategy_name", "optimizer", "optimizer_id", "symbol")}
+        result = get_adapter().run_optimizer_task(
+            strategy_name=data.get("strategy", data.get("strategy_name", "")),
+            optimizer_id=data.get("optimizer", data.get("optimizer_id", "tau_cluster")),
+            symbol=data.get("symbol", "600000.SH"),
+            params=params,
+        )
+        return jsonify(result)
 
 
     @api_gateway.route('/integration/full_workflow', methods=['POST'])

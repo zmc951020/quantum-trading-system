@@ -20,17 +20,22 @@ Agent智能编排引擎（Agent Orchestrator）
   - 综合诊断/全面分析 → 所有相关分组
 """
 
-import re
-import os
-import time
 import logging
+import os
+import re
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
-from typing import Dict, List, Optional, Any, Tuple
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.agent_registry import (
-    get_agent, get_agents_by_group, get_skills_by_category,
-    get_all_agents, AgentInfo, SkillInfo,
+    AgentInfo,
+    SkillInfo,
+    get_agent,
+    get_agents_by_group,
+    get_all_agents,
+    get_skills_by_category,
 )
 
 logger = logging.getLogger(__name__)
@@ -523,8 +528,8 @@ class AgentOrchestrator:
 
         if agents:
             # 使用Agent执行
-            from core.vibe_29_agents import VibeAgentAnalyzer
             from core.expert_team_bridge import ExpertTeamAnalyzer
+            from core.vibe_29_agents import VibeAgentAnalyzer
 
             vibe_analyzer = VibeAgentAnalyzer(symbol, kline_data)
             expert_analyzer = ExpertTeamAnalyzer(symbol, kline_data)
@@ -551,8 +556,8 @@ class AgentOrchestrator:
 
         if skills:
             # 使用技能执行
-            from core.expert_team_bridge import ExpertTeamAnalyzer
             from core.agent_registry import get_skill
+            from core.expert_team_bridge import ExpertTeamAnalyzer
 
             expert_analyzer = ExpertTeamAnalyzer(symbol, kline_data)
             for sid in skills:

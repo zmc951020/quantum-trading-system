@@ -14,8 +14,8 @@ Vibe-Trading 系统的多平台策略导出引擎，支持：
 """
 
 import logging
-from typing import Dict, List, Optional, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -329,12 +329,12 @@ class StrategyCodeExporter:
             lines.append(self._build_header("MetaTrader 5 EA (MQL5)", strategy_name))
             lines.append("//+------------------------------------------------------------------+")
             lines.append(f"//|                                    {safe_name}.mq5                 |")
-            lines.append(f"//|                                    生成: Vibe-Trading Exporter   |")
+            lines.append("//|                                    生成: Vibe-Trading Exporter   |")
             lines.append("//+------------------------------------------------------------------+")
             lines.append("")
             lines.append("#property copyright \"Vibe-Trading\"")
-            lines.append(f'#property link      "https://github.com/vibe-trading"')
-            lines.append(f"#property version   \"1.00\"")
+            lines.append('#property link      "https://github.com/vibe-trading"')
+            lines.append("#property version   \"1.00\"")
             lines.append("")
 
             # 输入参数
@@ -555,11 +555,11 @@ class StrategyCodeExporter:
 
             lines = []
             lines.append("#!/usr/bin/env python3")
-            lines.append(f'"""')
+            lines.append('"""')
             lines.append(f"{strategy_name} - Python 策略代码")
-            lines.append(f"由 Vibe-Trading Strategy Exporter 自动生成")
+            lines.append("由 Vibe-Trading Strategy Exporter 自动生成")
             lines.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            lines.append(f'"""')
+            lines.append('"""')
             lines.append("")
             lines.append("import numpy as np")
             lines.append("import logging")
@@ -815,9 +815,9 @@ class StrategyCodeExporter:
 
             # 完整代码
             lines.append("")
-            lines.append(f"# ============================================================")
-            lines.append(f"# 测试代码")
-            lines.append(f"# ============================================================")
+            lines.append("# ============================================================")
+            lines.append("# 测试代码")
+            lines.append("# ============================================================")
             lines.append("")
             lines.append("if __name__ == '__main__':")
             lines.append("    logging.basicConfig(level=logging.INFO,")

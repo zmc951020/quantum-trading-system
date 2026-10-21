@@ -7,7 +7,7 @@
 2. 财务数据检查：字段完整性、数值合理性
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 
 class DataValidator:

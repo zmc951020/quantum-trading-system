@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """请求频率限制中间件"""
-from flask import request, jsonify
 from functools import wraps
+
 from api.response_formatter import APIResponse
+from flask import jsonify, request
 
 
 def rate_limit(max_requests: int = 100, window_seconds: int = 60):

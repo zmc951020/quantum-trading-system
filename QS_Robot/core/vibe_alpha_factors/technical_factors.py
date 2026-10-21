@@ -1,5 +1,6 @@
 """技术因子 Mixin（15个）"""
 import numpy as np
+
 from ._registry import register_factor
 from ._utils import _min_max_normalize
 

@@ -12,12 +12,13 @@
 - 辩论式评分融合
 """
 import logging
-import time
 import random
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 
 logger = logging.getLogger(__name__)

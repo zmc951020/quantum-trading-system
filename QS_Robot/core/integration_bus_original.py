@@ -30,14 +30,14 @@ Strategy Integration Bus - 策略集成总线
   - UnifiedDataFetcher (统一数据获取)
 """
 
+import json
+import logging
 import os
 import sys
-import json
-import time
-import logging
 import threading
+import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -46,21 +46,30 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from core.tau_optimizer_cluster import (
-    TauOptimizerCluster, BernoulliCoandaModule, ShepherdRotationModule,
-    FourierRLStrategyModule, GyroModule,
-    FactorSpaceFolding, ParameterSpaceFolding, get_parameter_store, StrategyParameterStore
-)
-from core.tau_enhanced_optimizer import EntropyTauOptimizer  # 熵韬收敛优化器集群（主力）
-
+from core.data_fetcher import get_data_fetcher
 from core.enhanced_strategy_manager import (
-    EnhancedStrategyManager, get_strategy_manager, BacktestResult
+    BacktestResult,
+    EnhancedStrategyManager,
+    get_strategy_manager,
 )
+from core.risk_control import get_risk_control_engine
 
 # 导入新增模块
-from core.stock_pool import get_stock_pool_manager, PoolLevel, StockSource
-from core.risk_control import get_risk_control_engine
-from core.data_fetcher import get_data_fetcher
+from core.stock_pool import PoolLevel, StockSource, get_stock_pool_manager
+from core.tau_enhanced_optimizer import (
+    EntropyTauOptimizer,  # 熵韬收敛优化器集群（主力）
+)
+from core.tau_optimizer_cluster import (
+    BernoulliCoandaModule,
+    FactorSpaceFolding,
+    FourierRLStrategyModule,
+    GyroModule,
+    ParameterSpaceFolding,
+    ShepherdRotationModule,
+    StrategyParameterStore,
+    TauOptimizerCluster,
+    get_parameter_store,
+)
 
 
 class StrategyIntegrationBus:
@@ -166,7 +175,7 @@ class StrategyIntegrationBus:
             'checkpoint.json'
         )
         if not os.path.exists(checkpoint_path):
-            logger.warning(f"[断点续算] 未找到检查点文件，无法恢复")
+            logger.warning("[断点续算] 未找到检查点文件，无法恢复")
             return {
                 "success": False,
                 "error": "未找到检查点文件",
@@ -423,7 +432,7 @@ class StrategyIntegrationBus:
                                                            PoolLevel.WATCHLIST, metadata)
                     if result['success']:
                         matched_stocks.append(stock)
-            except Exception as e:
+            except Exception:
                 matched_stocks = self._simulate_stock_recommendations(
                     strategy_name, strategy_type, best_params, stock_count
                 )
@@ -1352,8 +1361,8 @@ class StrategyIntegrationBus:
                 use_entropy_optimizer = False
 
         # 回退：简单网格搜索（保留兼容性）
-        import random as _random
         import math as _math
+        import random as _random
 
         best_params = None
         best_score = -float("inf")
@@ -1977,7 +1986,7 @@ class StrategyIntegrationBus:
                 'analysis_sources': ['tau_optimization', 'vibe_ai_analysis', 'stock_pool_filter', 'risk_control'],
             }
             report_lines.append(f"  ✅ 推荐标的: {top_symbol}")
-            report_lines.append(f"  ✅ 交易配置: 止损5% / 止盈15%")
+            report_lines.append("  ✅ 交易配置: 止损5% / 止盈15%")
             
             elapsed = time.time() - start_time
             report_lines.append(f"\n⏱️ 总耗时: {elapsed:.2f}秒")
@@ -2378,7 +2387,7 @@ class StrategyIntegrationBus:
                                     "suggested_pct": pos_result.get("suggested_pct", 0),
                                     "reason": pos_result.get("reason", "仓位超标"),
                                 })
-                                review["reject_reason"] = review.get("reject_reason", "") + f"仓位审核未通过; "
+                                review["reject_reason"] = review.get("reject_reason", "") + "仓位审核未通过; "
                                 review["approved"] = False
                 except Exception as e:
                     logger.warning(f"[Vibe风控复核] 仓位审核失败 {symbol}: {e}")
@@ -2396,7 +2405,7 @@ class StrategyIntegrationBus:
                                     "suggested_stop_loss": sl_result.get("suggested_sl_pct", 5.0),
                                     "reason": sl_result.get("reason", "止损参数异常"),
                                 })
-                                review["reject_reason"] = review.get("reject_reason", "") + f"止损校验未通过; "
+                                review["reject_reason"] = review.get("reject_reason", "") + "止损校验未通过; "
                                 review["approved"] = False
                 except Exception as e:
                     logger.warning(f"[Vibe风控复核] 止损校验失败 {symbol}: {e}")

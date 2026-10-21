@@ -14,16 +14,16 @@ GraySwitch - Alpha158因子灰度切换控制器
   豆包审查 + Trae方案 - 灰度切换是新旧因子替换的核心安全机制
 """
 
+import hashlib
 import json
 import logging
-import hashlib
-import time
 import threading
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Callable
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

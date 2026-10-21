@@ -13,12 +13,14 @@ Aurora核心适配器 — 直接导入模式（豆包方案A）
 - 回测：直接导入auto_backtest模块
 - 复杂Web路由：反向代理到5002（fallback）
 """
-import sys
-import os
 import logging
+import os
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from typing import Any, Dict, List, Optional
+
 import requests
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -1581,8 +1583,10 @@ class AuroraCoreAdapter:
         """获取指定优化器的参数范围"""
         try:
             from core.tau_optimizer_cluster import (
-                FourierRLStrategyModule, GyroModule,
-                BernoulliCoandaModule, ShepherdRotationModule,
+                BernoulliCoandaModule,
+                FourierRLStrategyModule,
+                GyroModule,
+                ShepherdRotationModule,
             )
             module_map = {
                 "fourier_rl": FourierRLStrategyModule,
@@ -2141,7 +2145,8 @@ class AuroraCoreAdapter:
 
     def get_llm_models(self) -> Dict:
         """LLM模型列表 — 并发探测三provider，单provider超时3秒，整体5秒上限"""
-        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import TimeoutError as _FutTimeout
         try:
             llm = self._get_llm_manager()
             if llm and llm.providers:

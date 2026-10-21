@@ -20,11 +20,11 @@
 所有因子值归一化到 [0, 1] 或 [-1, 1] 范围。
 """
 
+import math
 import os
 import sys
-import math
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 

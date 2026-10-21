@@ -15,11 +15,12 @@
   - 操作风险：滑点容忍、流动性、执行成本
 """
 
-import numpy as np
-from typing import Dict, List, Optional, Any
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

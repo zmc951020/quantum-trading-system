@@ -17,10 +17,10 @@ FactorComparison - Alpha158 vs Wyckoff68 因子自动对比分析
 import json
 import logging
 import time
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -725,8 +725,8 @@ def get_comparator() -> FactorComparator:
 # ============================================================
 
 if __name__ == "__main__":
-    import sys
     import os
+    import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
     from core.qlib_core.alpha_factors import Alpha158Engine, get_alpha_engine

@@ -15,14 +15,13 @@
 
 import hashlib
 import json
-import time
 import random
-from dataclasses import dataclass, field
-from typing import Dict, Optional, Any, Tuple
-from datetime import datetime
-from collections import OrderedDict
 import threading
-
+import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, Optional, Tuple
 
 # ============================================================
 # 数据模型
@@ -293,7 +292,7 @@ def test_cache_effect():
     # 只取前1000组进行测试
     test_params = test_params[:1000]
 
-    print(f"\n测试场景:")
+    print("\n测试场景:")
     print(f"  - 参数组合数: {len(test_params)}")
     print(f"  - 预估无缓存耗时: {len(test_params) * 0.25:.1f}秒 (250ms/组)")
     print(f"  - 预估有缓存耗时: ~{len(test_params) * 0.35:.1f}秒 (含缓存开销)")
@@ -403,7 +402,7 @@ def test_cache_effect():
     print(f"{'B2: 有缓存(热)':<20} {total_time_b2:<12.2f} {avg_time_b2:<12.1f} {speedup_b2:<10.2f}x")
     print(f"{'C: 有缓存(重复)':<20} {total_time_c:<12.2f} {avg_time_c:<12.1f} {speedup_c:<10.2f}x")
 
-    print(f"\n结论:")
+    print("\n结论:")
     if stats_b2.hit_rate > 0.9:
         print(f"  ✅ 缓存层工作正常: 第二次迭代命中率 {stats_b2.hit_rate*100:.1f}%")
         print(f"  ✅ 加速效果: {speedup_b2:.2f}倍 (热缓存场景)")
@@ -412,7 +411,7 @@ def test_cache_effect():
 
     if speedup_c > 1.5:
         print(f"  ✅ 多优化器场景加速效果显著: {speedup_c:.2f}倍")
-        print(f"     核心价值: 多优化器并行时, 搜索空间重叠部分可被缓存复用")
+        print("     核心价值: 多优化器并行时, 搜索空间重叠部分可被缓存复用")
     else:
         print(f"  ⚠️ 重复参数场景加速效果一般: {speedup_c:.2f}倍")
 
@@ -455,7 +454,7 @@ def test_cache_key_normalization():
     key4 = cache.make_cache_key("策略", params4)
     key5 = cache.make_cache_key("策略", params5)
 
-    print(f"\n  参数顺序不同但值相同:")
+    print("\n  参数顺序不同但值相同:")
     print(f"    {params4} -> key: {key4}")
     print(f"    {params5} -> key: {key5}")
     print(f"  key4 == key5: {key4 == key5} (预期: True)")

@@ -14,15 +14,15 @@
   审计报告D4/D5维度 - 反向溯源/中间运算/异常预警/动态更新/成交回写/Agent迭代
 """
 
-import json
-import time
-import threading
 import hashlib
+import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, field, asdict
+import threading
+import time
 from collections import defaultdict
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -612,9 +612,9 @@ class AgentFeedbackLoop:
             self._correction_count += 1
         # 降低低准确率Agent的权重
         try:
-            from core.vibe_29_agents import VibeAgentAnalyzer
             # 通过PnL Learner更新权重
             from core.pnl_learner import get_pnl_learner
+            from core.vibe_29_agents import VibeAgentAnalyzer
             learner = get_pnl_learner()
             if hasattr(learner, 'update_agent_weight'):
                 was_correct = accuracy >= 0.5

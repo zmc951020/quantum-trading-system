@@ -16,14 +16,14 @@
   - 自定义任务
 """
 
-import os
 import json
-import time
+import os
 import threading
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
 # ============================================================
 # 任务状态枚举
@@ -121,9 +121,9 @@ class TaskScheduler:
     def _init_scheduler(self):
         """初始化 APScheduler"""
         try:
-            from apscheduler.schedulers.background import BackgroundScheduler
-            from apscheduler.jobstores.memory import MemoryJobStore
             from apscheduler.executors.pool import ThreadPoolExecutor
+            from apscheduler.jobstores.memory import MemoryJobStore
+            from apscheduler.schedulers.background import BackgroundScheduler
 
             self._scheduler = BackgroundScheduler(
                 jobstores={"default": MemoryJobStore()},
@@ -137,9 +137,9 @@ class TaskScheduler:
                 }
             )
             self._scheduler.start()
-            print(f"[TaskScheduler] APScheduler已启动")
+            print("[TaskScheduler] APScheduler已启动")
         except ImportError:
-            print(f"[TaskScheduler] APScheduler未安装，使用简单调度器")
+            print("[TaskScheduler] APScheduler未安装，使用简单调度器")
             self._scheduler = None
 
     def _load_tasks(self):
@@ -585,7 +585,7 @@ if __name__ == "__main__":
 
     # 获取统计
     stats = scheduler.get_stats()
-    print(f"\n统计信息:")
+    print("\n统计信息:")
     for k, v in stats.items():
         print(f"  {k}: {v}")
 

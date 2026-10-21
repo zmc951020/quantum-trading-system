@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """认证中间件"""
-from flask import request, jsonify, g
-from functools import wraps
-from api.response_formatter import APIResponse
 import logging
+from functools import wraps
+
+from api.response_formatter import APIResponse
+from flask import g, jsonify, request
+
 logger = logging.getLogger(__name__)
 
 

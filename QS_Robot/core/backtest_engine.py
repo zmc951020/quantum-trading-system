@@ -30,12 +30,13 @@
 }
 """
 
-import time
-import math
 import logging
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Callable
+import math
+import time
 import warnings
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
+
 warnings.filterwarnings('ignore')
 
 logger = logging.getLogger(__name__)
@@ -216,7 +217,7 @@ class SimpleBacktestEngine:
         """
         volume = row.get('volume', 0) if isinstance(row, dict) else 0
         if volume <= 0:
-            logger.info(f"[停牌检测] 成交量为0，疑似停牌，跳过该日")
+            logger.info("[停牌检测] 成交量为0，疑似停牌，跳过该日")
             return True
         return False
 
@@ -392,9 +393,9 @@ class VectorBTBacktestEngine:
             import vectorbt as vbt
             self._vbt = vbt
             self._available = True
-            print(f"[VectorBTBacktestEngine] VectorBT已加载")
+            print("[VectorBTBacktestEngine] VectorBT已加载")
         except ImportError:
-            print(f"[VectorBTBacktestEngine] VectorBT未安装，将使用简单回测引擎")
+            print("[VectorBTBacktestEngine] VectorBT未安装，将使用简单回测引擎")
             self._available = False
 
     def is_available(self) -> bool:

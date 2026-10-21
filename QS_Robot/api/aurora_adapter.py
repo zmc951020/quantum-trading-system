@@ -17,9 +17,11 @@ Aurora API基础地址: http://127.0.0.1:5002
 import json
 import os
 import time
-import requests
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin
+
+import requests
+
 from .response_formatter import transform_aurora_response
 
 # Aurora API基础地址

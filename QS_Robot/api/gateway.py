@@ -17,20 +17,25 @@ API 网关 — 直接导入模式（豆包方案A）
 - 路由:   api/routes/ (19个领域模块)
 """
 
-from flask import Blueprint, request, jsonify, g
-from functools import wraps
+import logging
 import os
 import time
+from functools import wraps
 from typing import Optional
-from .aurora_core_adapter import get_aurora_adapter, AuroraCoreAdapter, AURORA_BACKEND
-from .response_formatter import APIResponse
-from core.system_health_checker import get_health_checker
-from core.security import (
-    get_input_validator, get_data_masker, get_csrf_manager,
-    get_rate_limiter, get_threat_detector
-)
 
-import logging
+from core.security import (
+    get_csrf_manager,
+    get_data_masker,
+    get_input_validator,
+    get_rate_limiter,
+    get_threat_detector,
+)
+from core.system_health_checker import get_health_checker
+from flask import Blueprint, g, jsonify, request
+
+from .aurora_core_adapter import AURORA_BACKEND, AuroraCoreAdapter, get_aurora_adapter
+from .response_formatter import APIResponse
+
 logger = logging.getLogger(__name__)
 
 # 创建API网关蓝图
@@ -70,4 +75,5 @@ def get_adapter() -> AuroraCoreAdapter:
 # 中间件: api/middleware/ | 验证器: api/validators/ | 路由: api/routes/
 # ============================================================
 from api.routes import register_all_routes
+
 register_all_routes(api_gateway)

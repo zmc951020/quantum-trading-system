@@ -27,7 +27,7 @@
 import threading
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 from core.data_bus import get_data_bus
 

@@ -6,11 +6,11 @@ Tushare 数据源适配器
 Tushare 需要注册账号并获取 token，建议通过环境变量配置。
 """
 
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
 import os
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-from core.data_bus import create_kline_format, create_financial_format
+from core.data_bus import create_financial_format, create_kline_format
 from core.data_sources.base_adapter import BaseDataSourceAdapter
 
 
@@ -35,14 +35,14 @@ class TushareAdapter(BaseDataSourceAdapter):
                 self._ts.set_token(self._token)
                 self._pro = self._ts.pro_api()
                 self._available = True
-                print(f"[TushareAdapter] Tushare已加载（使用token）")
+                print("[TushareAdapter] Tushare已加载（使用token）")
             else:
                 # 尝试匿名模式（部分接口可用）
                 self._available = True
-                print(f"[TushareAdapter] Tushare已加载（匿名模式）")
+                print("[TushareAdapter] Tushare已加载（匿名模式）")
 
         except ImportError:
-            print(f"[TushareAdapter] Tushare未安装，作为降级占位")
+            print("[TushareAdapter] Tushare未安装，作为降级占位")
             self._available = True  # 保持可用状态作为降级源
 
     # --------------------------------------------------------
@@ -257,7 +257,7 @@ class TushareAdapter(BaseDataSourceAdapter):
                             "amount": float(row.get("amount", 0)),
                             "source": "Tushare"
                         }
-        except Exception as e:
+        except Exception:
             pass
         return None
 
@@ -278,6 +278,6 @@ class TushareAdapter(BaseDataSourceAdapter):
                             "name": str(row["name"])
                         })
                     return result
-        except Exception as e:
+        except Exception:
             pass
         return []

@@ -9,24 +9,24 @@
   3. 增量计算框架 - 真正的"时间缩微" (τ缩减)
 """
 
-import sys
+import datetime
 import hashlib
 import importlib
 import json
-import time
-import random
-import math
-import datetime
-import os
 import logging
+import math
+import os
+import random
+import sys
+import time
 
 logger = logging.getLogger(__name__)
-from dataclasses import dataclass, field
-from typing import Dict, Optional, List, Any, Tuple
-from collections import OrderedDict
-from enum import Enum
-import threading
 import statistics
+import threading
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 # 数据平台集成：优化器数据源统一通过qlib_adapter获取
 # 历史回测数据、因子计算均由数据平台提供，优化器不直接读取本地文件

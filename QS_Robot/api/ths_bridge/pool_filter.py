@@ -14,9 +14,9 @@
 3. 给 SignalCollector 提供按策略筛选的股票池入口
 """
 
-import re
 import logging
-from typing import Dict, List, Optional, Any
+import re
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +170,8 @@ class PoolFilter:
 
         优先按文件实际存在位置判断属于14策略还是18战法，回退到双JSON查找
         """
-        from pathlib import Path
         import json
+        from pathlib import Path
         # __file__ = QS_Robot/api/ths_bridge/pool_filter.py
         # root   = QS_Robot/
         root = Path(__file__).resolve().parent.parent.parent

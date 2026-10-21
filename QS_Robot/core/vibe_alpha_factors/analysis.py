@@ -1,7 +1,8 @@
 """因子分析 Mixin — IC/IR、分位数分层、衰减、相关性"""
 import logging
+from typing import Any, Dict, List
+
 import numpy as np
-from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 

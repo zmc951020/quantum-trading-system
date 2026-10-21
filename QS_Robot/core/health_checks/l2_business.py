@@ -1,7 +1,7 @@
 """L2 业务功能链路检查"""
 import os
 import sys
-from typing import List, Callable
+from typing import Callable, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
@@ -98,7 +98,10 @@ def build_l2_checks(hc) -> List[Callable]:
 
     def _l2_009():
         try:
-            from core.tau_optimizer_cluster import TauOptimizerCluster, get_parameter_store
+            from core.tau_optimizer_cluster import (
+                TauOptimizerCluster,
+                get_parameter_store,
+            )
             has_cluster_class = TauOptimizerCluster is not None
             store = get_parameter_store()
             has_folding = hasattr(store, 'get_param_groups')
@@ -174,8 +177,10 @@ def build_l2_checks(hc) -> List[Callable]:
     def _l2_013():
         try:
             from core.adaptive_market_regime import (
-                MultiDimensionalRegimeDetector, StrategyPerformanceProfile,
-                StrategyProfileStore, get_adaptation_engine
+                MultiDimensionalRegimeDetector,
+                StrategyPerformanceProfile,
+                StrategyProfileStore,
+                get_adaptation_engine,
             )
             engine = get_adaptation_engine()
             has_detector = (hasattr(engine, 'detector') and engine.detector is not None)
@@ -227,7 +232,7 @@ def build_l2_checks(hc) -> List[Callable]:
 
     def _l2_016a():
         try:
-            from api.ths_bridge import IwencaiAdapter, HttpAdapter, SignalCollector
+            from api.ths_bridge import HttpAdapter, IwencaiAdapter, SignalCollector
             collector = SignalCollector()
             s14, s18 = collector.list_strategies()
             ok = len(s14) == 14 and len(s18) == 18

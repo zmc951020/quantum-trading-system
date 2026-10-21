@@ -14,17 +14,17 @@
   result = engine.run_oneclick()  # 一键执行全流程
 """
 
-import os
-import sys
-import time
 import json
 import logging
+import os
+import sys
 import threading
+import time
 import traceback
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass, field
 from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -365,7 +365,7 @@ class OneClickWorkflowEngine:
                 return
 
             # 先跑自动调参（轻量模式）
-            stage.message = f"自动调参中 (u×n网格)..."
+            stage.message = "自动调参中 (u×n网格)..."
             tune_result = selector.auto_tune(
                 codes,
                 u_range=(0.0, 1.0, 0.1),
@@ -597,7 +597,7 @@ class OneClickWorkflowEngine:
             stage.message = "无通过验证的策略需要匹配"
             return
 
-        stage.message = f"正在匹配股票池..."
+        stage.message = "正在匹配股票池..."
 
         matched = []
         for item in passed:
@@ -705,8 +705,11 @@ class OneClickWorkflowEngine:
     def _save_optimization_profiles(self, optimized: List[Dict]):
         """将优化结果永久保存到 StrategyProfileStore"""
         try:
-            from core.adaptive_market_regime import StrategyProfileStore, \
-                StrategyPerformanceProfile, BacktestProfileBuilder
+            from core.adaptive_market_regime import (
+                BacktestProfileBuilder,
+                StrategyPerformanceProfile,
+                StrategyProfileStore,
+            )
 
             store = StrategyProfileStore()
             builder = BacktestProfileBuilder(profile_store=store)
@@ -902,7 +905,7 @@ class OneClickWorkflowEngine:
     def _push_to_stock_pool(self, codes: list, level: str, stage: WorkflowStage, require_approval: bool = False):
         """将选股结果推入股票池"""
         try:
-            from core.stock_pool import get_stock_pool_manager, PoolLevel
+            from core.stock_pool import PoolLevel, get_stock_pool_manager
 
             mgr = get_stock_pool_manager()
             level_map = {

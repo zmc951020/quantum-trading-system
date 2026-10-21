@@ -9,15 +9,16 @@ L2 业务功能链路 - 自动巡检脚本
   python -m core.l2_inspector --json   # JSON输出
   python -m core.l2_inspector --help   # 查看帮助
 """
+import argparse
+import json
 import os
 import sys
-import json
 import time
-import argparse
-import requests
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+import requests
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:

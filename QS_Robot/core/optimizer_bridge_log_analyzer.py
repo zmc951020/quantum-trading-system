@@ -30,14 +30,13 @@
   python core/optimizer_bridge_log_analyzer.py [log_file]
   python core/optimizer_bridge_log_analyzer.py --mock  # 生成模拟日志并分析
 """
-import re
-import sys
 import json
 import random
-from datetime import datetime
+import re
+import sys
 from collections import Counter, defaultdict
-from typing import Dict, List, Any
-
+from datetime import datetime
+from typing import Any, Dict, List
 
 LOG_PATTERN = re.compile(
     r'\[OptimizerBridge(?: Mock|Mock)?\]\s+(.*)'

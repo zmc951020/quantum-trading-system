@@ -23,9 +23,9 @@ Aurora API 适配层
     from api.aurora_adapter import AuroraAPIAdapter
 """
 
-from .response_formatter import APIResponse
 from .aurora_adapter import AuroraAPIAdapter
 from .gateway import api_gateway
+from .response_formatter import APIResponse
 
 __all__ = [
     'APIResponse',

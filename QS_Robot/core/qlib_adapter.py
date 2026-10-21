@@ -18,18 +18,20 @@ QlibAdapter - Vibe智能体 ↔ Qlib因子计算引擎适配层
 import logging
 import time
 import traceback
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .qlib_core.data_converter import DataConverter, get_converter
+from .factor_comparison import FactorComparator, get_comparator
+from .gray_switch import PHASE_RATIO, GrayPhase, GraySwitch, get_gray_switch
 from .qlib_core.alpha_factors import Alpha158Engine, get_alpha_engine
+from .qlib_core.data_converter import DataConverter, get_converter
 from .qlib_core.mongo_store import MongoStore, get_mongo_store
 from .redis_cache import RedisCache, get_redis_cache
-from .gray_switch import GraySwitch, get_gray_switch, GrayPhase, PHASE_RATIO
-from .factor_comparison import FactorComparator, get_comparator
-from .tenant_manager import TenantManager, get_tenant_manager, UserRole as TenantRole, TaskPriority as TenantPriority
+from .tenant_manager import TaskPriority as TenantPriority
+from .tenant_manager import TenantManager, get_tenant_manager
+from .tenant_manager import UserRole as TenantRole
 
 logger = logging.getLogger(__name__)
 
@@ -937,6 +939,7 @@ class QlibAdapter:
 # ============================================================
 
 import json
+
 import numpy as np
 import pandas as pd
 

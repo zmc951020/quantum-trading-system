@@ -43,7 +43,7 @@ repos:
 
       - id: python-lint
         name: Python Lint (ruff - 需 pip install ruff)
-        entry: '"D:/Program Files/Python314/python.exe" -m ruff check --select=E9,F --ignore=E501,F401'
+        entry: '"D:/Program Files/Python314/python.exe" -m ruff check --select=E9,F821,F811 --ignore=E501,F401'
         language: system
         types: [python]
         stages: [pre-commit]

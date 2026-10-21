@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """输入净化中间件"""
-from flask import request
-from functools import wraps
 import re
+from functools import wraps
+
+from flask import request
 
 
 def sanitize_input(f):

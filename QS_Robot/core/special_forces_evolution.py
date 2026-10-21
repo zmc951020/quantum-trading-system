@@ -29,19 +29,20 @@
 唯一优化目标：最大化年化收益率
 """
 
-import os
-import sys
-import json
-import time
-import math
-import random
 import copy
+import json
+import math
+import os
+import random
+import sys
+import time
 import traceback
-import numpy as np
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple, Callable
-from dataclasses import dataclass, field
 from collections import OrderedDict
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
 
 # 路径设置
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -643,7 +644,7 @@ class EvolutionEngine:
             if not passed:
                 print(f"  ⚠️ 硬约束未满足: {violations}")
             else:
-                print(f"  ✅ 硬约束全部满足")
+                print("  ✅ 硬约束全部满足")
 
         return journal
 
@@ -801,8 +802,11 @@ class SpecialForcesEvolutionController:
         print(f"{'='*60}\n")
 
         # 懒加载策略模块
-        from core.special_forces_strategy import SpecialForcesStrategy, StrategyParams
-        from core.special_forces_strategy import SFBacktestResult
+        from core.special_forces_strategy import (
+            SFBacktestResult,
+            SpecialForcesStrategy,
+            StrategyParams,
+        )
 
         # 评估函数
         def evaluate_params(params: Dict[str, float]) -> Dict[str, Any]:
@@ -834,7 +838,7 @@ class SpecialForcesEvolutionController:
                     "metrics": metrics,
                     "elapsed": result.elapsed_time,
                 }
-            except Exception as e:
+            except Exception:
                 traceback.print_exc()
                 return {
                     "params": params,

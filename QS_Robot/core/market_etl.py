@@ -16,12 +16,12 @@ MarketETL - 行情数据ETL增量服务
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from .qlib_core.data_converter import DataConverter, get_converter
 
@@ -144,7 +144,7 @@ class MarketETL:
                     df = self.converter.fetch_akshare_1min(symbol)
 
                 if df is None or df.empty:
-                    last_error = f"数据为空"
+                    last_error = "数据为空"
                     continue
 
                 ok, msg = self.converter.convert_akshare_to_qlib(df, symbol, freq)

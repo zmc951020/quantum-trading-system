@@ -1,8 +1,8 @@
 """L1 安全认证检查"""
 import os
-import sys
 import re
-from typing import List, Callable
+import sys
+from typing import Callable, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:

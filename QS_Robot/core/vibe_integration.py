@@ -12,14 +12,14 @@ Vibe-Trading 集成模块（真实引擎版）
   回测层: backtest 模块完整回测管线
 """
 
-import os
 import json
 import logging
+import os
 import subprocess
 import time
 import urllib.request
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -420,8 +420,10 @@ def strategy(data: pd.DataFrame) -> pd.DataFrame:
 
     def run_module(self, module_name: str, symbol: str, **params) -> Dict:
         """运行指定模块分析"""
+        import importlib
+        import inspect
+
         from core.vibe_module_registry import VIBE_MODULES
-        import importlib, inspect
 
         if module_name not in VIBE_MODULES:
             return {"success": False, "error": f"模块 {module_name} 不存在"}
@@ -437,8 +439,8 @@ def strategy(data: pd.DataFrame) -> pd.DataFrame:
             if not kline.get("success"):
                 return {"success": False, "error": "数据获取失败"}
 
-            import pandas as pd
             import numpy as np
+            import pandas as pd
             n = len(kline["closes"])
             dates = pd.date_range(end=pd.Timestamp.now(), periods=n, freq='B')
             df = pd.DataFrame({
@@ -566,7 +568,7 @@ def strategy(data: pd.DataFrame) -> pd.DataFrame:
             "category": info["category"],
             "signal": [],
             "signal_summary": {"buy": 0, "sell": 0, "hold": 0},
-            "fallback_note": f"模块无generate方法，使用降级模式",
+            "fallback_note": "模块无generate方法，使用降级模式",
         }
 
     def run_category(self, category: str, symbol: str) -> Dict:

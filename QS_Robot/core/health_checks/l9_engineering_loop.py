@@ -1,10 +1,10 @@
 """L9 工程闭环审查"""
-import os
-import sys
-import re
 import json
+import os
 import random
-from typing import List, Callable
+import re
+import sys
+from typing import Callable, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:

@@ -21,8 +21,8 @@ Alpha158Engine - Alpha158因子计算引擎
 """
 
 import logging
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -847,8 +847,9 @@ def get_alpha_engine() -> Alpha158Engine:
 # ============================================================
 
 if __name__ == "__main__":
-    from .data_converter import DataConverter
     import tempfile
+
+    from .data_converter import DataConverter
 
     # 生成模拟数据
     dates = pd.date_range("2026-01-01", "2026-06-18", freq="B")

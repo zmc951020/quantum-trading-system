@@ -1,8 +1,8 @@
 """L8 深度审计检查（代码/API/引擎/配置）"""
 import os
-import sys
 import re
-from typing import List, Callable
+import sys
+from typing import Callable, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
@@ -665,8 +665,9 @@ def build_l8_checks(hc) -> List[Callable]:
     def _l8_029():
         """工作流批量模式支持检查"""
         try:
-            from core.workflow_engine import get_workflow_engine
             import inspect
+
+            from core.workflow_engine import get_workflow_engine
             engine = get_workflow_engine()
             sig = inspect.signature(engine.run_oneclick)
             has_batch = 'batch_mode' in sig.parameters
@@ -687,8 +688,8 @@ def build_l8_checks(hc) -> List[Callable]:
     def _l8_030():
         """股票池流转一致性检查"""
         try:
-            from core.stock_pool import get_stock_pool_manager
             from core.integration_bus import get_integration_bus
+            from core.stock_pool import get_stock_pool_manager
             pool_mgr = get_stock_pool_manager()
             bus = get_integration_bus()
             has_flow = (hasattr(bus, 'auto_stock_pool_flow') or

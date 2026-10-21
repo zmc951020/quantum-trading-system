@@ -5,9 +5,9 @@
 所有数据源适配器必须继承自此基类，实现统一接口。
 """
 
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
 import random
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 
 class BaseDataSourceAdapter:

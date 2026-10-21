@@ -21,18 +21,18 @@
 
 from __future__ import annotations
 
-import os
+import datetime
 import json
+import logging
 import math
+import os
 import random
 import statistics
-import time
-import logging
 import threading
-import datetime
-from collections import deque, defaultdict
+import time
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

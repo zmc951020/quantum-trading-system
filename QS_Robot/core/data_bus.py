@@ -23,12 +23,12 @@
   5. 优雅降级：高优先级源失败时自动切换到低优先级
 """
 
-import os
 import json
-import time
+import os
 import threading
+import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.data_cache import get_cache_manager
 from core.data_validator import get_validator
@@ -144,28 +144,28 @@ class UnifiedDataBus:
         try:
             from core.data_sources.akshare_adapter import AKShareAdapter
             self._adapters["akshare"] = AKShareAdapter()
-            print(f"[DataBus] AKShare适配器已加载")
+            print("[DataBus] AKShare适配器已加载")
         except Exception as e:
             print(f"[DataBus] AKShare适配器加载失败: {e}")
 
         try:
             from core.data_sources.tushare_adapter import TushareAdapter
             self._adapters["tushare"] = TushareAdapter()
-            print(f"[DataBus] Tushare适配器已加载")
+            print("[DataBus] Tushare适配器已加载")
         except Exception as e:
             print(f"[DataBus] Tushare适配器未加载: {e}")
 
         try:
             from core.data_sources.astock_adapter import AStockDataAdapter
             self._adapters["astock"] = AStockDataAdapter()
-            print(f"[DataBus] AStockData适配器已加载")
+            print("[DataBus] AStockData适配器已加载")
         except Exception as e:
             print(f"[DataBus] AStockData适配器未加载: {e}")
 
         try:
             from core.data_sources.vibe_adapter import VibeAdapter
             self._adapters["vibe"] = VibeAdapter()
-            print(f"[DataBus] Vibe适配器已加载")
+            print("[DataBus] Vibe适配器已加载")
         except Exception as e:
             print(f"[DataBus] Vibe适配器未加载: {e}")
 
@@ -233,7 +233,7 @@ class UnifiedDataBus:
                 sources.append(src)
 
         if not sources:
-            print(f"[DataBus] 错误: 没有可用的数据源")
+            print("[DataBus] 错误: 没有可用的数据源")
             return None
 
         # 3. 按优先级尝试获取数据
@@ -340,7 +340,7 @@ class UnifiedDataBus:
                 if result:
                     return result
 
-            except Exception as e:
+            except Exception:
                 continue
 
         return None
@@ -358,7 +358,7 @@ class UnifiedDataBus:
                     result = adapter.get_stock_list(market)
                     if result:
                         return result
-                except Exception as e:
+                except Exception:
                     continue
         return []
 

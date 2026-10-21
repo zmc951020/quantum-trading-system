@@ -1,5 +1,6 @@
 """基本面因子 Mixin（15个）"""
 import numpy as np
+
 from ._registry import register_factor
 
 

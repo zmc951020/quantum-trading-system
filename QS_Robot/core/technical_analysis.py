@@ -25,9 +25,9 @@
 
 import math
 import random
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List
-from dataclasses import dataclass
 
 try:
     import pandas as pd

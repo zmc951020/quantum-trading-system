@@ -2,7 +2,7 @@
 import os
 import sys
 import time
-from typing import List, Callable
+from typing import Callable, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
@@ -44,8 +44,9 @@ def build_l3_checks(hc) -> List[Callable]:
     # 深度扩展
     def _l3_004():
         try:
-            import requests
             from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            import requests
             def _req():
                 r = requests.get(f"{hc.BASE_URL}/api/strategy/list",
                                 cookies=hc._get_auth_cookies(), timeout=10)

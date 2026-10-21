@@ -13,11 +13,11 @@ NLP自然语言指令解析器 - 港大Vibe-Trading智能体调度入口
   采用关键词+规则引擎混合方案，轻量级、可解释、无外部依赖
 """
 
-import re
 import json
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+import re
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

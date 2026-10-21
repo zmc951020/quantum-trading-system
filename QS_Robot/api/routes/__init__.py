@@ -12,7 +12,9 @@ def register_all_routes(api_gateway):
     register_broker_routes(api_gateway)
     from api.routes.health_routes import register_routes as register_health_routes
     register_health_routes(api_gateway)
-    from api.routes.market_data_routes import register_routes as register_market_data_routes
+    from api.routes.market_data_routes import (
+        register_routes as register_market_data_routes,
+    )
     register_market_data_routes(api_gateway)
     from api.routes.misc_routes import register_routes as register_misc_routes
     register_misc_routes(api_gateway)
@@ -24,9 +26,13 @@ def register_all_routes(api_gateway):
     register_risk_routes(api_gateway)
     from api.routes.security_routes import register_routes as register_security_routes
     register_security_routes(api_gateway)
-    from api.routes.special_forces_routes import register_routes as register_special_forces_routes
+    from api.routes.special_forces_routes import (
+        register_routes as register_special_forces_routes,
+    )
     register_special_forces_routes(api_gateway)
-    from api.routes.stock_pool_routes import register_routes as register_stock_pool_routes
+    from api.routes.stock_pool_routes import (
+        register_routes as register_stock_pool_routes,
+    )
     register_stock_pool_routes(api_gateway)
     from api.routes.strategy_routes import register_routes as register_strategy_routes
     register_strategy_routes(api_gateway)

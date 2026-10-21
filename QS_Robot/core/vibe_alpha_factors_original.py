@@ -13,9 +13,10 @@ Vibe-Trading 系统的核心因子计算引擎，提供三大类共50个因子�
 """
 
 import logging
-import numpy as np
-from typing import Dict, List, Optional, Any, Tuple, Callable
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

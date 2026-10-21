@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """CSRF防护中间件"""
-from flask import request, jsonify
 from functools import wraps
+
 from api.response_formatter import APIResponse
+from flask import jsonify, request
 
 
 def require_csrf(f):

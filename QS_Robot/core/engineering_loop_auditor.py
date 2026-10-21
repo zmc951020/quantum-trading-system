@@ -1,14 +1,14 @@
 """自动化工程闭环流审查器 - 独立可复用类
 五维审查：自适应工程工作流 → 策略三大入口 → 可视化模块 → 链路通达性 → 色调风格统一
 """
+import json
+import logging
 import os
 import re
-import json
-import time
 import sys
-import logging
+import time
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("EngineeringLoopAuditor")
 

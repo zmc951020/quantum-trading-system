@@ -12,11 +12,11 @@
 降级：AKShare失败 → 返回空列表 + 日志告警，不阻塞流程
 """
 
-import time
 import logging
-from typing import Dict, List, Any
+import time
+from typing import Any, Dict, List
 
-from core.stock_pool import get_stock_pool_manager, StockSource
+from core.stock_pool import StockSource, get_stock_pool_manager
 
 logger = logging.getLogger(__name__)
 

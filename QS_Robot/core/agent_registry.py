@@ -14,9 +14,8 @@ Agent注册表：6组29个智能体，每个Agent有名称、分组、标签、�
   4. 为Cline对话框提供可视化选择面板数据源
 """
 
-from typing import Dict, List, Optional, Any, Set
 from dataclasses import dataclass, field
-
+from typing import Any, Dict, List, Optional, Set
 
 # ============================================================
 # 数据模型

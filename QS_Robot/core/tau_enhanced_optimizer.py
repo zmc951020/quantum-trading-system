@@ -24,23 +24,23 @@ EntropyTauOptimizer（熵韬收敛优化器集群）是主力策略寻优引擎�
 备选方案: TauOptimizerCluster（原韬定律优化器集群）作为低配快速兜底
 """
 
+import importlib
 import math
 import random
-import time
-import importlib
 import statistics
+import time
 from collections import Counter
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 # 数据平台集成：优化器数据源统一通过qlib_adapter/alpha_factors获取
 # 批量回测、参数寻优、模型训练仅读取数据平台，无本地历史文件依赖
-
 # 引用现有优化器的基础组件
 from core.tau_optimizer_cluster import (
-    TauOptimizerCluster, BacktestResult, PatternAnalyzer
+    BacktestResult,
+    PatternAnalyzer,
+    TauOptimizerCluster,
 )
-
 
 # ============================================================
 # 1. 熵计算引擎

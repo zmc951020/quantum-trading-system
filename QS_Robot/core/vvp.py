@@ -9,11 +9,10 @@ Vibe Visualization Protocol (VVP) - 统一可视化数据协议
 协议版本: 1.0
 """
 
-from typing import Dict, List, Optional, Any, Union
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
-
+from typing import Any, Dict, List, Optional, Union
 
 # ============================================================
 # VVP Schema 定义

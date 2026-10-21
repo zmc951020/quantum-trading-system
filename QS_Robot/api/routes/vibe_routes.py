@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """vibe_routes - API网关路由"""
-from flask import request, jsonify
-from api.response_formatter import APIResponse
+import logging
 
 from api.middleware.auth import require_auth
+from api.response_formatter import APIResponse
+from flask import jsonify, request
 
-import logging
 logger = logging.getLogger(__name__)
 
 

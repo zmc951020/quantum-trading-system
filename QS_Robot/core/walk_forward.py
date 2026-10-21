@@ -14,9 +14,10 @@ Walk-Forward 滚动窗口回测验证
 """
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -253,28 +254,28 @@ class WalkForwardAnalyzer:
     def generate_report(self, report: WalkForwardReport) -> str:
         """生成可读报告"""
         lines = [
-            f"# Walk-Forward 分析报告",
+            "# Walk-Forward 分析报告",
             f"策略: {report.strategy_name}",
             f"窗口数: {report.total_windows}",
-            f"",
-            f"## 汇总指标",
-            f"| 指标 | 值 |",
-            f"|------|-----|",
+            "",
+            "## 汇总指标",
+            "| 指标 | 值 |",
+            "|------|-----|",
             f"| 平均验证期收益 | {report.avg_test_return:.2%} |",
             f"| 平均验证期夏普 | {report.avg_test_sharpe:.2f} |",
             f"| 平均过拟合比率 | {report.avg_overfit_ratio:.2f} |",
             f"| 过拟合窗口数 | {report.overfit_count}/{report.total_windows} |",
             f"| 鲁棒性评分 | {report.robustness_score:.1f}/100 |",
-            f"",
-            f"## 判定",
+            "",
+            "## 判定",
             f"{'✅ 策略鲁棒' if report.is_robust else '⚠️ 策略可能过拟合'}",
-            f"",
-            f"## 建议",
+            "",
+            "## 建议",
             f"{report.recommendation}",
-            f"",
-            f"## 各窗口详情",
-            f"| 窗口 | 训练期 | 验证期 | 训练收益 | 验证收益 | 过拟合 |",
-            f"|------|--------|--------|----------|----------|--------|",
+            "",
+            "## 各窗口详情",
+            "| 窗口 | 训练期 | 验证期 | 训练收益 | 验证收益 | 过拟合 |",
+            "|------|--------|--------|----------|----------|--------|",
         ]
 
         for w in report.windows:

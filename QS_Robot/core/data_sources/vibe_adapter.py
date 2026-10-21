@@ -13,8 +13,8 @@ Vibe-Trading 港大智能体数据源适配器
 降级策略: vibe-trading-ai 不可用时，回退到本地 data_fetcher
 """
 
-from typing import Dict, List, Optional, Any
 import logging
+from typing import Any, Dict, List, Optional
 
 from core.data_sources.base_adapter import BaseDataSourceAdapter
 

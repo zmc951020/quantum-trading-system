@@ -3,12 +3,12 @@
 批量海选 + 低位筛选 + 热启动 + 优良度排名。
 与 TauClusterEngine 互补：本模块做批量选股，TauClusterEngine 做单股深度决策。
 """
-import os
-import sys
-import json
 import importlib
 import inspect
+import json
 import logging
+import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -146,7 +146,7 @@ class ClusterStockSelector:
     def _evaluate_stock(self, code: str, bars: list[dict], hot_required: int,
                         regime: str) -> StockScore | None:
         """对单只股票评估：低位 + 热启动 + 32策略信号"""
-        from tools.low_position_filter import check_low_position, check_hot_start
+        from tools.low_position_filter import check_hot_start, check_low_position
 
         i = len(bars) - 1
 

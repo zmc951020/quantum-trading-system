@@ -17,25 +17,37 @@ Agent自由调度引擎（Agent Dispatcher）
   5. 结果聚合 → 加权投票+综合评分
 """
 
-import os
-import sys
-import re
-import time
 import hashlib
 import json as json_module
-import threading
 import logging
-from enum import Enum
+import os
+import re
+import sys
+import threading
+import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Any, Tuple
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.agent_registry import (
-    AGENT_REGISTRY, SKILL_REGISTRY,
-    get_agent, get_agents_by_group, get_agents_by_tags, get_agents_by_keyword,
-    get_skill, get_skills_by_category, get_skills_by_tags, get_skills_by_keyword,
-    get_all_groups, get_all_agents, get_all_categories, get_all_skills,
-    get_registry_stats, AgentInfo, SkillInfo,
+    AGENT_REGISTRY,
+    SKILL_REGISTRY,
+    AgentInfo,
+    SkillInfo,
+    get_agent,
+    get_agents_by_group,
+    get_agents_by_keyword,
+    get_agents_by_tags,
+    get_all_agents,
+    get_all_categories,
+    get_all_groups,
+    get_all_skills,
+    get_registry_stats,
+    get_skill,
+    get_skills_by_category,
+    get_skills_by_keyword,
+    get_skills_by_tags,
 )
 
 logger = logging.getLogger(__name__)
@@ -237,7 +249,7 @@ class AgentDispatcher:
                         f"({timing['parse']}ms)")
 
             if not intent.symbol:
-                logger.warning(f"[Dispatcher] 未检测到股票代码")
+                logger.warning("[Dispatcher] 未检测到股票代码")
                 return {
                     "success": False,
                     "error": "未检测到股票代码，请提供6位数字代码（如：600519）",
@@ -255,7 +267,7 @@ class AgentDispatcher:
             if not has_explicit_agent and not intent.group_ids:
                 t0 = time.time()
                 logger.info(f"[Dispatcher] 未指定Agent/分组，触发智能编排 ({timing['resolve']}ms)")
-                from core.agent_orchestrator import orchestrate, _check_llm_available
+                from core.agent_orchestrator import _check_llm_available, orchestrate
                 llm_ok = _check_llm_available()
                 timing["llm_check"] = round((time.time() - t0) * MS_TO_SEC, 1)
                 if not llm_ok:
@@ -361,8 +373,8 @@ class AgentDispatcher:
     def _execute_agents(self, intent: DispatchIntent, agents: List[AgentInfo],
                         kline_data: Dict) -> Dict[str, Any]:
         """并行执行多个Agent（支持Vibe Agent + 专家团队）"""
-        from core.vibe_29_agents import VibeAgentAnalyzer
         from core.expert_team_bridge import ExpertTeamAnalyzer
+        from core.vibe_29_agents import VibeAgentAnalyzer
 
         vibe_analyzer = VibeAgentAnalyzer(intent.symbol, kline_data)
         expert_analyzer = ExpertTeamAnalyzer(intent.symbol, kline_data)
@@ -451,7 +463,10 @@ class AgentDispatcher:
                 # 技术分析类技能
                 elif skill.module == "technical_analysis":
                     if tech is None:
-                        from core.technical_analysis import TechnicalAnalysisEngine, FactorAnalysisEngine
+                        from core.technical_analysis import (
+                            FactorAnalysisEngine,
+                            TechnicalAnalysisEngine,
+                        )
                         tech = TechnicalAnalysisEngine()
                         factor = FactorAnalysisEngine()
                     if not closes:

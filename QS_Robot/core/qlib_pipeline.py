@@ -17,10 +17,10 @@ import json
 import logging
 import time
 import traceback
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -299,7 +299,10 @@ class QlibPipeline:
         try:
             # 优先使用 Qlib 回测引擎
             if self._qlib_adapter is not None:
-                from .qlib_core.backtest_engine import QlibBacktestEngine, BacktestConfig
+                from .qlib_core.backtest_engine import (
+                    BacktestConfig,
+                    QlibBacktestEngine,
+                )
                 from .qlib_core.data_converter import DataConverter
 
                 converter = DataConverter()
@@ -314,7 +317,11 @@ class QlibPipeline:
 
                     # 简单均线策略作为信号函数
                     def ma_signal(data_slice, account):
-                        from .qlib_core.backtest_engine import Order, TradeSide, OrderType
+                        from .qlib_core.backtest_engine import (
+                            Order,
+                            OrderType,
+                            TradeSide,
+                        )
                         orders = []
                         for sym, df in data_slice.items():
                             if len(df) < 20:

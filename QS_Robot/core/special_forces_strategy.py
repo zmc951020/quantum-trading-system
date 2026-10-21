@@ -25,8 +25,10 @@ Special Forces Wyckoff Adaptive Strategy (自演进版)
 import os
 import sys
 import time
+import json
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 
 # 路径设置
@@ -35,10 +37,10 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from core.multi_timeframe_pipeline import MultiTimeframePipeline, AlignedData
-from core.wyckoff_factors import WyckoffFactorEngine
+from core.wyckoff_factors import WyckoffFactorEngine, ALL_FACTOR_NAMES
 from core.wyckoff_phase_detector import (
     WyckoffPhaseDetector, SignalGenerator,
-    SignalType, TradeSignal
+    WyckoffPhase, SignalType, PhaseResult, TradeSignal
 )
 
 
@@ -481,6 +483,7 @@ class SpecialForcesStrategy:
         for s in self._signals:
             if s.signal_type != SignalType.NO_SIGNAL:
                 # 从因子中获取阶段
+                phase_labels = {0: "吸筹", 1: "拉升", 2: "派发", 3: "下跌"}
                 # 简化：统计信号类型
                 label = "BUY" if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY) else "SELL"
                 phase_dist[label] = phase_dist.get(label, 0) + 1

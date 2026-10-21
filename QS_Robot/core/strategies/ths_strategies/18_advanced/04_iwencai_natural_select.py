@@ -40,8 +40,8 @@ class IwencaiNaturalSelectStrategy(THSBaseStrategy):
         if "5日均线上穿10日" in query:
             matched.append(sma(closes, 5) > sma(closes, 10))
         if "涨停" in query:
-            prev = bars[-2] if len(bars) >= 2 else last
-            pct = (last["close"] - prev["close"]) / prev["close"] * 100
+            prev = closes[-2] if len(closes) >= 2 else last["close"]
+            pct = (last["close"] - prev) / prev * 100
             matched.append(pct >= 9.5)
         if not matched:
             matched = [True]

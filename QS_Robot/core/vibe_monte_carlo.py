@@ -13,9 +13,10 @@ Vibe-Trading 系统的统计检验引擎，提供：
 """
 
 import logging
-import numpy as np
-from typing import Dict, List, Optional, Any, Tuple, Callable
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

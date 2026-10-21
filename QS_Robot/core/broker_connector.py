@@ -16,10 +16,10 @@
 
 import logging
 import threading
-from datetime import datetime
-from typing import Dict, List, Optional
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

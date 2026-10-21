@@ -1,21 +1,39 @@
 # -*- coding: utf-8 -*-
 """health_routes - API网关路由"""
-from flask import request, jsonify
-from api.response_formatter import APIResponse
-from api.aurora_core_adapter import get_aurora_adapter, AURORA_BACKEND
-
-from api.middleware.auth import require_auth
-from api.middleware.csrf import require_csrf
-from api.middleware.rate_limit import rate_limit
-from api.middleware.sanitize import sanitize_input
-from api.middleware.origin import check_origin
-from api.middleware.threat import check_threat
-from api.validators import get_input_validator, get_data_masker
-
 import logging
 import os
+import sys
 import time
+
+from api.aurora_core_adapter import AURORA_BACKEND, get_aurora_adapter
+from api.middleware.auth import require_auth
+from api.middleware.csrf import require_csrf
+from api.middleware.origin import check_origin
+from api.middleware.rate_limit import rate_limit
+from api.middleware.sanitize import sanitize_input
+from api.middleware.threat import check_threat
+from api.response_formatter import APIResponse
+from api.validators import get_data_masker, get_input_validator
+from flask import jsonify, request
+
 logger = logging.getLogger(__name__)
+
+from core.security import get_rate_limiter, get_threat_detector
+from core.system_health_checker import get_health_checker
+
+
+def _summarize_trends(trends):
+    """巡检趋势摘要（2026-10-21 补：原调用处引用了未定义函数，补最小实现）"""
+    if not trends:
+        return None
+    latest = trends[-1]
+    summary = {
+        "total_records": len(trends),
+        "latest": latest,
+    }
+    if isinstance(latest, dict):
+        summary["has_issue"] = latest.get("has_issue") or latest.get("issues_count", 0) > 0
+    return summary
 
 
 def register_routes(api_gateway):
@@ -40,7 +58,6 @@ def register_routes(api_gateway):
     def security_status():
         """获取安全状态"""
         detector = get_threat_detector()
-        limiter = get_rate_limiter()
         return jsonify(APIResponse.success({
             "threat_detection": "active",
             "rate_limiting": "active",
@@ -278,7 +295,8 @@ def register_routes(api_gateway):
     def health_check_three_entry():
         """三大入口自动化流程链路验收"""
         try:
-            import importlib.util, sys
+            import importlib.util
+            import sys
             spec = importlib.util.spec_from_file_location(
                 "_verify_three_entries",
                 os.path.join(os.path.dirname(os.path.dirname(__file__)), "_verify_three_entries.py"))

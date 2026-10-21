@@ -17,10 +17,10 @@
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
-from core.stock_pool import get_stock_pool_manager, StockSource
 from api.ths_bridge.signal_collector import SignalCollector
+from core.stock_pool import StockSource, get_stock_pool_manager
 
 logger = logging.getLogger(__name__)
 

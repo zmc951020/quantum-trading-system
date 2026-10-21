@@ -2,14 +2,14 @@
 五维22节点：Aurora策略审查 → 三大入口关系 → 工程流完整性 → 优化器链路 → Vibe Trading
 与 EngineeringLoopAuditor（基础设施检查）互补，专注策略业务逻辑深度审查
 """
-import os
-import sys
 import json
-import time
 import logging
+import os
 import re
+import sys
+import time
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("StrategyEntryAuditor")
 

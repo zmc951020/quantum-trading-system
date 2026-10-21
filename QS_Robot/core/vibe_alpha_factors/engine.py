@@ -1,14 +1,15 @@
 """AlphaFactorEngine — 因子计算引擎主类"""
 import logging
 import time
+from typing import Any, Callable, Dict, List, Optional
+
 import numpy as np
-from typing import Dict, List, Optional, Any, Callable
 
 from ._registry import _FACTOR_REGISTRY, FactorMeta
-from .basic_factors import BasicFactorsMixin
-from .technical_factors import TechnicalFactorsMixin
-from .fundamental_factors import FundamentalFactorsMixin
 from .analysis import AnalysisMixin
+from .basic_factors import BasicFactorsMixin
+from .fundamental_factors import FundamentalFactorsMixin
+from .technical_factors import TechnicalFactorsMixin
 
 logger = logging.getLogger(__name__)
 

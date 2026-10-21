@@ -10,20 +10,20 @@
   4. API密钥管理
 """
 
-import os
-import sys
-import json
-import re
-import time
-import hmac
-import hashlib
-import secrets
-import logging
 import base64
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+import hashlib
+import hmac
+import json
+import logging
+import os
+import re
+import secrets
+import sys
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 try:
     from cryptography.fernet import Fernet
@@ -301,22 +301,22 @@ class AuditLogger:
                         # 无签名
                         if migrated:
                             tampered += 1
-                            logger.error(f"审计日志条目无签名（迁移后视为篡改）")
+                            logger.error("审计日志条目无签名（迁移后视为篡改）")
                             continue
                         else:
                             legacy_count += 1
-                            logger.info(f"历史日志条目（无签名），待补签")
+                            logger.info("历史日志条目（无签名），待补签")
                             self._logs.append(AuditLog(**entry))
                             continue
                     # 有签名
                     if not self._verify_entry(entry, sig):
                         if migrated:
                             tampered += 1
-                            logger.error(f"审计日志条目签名验证失败，可能被篡改")
+                            logger.error("审计日志条目签名验证失败，可能被篡改")
                             continue
                         else:
                             legacy_count += 1
-                            logger.warning(f"密钥迁移期日志签名验证失败，待补签")
+                            logger.warning("密钥迁移期日志签名验证失败，待补签")
                             self._logs.append(AuditLog(**entry))
                             continue
                     self._logs.append(AuditLog(**entry))
@@ -1564,8 +1564,8 @@ class CertValidator:
         }
 
         try:
-            import ssl
             import hashlib
+            import ssl
             from datetime import datetime
 
             # 加载证书
@@ -1674,9 +1674,9 @@ class CertValidator:
         }
 
         try:
-            import ssl
-            import socket
             import hashlib
+            import socket
+            import ssl
 
             ctx = ssl.create_default_context()
             ctx.check_hostname = True

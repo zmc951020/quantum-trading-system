@@ -5,8 +5,8 @@ AKShare 数据源适配器
 对接东方财富/新浪财经等数据源，提供A股股票数据。
 """
 
-from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 from core.data_bus import create_kline_format
 from core.data_sources.base_adapter import BaseDataSourceAdapter
@@ -24,9 +24,9 @@ class AKShareAdapter(BaseDataSourceAdapter):
             import akshare as ak
             self._ak = ak
             self._available = True
-            print(f"[AKShareAdapter] AKShare已加载")
+            print("[AKShareAdapter] AKShare已加载")
         except ImportError:
-            print(f"[AKShareAdapter] AKShare未安装，使用模拟模式")
+            print("[AKShareAdapter] AKShare未安装，使用模拟模式")
             self._available = True  # 模拟模式仍可用
 
     # --------------------------------------------------------
@@ -238,7 +238,7 @@ class AKShareAdapter(BaseDataSourceAdapter):
                 if df is not None and not df.empty:
                     row = df.iloc[-1]
                     result["revenue_growth"] = float(row.get("同比增长率", 0)) / 100 if row.get("同比增长率") else None
-            except Exception as e:
+            except Exception:
                 pass
 
             # 3. 获取行业分类
@@ -246,7 +246,7 @@ class AKShareAdapter(BaseDataSourceAdapter):
                 df = self._ak.stock_industry(symbol)
                 if df is not None and not df.empty:
                     result["industry"] = str(df.iloc[0].get("所属行业", ""))
-            except Exception as e:
+            except Exception:
                 pass
 
             # 4. 获取市值数据
@@ -257,7 +257,7 @@ class AKShareAdapter(BaseDataSourceAdapter):
                     if not match.empty:
                         row = match.iloc[0]
                         result["total_market_cap"] = float(row.get("最新市值", 0)) / 10000 if row.get("最新市值") else None
-            except Exception as e:
+            except Exception:
                 pass
 
             return result
@@ -314,7 +314,7 @@ class AKShareAdapter(BaseDataSourceAdapter):
                             }
                 except Exception:
                     pass
-        except Exception as e:
+        except Exception:
             pass
         return None
 
@@ -356,7 +356,7 @@ class AKShareAdapter(BaseDataSourceAdapter):
                         return result
                 except Exception:
                     pass
-        except Exception as e:
+        except Exception:
             pass
         return []
 

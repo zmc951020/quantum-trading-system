@@ -13,8 +13,9 @@ Vibe-Trading 系统的期权与衍生品工具集，提供：
 """
 
 import logging
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
 from scipy.stats import norm
 
 logger = logging.getLogger(__name__)
@@ -604,7 +605,7 @@ if __name__ == '__main__':
 
     # 希腊字母
     greeks = analyzer.calculate_greeks(S, K, T, r, sigma)
-    print(f"\n希腊字母:")
+    print("\n希腊字母:")
     print(f"  Call Delta: {greeks.get('call_delta', 'N/A')}")
     print(f"  Put Delta:  {greeks.get('put_delta', 'N/A')}")
     print(f"  Gamma:      {greeks.get('gamma', 'N/A')}")

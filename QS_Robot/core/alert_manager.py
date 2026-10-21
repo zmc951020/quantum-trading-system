@@ -10,16 +10,16 @@
 - 频率限制（防刷屏）
 - 告警静默（可配置静默期）
 """
+import json
 import logging
+import smtplib
 import threading
 import time
-import json
-import smtplib
-from email.mime.text import MIMEText
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from enum import Enum
+from typing import Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,7 @@ class AlertManager:
     def _send_dingtalk(self, alert: Alert):
         """钉钉机器人推送"""
         import os
+
         import requests
 
         token = os.environ.get("DINGTALK_WEBHOOK_TOKEN", "")
@@ -199,6 +200,7 @@ class AlertManager:
     def _send_wecom(self, alert: Alert):
         """企业微信机器人推送"""
         import os
+
         import requests
 
         key = os.environ.get("WECOM_WEBHOOK_KEY", "")
