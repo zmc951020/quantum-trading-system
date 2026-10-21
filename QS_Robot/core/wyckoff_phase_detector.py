@@ -211,7 +211,7 @@ class WyckoffPhaseDetector:
 
         price_to_upper = f[FACTOR_INDEX["price_to_upper"]]
         price_to_lower = f[FACTOR_INDEX["price_to_lower"]]
-        range_break_prob = f[FACTOR_INDEX["range_break_prob"]]
+        f[FACTOR_INDEX["range_break_prob"]]
         range_vol_shrink = f[FACTOR_INDEX["range_vol_shrink"]]
 
         break_strength = f[FACTOR_INDEX["breakout_strength"]]
@@ -222,7 +222,7 @@ class WyckoffPhaseDetector:
         ma_confirm = f[FACTOR_INDEX["breakout_ma_confirm"]]
         trend_confirm = f[FACTOR_INDEX["breakout_trend_confirm"]]
 
-        market_trend = f[FACTOR_INDEX["market_trend"]]
+        f[FACTOR_INDEX["market_trend"]]
         market_risk = f[FACTOR_INDEX["market_risk_level"]]
 
         # ---- 一级判定：量化规则 ----
@@ -530,7 +530,7 @@ class SignalGenerator:
         break_strength = f[FACTOR_INDEX["breakout_strength"]]
         break_vol = f[FACTOR_INDEX["breakout_vol_ratio"]]
         attack_wave = f[FACTOR_INDEX["attack_wave"]]
-        test_wave = f[FACTOR_INDEX["test_wave"]]
+        f[FACTOR_INDEX["test_wave"]]
         avg_line = f[FACTOR_INDEX["avg_line_strength"]]
         time_trend = f[FACTOR_INDEX["time_share_trend"]]
         market_risk = f[FACTOR_INDEX["market_risk_level"]]

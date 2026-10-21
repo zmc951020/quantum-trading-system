@@ -347,7 +347,6 @@ class RiskControlEngine:
         price = order.get("price", 0)
         side = order.get("side", "buy")
 
-        checks = []
 
         # 1. 数值边界校验：NaN/零/负值拦截
         if not isinstance(price, (int, float)) or np.isnan(price) or price <= 0:

@@ -297,7 +297,7 @@ class FiveDimensionalAnalyzer:
             return {"E": 0.5, "V": 0.5, "H": 0.5, "M": 0.5, "P": 0.5}
 
         scores = np.array([h["score"] for h in params_history])
-        sorted_scores = np.sort(scores)
+        np.sort(scores)
 
         # E (期望): 评分趋势（正=上升，负=下降）
         if len(scores) >= 5:
@@ -895,7 +895,7 @@ class SpecialForcesEvolutionController:
             print(f"[增量演化] {symbol} 无已有参数，请先运行完整演化")
             return None
 
-        current_params = existing["current_params"]
+        existing["current_params"]
         current_score = existing.get("current_score", 0)
 
         if verbose:
@@ -997,7 +997,7 @@ class SpecialForcesEvolutionController:
             return False
 
         from core.special_forces_strategy import StrategyParams
-        params = StrategyParams.from_dict(best_params)
+        StrategyParams.from_dict(best_params)
         print(f"[应用参数] {symbol} 已应用最佳参数 (v{len(self._store.get_all_versions(symbol))})")
         return True
 

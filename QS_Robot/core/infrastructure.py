@@ -68,8 +68,8 @@ class TraceabilityEngine:
             "root": root_node_id,
             "chain_length": len(chain),
             "chain": chain,
-            "data_sources": list(set(t["source"] for t in chain)),
-            "agents_involved": list(set(t["agent"] for t in chain if t["agent"])),
+            "data_sources": list({t["source"] for t in chain}),
+            "agents_involved": list({t["agent"] for t in chain if t["agent"]}),
             "has_simulated": any(t["source"] == "simulated" for t in chain),
             "verified": all(t["hash"] == chain[0]["hash"] for t in chain) if chain else False,
         }

@@ -119,7 +119,7 @@ def analyze(entries: List[Dict]) -> Dict[str, Any]:
 
     # 未触发的日志点
     all_points = set(LOG_POINTS.keys())
-    triggered = set(e["point"] for e in entries if e["point"] != "未知")
+    triggered = {e["point"] for e in entries if e["point"] != "未知"}
     missing = all_points - triggered
 
     # 时序分析

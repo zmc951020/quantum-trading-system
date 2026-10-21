@@ -102,7 +102,7 @@ class OptionsAnalyzer:
             pdf_d1 = self._norm.pdf(d1)
             cdf_d1 = self._norm.cdf(d1)
             cdf_d2 = self._norm.cdf(d2)
-            cdf_neg_d1 = self._norm.cdf(-d1)
+            self._norm.cdf(-d1)
             cdf_neg_d2 = self._norm.cdf(-d2)
 
             sqrt_t = np.sqrt(T)
@@ -575,7 +575,7 @@ class OptionsAnalyzer:
         K = params.get("K", S * 1.05)
         sigma = params.get("sigma", 0.25)
         call_price = self.black_scholes(S, K, T, r, sigma, 'call')
-        cost = S - call_price
+        S - call_price
         return (prices - S) - np.maximum(prices - K, 0) + call_price
 
     def _pnl_protective_put(self, prices: np.ndarray, params: Dict,
@@ -584,7 +584,7 @@ class OptionsAnalyzer:
         K = params.get("K", S * 0.95)
         sigma = params.get("sigma", 0.25)
         put_price = self.black_scholes(S, K, T, r, sigma, 'put')
-        cost = S + put_price
+        S + put_price
         return (prices - S) + np.maximum(K - prices, 0) - put_price
 
 

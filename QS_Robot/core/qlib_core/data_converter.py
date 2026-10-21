@@ -364,11 +364,10 @@ class DataConverter:
             import akshare as ak
 
             # 处理股票代码格式
-            code = symbol
             if symbol.startswith("6"):
-                code = f"sh{symbol}"
+                pass
             elif symbol.startswith(("0", "3")):
-                code = f"sz{symbol}"
+                pass
 
             df = ak.stock_zh_a_hist(
                 symbol=symbol,

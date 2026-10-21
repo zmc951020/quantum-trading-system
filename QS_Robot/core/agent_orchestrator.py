@@ -200,7 +200,7 @@ def decompose_task(message: str, task_type: str) -> TaskIntent:
     """根据任务类型分解子任务"""
     intent = TaskIntent()
     intent.task_type = task_type
-    msg = message.lower()
+    message.lower()
 
     if task_type == "市场分析":
         intent.priority_groups = ["技术分析组"]

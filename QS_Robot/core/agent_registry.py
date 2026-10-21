@@ -879,9 +879,9 @@ def get_agents_by_group(group: str) -> List[AgentInfo]:
 
 def get_agents_by_tags(tags: List[str]) -> List[AgentInfo]:
     """按标签匹配Agent（交集匹配）"""
-    tag_set = set(t.lower() for t in tags)
+    tag_set = {t.lower() for t in tags}
     return [a for a in AGENT_REGISTRY.values()
-            if tag_set & set(t.lower() for t in a.tags)]
+            if tag_set & {t.lower() for t in a.tags}]
 
 def get_agents_by_keyword(keyword: str) -> List[AgentInfo]:
     """按关键词模糊搜索Agent"""
@@ -895,7 +895,7 @@ def get_agents_by_keyword(keyword: str) -> List[AgentInfo]:
 
 def get_all_groups() -> List[str]:
     """获取所有分组"""
-    return sorted(set(a.group for a in AGENT_REGISTRY.values()))
+    return sorted({a.group for a in AGENT_REGISTRY.values()})
 
 def get_all_agents() -> List[AgentInfo]:
     """获取所有Agent"""
@@ -911,9 +911,9 @@ def get_skills_by_category(category: str) -> List[SkillInfo]:
 
 def get_skills_by_tags(tags: List[str]) -> List[SkillInfo]:
     """按标签匹配技能"""
-    tag_set = set(t.lower() for t in tags)
+    tag_set = {t.lower() for t in tags}
     return [s for s in SKILL_REGISTRY.values()
-            if tag_set & set(t.lower() for t in s.tags)]
+            if tag_set & {t.lower() for t in s.tags}]
 
 def get_skills_by_keyword(keyword: str) -> List[SkillInfo]:
     """按关键词模糊搜索技能"""
@@ -927,7 +927,7 @@ def get_skills_by_keyword(keyword: str) -> List[SkillInfo]:
 
 def get_all_categories() -> List[str]:
     """获取所有技能分类"""
-    return sorted(set(s.category for s in SKILL_REGISTRY.values()))
+    return sorted({s.category for s in SKILL_REGISTRY.values()})
 
 def get_all_skills() -> List[SkillInfo]:
     """获取所有技能"""

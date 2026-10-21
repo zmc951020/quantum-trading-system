@@ -817,7 +817,7 @@ class Alpha158Engine:
 
     def get_categories(self) -> List[str]:
         """获取所有因子类别"""
-        return sorted(set(v["cat"] for v in self._factor_registry.values()))
+        return sorted({v["cat"] for v in self._factor_registry.values()})
 
     def get_factor_matrix(self, df: pd.DataFrame, freq: str = "day") -> pd.DataFrame:
         """计算所有因子并返回DataFrame矩阵"""

@@ -221,7 +221,7 @@ def build_l9_checks(hc) -> List[Callable]:
             try:
                 with open(fpath, 'r', encoding='utf-8') as f:
                     content = f.read()
-                links = re.findall(r'href="([^"]+)"', content)
+                re.findall(r'href="([^"]+)"', content)
                 # 检查是否有到其他核心页面的链接
                 has_nav = any('nav-link' in l or 'nav-brand' in l for l in re.findall(r'class="([^"]*)"', content))
                 if not has_nav and fname != "login.html":
@@ -490,8 +490,8 @@ def build_l9_checks(hc) -> List[Callable]:
             all_info = store.get_all_strategies_info() if hasattr(store, 'get_all_strategies_info') else []
             invalid = []
             for info in all_info:
-                best = info.get("best_score", 0)
-                version = info.get("current_version", 0)
+                info.get("best_score", 0)
+                info.get("current_version", 0)
                 params = info.get("best_params", {})
                 # 检查参数是否极端
                 for k, v in params.items():

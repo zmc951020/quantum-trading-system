@@ -618,9 +618,9 @@ class OneClickWorkflowEngine:
 
         stage.data["matched"] = matched
         if matched:
-            stage.data["final_stock_pool"] = list(set(
+            stage.data["final_stock_pool"] = list({
                 s for m in matched for s in m.get("stocks", [])
-            ))
+            })
         stage.message = f"匹配完成: {len(matched)} 个策略, {len(stage.data.get('final_stock_pool', []))} 只股票"
 
     def _stage_adapt(self, stage: WorkflowStage):
@@ -918,7 +918,6 @@ class OneClickWorkflowEngine:
             }
 
             if require_approval:
-                target_level = "pending_approval"
                 pool_level = PoolLevel.PENDING_APPROVAL
             else:
                 pool_level = level_map.get(level, PoolLevel.CANDIDATE)

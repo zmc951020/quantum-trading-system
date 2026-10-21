@@ -209,7 +209,7 @@ class AlertManager:
 
         url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
         level_color = {"info": "info", "warn": "warning", "critical": "warning"}
-        color = level_color.get(alert.level.value, "info")
+        level_color.get(alert.level.value, "info")
 
         payload = {
             "msgtype": "markdown",

@@ -235,7 +235,6 @@ class L2Inspector:
             store_path = os.path.join(PROJECT_ROOT, "data", "strategy_profiles.json")
             store_exists = os.path.exists(store_path)
             store = StrategyProfileStore(storage_path=store_path)
-            has_store = store_exists and store is not None
             priorities = store.get_regime_priorities() if hasattr(store, 'get_regime_priorities') else {}
             return (True, 100,
                     f"策略画像: 存储={'✓' if store_exists else '✗'}, 优先级配置={len(priorities)}个", "")

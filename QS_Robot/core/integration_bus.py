@@ -1371,7 +1371,7 @@ class StrategyIntegrationBus:
         def _evaluate_cluster_params(params: Dict[str, float]) -> float:
             engine.reset_state(keep_strategies=True)
             engine.apply_optimizer_result(params)
-            rnd = _random.Random(seed)
+            _random.Random(seed)
             correct = wrong = 0
             returns = []
             for i in range(rounds):

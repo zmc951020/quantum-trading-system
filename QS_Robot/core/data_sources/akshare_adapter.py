@@ -370,12 +370,6 @@ class AKShareAdapter(BaseDataSourceAdapter):
             if self._ak is None:
                 return []
 
-            index_map = {
-                "000300": "沪深300",
-                "000001": "上证指数",
-                "399001": "深证成指",
-                "399006": "创业板指"
-            }
 
             try:
                 df = self._ak.index_stock_cons(index_code)

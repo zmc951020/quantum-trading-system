@@ -92,7 +92,7 @@ class StrategyCodeExporter:
         """
         try:
             params = self._normalize_params(params)
-            safe_name = strategy_name.replace(" ", "_").replace("-", "_")
+            strategy_name.replace(" ", "_").replace("-", "_")
 
             lines = []
             lines.append(self._build_header("TradingView Pine Script v5", strategy_name))
@@ -221,7 +221,7 @@ class StrategyCodeExporter:
                 default = p.get("value", 0)
                 p_min = p.get("min", 0)
                 p_max = p.get("max", 100)
-                desc = p.get("description", name)
+                p.get("description", name)
                 param_lines.append(f"{name}({p_min},{default},{p_max})")
 
             if param_lines:

@@ -325,7 +325,7 @@ def register_routes(api_gateway):
         """同花顺入口根端点"""
         try:
             from api.ths_bridge.signal_collector import SignalCollector
-            collector = SignalCollector()
+            SignalCollector()
             status = {"available": True, "strategies": 14, "advanced": 18, "total": 32}
             return jsonify({"success": True, "data": status})
         except Exception as e:

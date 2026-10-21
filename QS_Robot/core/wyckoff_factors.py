@@ -263,7 +263,7 @@ def compute_wyckoff_structure(opens: np.ndarray, highs: np.ndarray,
 
     # 价格变化
     returns = np.diff(closes, prepend=closes[0]) / np.where(closes > 0, closes, 1)
-    price_change = closes - closes[0] if n > 0 else np.zeros(n)
+    closes - closes[0] if n > 0 else np.zeros(n)
 
     # 均线
     ma20 = _sma(closes, 20)
@@ -704,7 +704,7 @@ def compute_breakout_factors(opens: np.ndarray, highs: np.ndarray,
 
     # 识别突破点：价格突破N日高点
     high_20 = np.array([np.max(highs[max(0,i-19):i+1]) if i > 0 else highs[0] for i in range(n)])
-    high_50 = np.array([np.max(highs[max(0,i-49):i+1]) if i > 0 else highs[0] for i in range(n)])
+    np.array([np.max(highs[max(0,i-49):i+1]) if i > 0 else highs[0] for i in range(n)])
 
     # ---- 36. breakout_strength: 突破强度 ----
     # 突破幅度相对于前期波动
@@ -839,8 +839,8 @@ def compute_order_book_factors(m15_opens: np.ndarray, m15_highs: np.ndarray,
 
         day_bars = np.array(bar_indices)
         day_open = m15_opens[day_bars[0]]
-        day_high = np.max(m15_highs[day_bars])
-        day_low = np.min(m15_lows[day_bars])
+        np.max(m15_highs[day_bars])
+        np.min(m15_lows[day_bars])
         day_vol = np.sum(m15_volumes[day_bars])
 
         if day_open <= 0:
@@ -859,7 +859,7 @@ def compute_order_book_factors(m15_opens: np.ndarray, m15_highs: np.ndarray,
 
         # 价格变化率
         price_changes = np.diff(intraday_prices, prepend=intraday_prices[0])
-        ret_changes = np.diff(intraday_ret, prepend=intraday_ret[0])
+        np.diff(intraday_ret, prepend=intraday_ret[0])
 
         for idx_in_day, bar_idx in enumerate(bar_indices):
             if idx_in_day < 2:

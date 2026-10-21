@@ -154,13 +154,13 @@ class ShadowAccountAnalyzer:
                 return {"success": False, "error": "交易记录不足（至少需要5笔已平仓交易）"}
 
             buy_trades = [t for t in closed_trades if t.direction == "buy"]
-            sell_trades = [t for t in closed_trades if t.direction == "sell"]
+            [t for t in closed_trades if t.direction == "sell"]
 
             behaviors = {}
 
             # 1. 追涨杀跌检测
             if buy_trades:
-                buy_pnl_pcts = [t.pnl_pct for t in buy_trades]
+                [t.pnl_pct for t in buy_trades]
                 buy_wins = [t for t in buy_trades if t.pnl > 0]
                 buy_losses = [t for t in buy_trades if t.pnl < 0]
                 avg_win = np.mean([t.pnl_pct for t in buy_wins]) if buy_wins else 0
@@ -590,8 +590,7 @@ class ShadowAccountAnalyzer:
 
             # 月度统计
             monthly_returns = []
-            current_month_pnl = 0.0
-            current_month_start = equity[0]
+            equity[0]
             # 简化：按交易笔数分组近似
             chunk_size = max(len(closed_trades) // 12, 1)
             for i in range(0, len(closed_trades), chunk_size):

@@ -52,7 +52,7 @@ def build_l2_checks(hc) -> List[Callable]:
     def _l2_005():
         try:
             from core.shepherd_optimizer import ShepherdOptimizer, ShepherdVersion
-            s = ShepherdOptimizer(version=ShepherdVersion.V6)
+            ShepherdOptimizer(version=ShepherdVersion.V6)
             return (True, 100, "牧羊人V6优化器: 本地可用", "")
         except Exception as e:
             return (False, 0, f"牧羊人优化器: 不可用 - {e}", "检查 core/shepherd_optimizer.py")
@@ -61,7 +61,7 @@ def build_l2_checks(hc) -> List[Callable]:
     def _l2_006():
         try:
             from core.walk_forward import WalkForwardAnalyzer
-            wf = WalkForwardAnalyzer()
+            WalkForwardAnalyzer()
             return (True, 100, "Walk-Forward分析器: 可用", "")
         except Exception as e:
             return (False, 0, f"Walk-Forward: 不可用 - {e}", "检查 core/walk_forward.py")
@@ -70,7 +70,7 @@ def build_l2_checks(hc) -> List[Callable]:
     def _l2_007():
         try:
             from core.backtest_comparator import BacktestComparator
-            bc = BacktestComparator()
+            BacktestComparator()
             return (True, 100, "回测对比器: 可用", "")
         except Exception as e:
             return (False, 0, f"回测对比器: 不可用 - {e}", "检查 core/backtest_comparator.py")
