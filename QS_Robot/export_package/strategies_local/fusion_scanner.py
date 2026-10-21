@@ -15,6 +15,7 @@
 
 import sys
 import os
+import argparse
 
 # 路径设置
 QS_ROBOT_ROOT = r'D:\Gupiao\升级vscode\QS_Robot'
@@ -51,11 +52,42 @@ def load_sepa_results():
     return results
 
 
-def run_fusion_scan():
-    """运行融合扫描"""
+def attach_realtime_prices(sepa_results):
+    """盘中模式：用免费实时行情(腾讯主源)刷新候选股票现价/涨跌幅"""
+    try:
+        sys.path.insert(0, QS_ROBOT_ROOT)
+        from core.data_sources.realtime_adapter import RealtimeAdapter
+    except Exception as e:
+        print(f"  [实时] 适配器加载失败: {e}，跳过实时刷新")
+        return sepa_results
+
+    codes = [str(s['symbol']).zfill(6) for s in sepa_results]
+    print(f"  [实时] 拉取 {len(codes)} 只候选股票实时快照...")
+    a = RealtimeAdapter()
+    qs = {}
+    for i in range(0, len(codes), 40):
+        qs.update(a.get_realtime_batch(codes[i:i + 40]))
+        import time
+        time.sleep(0.5)
+
+    hit = 0
+    for s in sepa_results:
+        code = str(s['symbol']).zfill(6)
+        q = qs.get(code)
+        if q and q.get('price'):
+            s['price'] = q['price']
+            s['realtime_change_pct'] = q.get('change_pct')
+            s['realtime_time'] = q.get('time')
+            hit += 1
+    print(f"  [实时] 刷新成功 {hit}/{len(sepa_results)}")
+    return sepa_results
+
+
+def run_fusion_scan(realtime: bool = False):
+    """运行融合扫描（realtime=True 时用实时行情刷新现价）"""
     
     print("=" * 70)
-    print("  魔法策略 + 公转自转 融合扫描器")
+    print("  魔法策略 + 公转自转 融合扫描器" + ("（盘中实时模式）" if realtime else ""))
     print("=" * 70)
     print(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
@@ -70,6 +102,10 @@ def run_fusion_scan():
     
     print(f"读取完成：{len(sepa_results)}只候选股票")
     print()
+
+    # 盘中模式：先刷新实时价格
+    if realtime:
+        sepa_results = attach_realtime_prices(sepa_results)
     
     # ===== 第二步：公转自转择时过滤 =====
     print("【第二步】公转自转决策引擎逐只过滤...")
@@ -180,4 +216,8 @@ def run_fusion_scan():
 
 
 if __name__ == '__main__':
-    run_fusion_scan()
+    parser = argparse.ArgumentParser(description="魔法策略+公转自转融合扫描器")
+    parser.add_argument('--realtime', action='store_true',
+                        help='盘中实时模式：用免费实时行情刷新候选股票现价')
+    args = parser.parse_args()
+    run_fusion_scan(realtime=args.realtime)
