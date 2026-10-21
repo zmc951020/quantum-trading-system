@@ -169,6 +169,13 @@ class UnifiedDataBus:
         except Exception as e:
             print(f"[DataBus] Vibe适配器未加载: {e}")
 
+        try:
+            from core.data_sources.realtime_adapter import RealtimeAdapter
+            self._adapters["realtime"] = RealtimeAdapter()
+            print("[DataBus] 实时适配器(腾讯/东财)已加载")
+        except Exception as e:
+            print(f"[DataBus] 实时适配器未加载: {e}")
+
         print(f"[DataBus] 可用数据源: {list(self._adapters.keys())}")
 
     def register_adapter(self, name: str, adapter: Any) -> bool:
