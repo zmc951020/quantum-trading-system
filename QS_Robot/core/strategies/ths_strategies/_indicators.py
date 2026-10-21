@@ -2,6 +2,17 @@
 
 集中实现 SMA/EMA/MACD/BOLL/DMI/EXPMA，避免 14 策略 + 18 战法重复造轮子。
 所有函数纯计算无副作用，便于单元测试。
+
+.. 待迁移说明（pending migration）::
+    统一指标库已建立：core/indicators/technical_indicators.py（纯 numpy 数组版）。
+    本文件暂未改造，原因是其对外契约与统一库差异过大，强行替换会回归：
+      - 本文件函数返回「标量 float」或「list」，统一库返回「同长 numpy 数组」；
+      - macd() 返回 5 元组 (dif, dea, hist, prev_dif, prev_dea)，统一库返回 3 元组；
+      - ema() 以 values[0] 为种子递推，统一库 ema 以前 period 个均值为种子；
+      - 无独立 atr()（atr 仅在 dmi() 内部以 TR 简单均值计算）；
+      - 调用方为 14_strategies / 18_advanced 共 30+ 战法，均按标量/list 契约取值。
+    后续迁移需同步改造全部调用方（改取数组末值），风险较大，本轮保守不动。
+    新增指标请优先用 core.indicators.technical_indicators，勿在本文件新增重复实现。
 """
 from typing import Sequence
 

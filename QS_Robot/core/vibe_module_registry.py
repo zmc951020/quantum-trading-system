@@ -1,5 +1,5 @@
 """Vibe-Trading 77个Skill模块注册表"""
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 VIBE_MODULES: Dict[str, Dict[str, str]] = {
     # ============================================================
@@ -306,7 +306,7 @@ VIBE_MODULES: Dict[str, Dict[str, str]] = {
     # alpha (3) - 因子研究模块
     # ============================================================
     "alpha-factors": {
-        "module": "core.vibe_alpha_factors", "class": "AlphaFactorEngine",
+        "module": "core.vibe_alpha_zoo", "class": "AlphaFactorEngine",
         "desc": "Alpha因子库", "category": "alpha",
     },
     "alpha-zoo": {
@@ -350,7 +350,7 @@ VIBE_MODULES: Dict[str, Dict[str, str]] = {
         "desc": "监管知识库", "category": "tools",
     },
     "29-agents": {
-        "module": "core.vibe_29_agents", "class": "VibeAgentAnalyzer",
+        "module": "core.vibe_29_agents_original", "class": "VibeAgentAnalyzer",
         "desc": "29智能体投票", "category": "tools",
     },
 }

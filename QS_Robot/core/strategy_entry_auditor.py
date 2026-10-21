@@ -7,6 +7,7 @@ import sys
 import json
 import time
 import logging
+import re
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -246,22 +247,35 @@ class StrategyEntryAuditor:
             adapter = AuroraCoreAdapter()
             strategies = adapter.get_strategy_list() if hasattr(adapter, 'get_strategy_list') else []
             for s in strategies:
-                # 多字段兼容：category > type > strategy_type > 策略名称推断
                 cat = s.get("category", "") or s.get("type", "") or s.get("strategy_type", "")
                 if not cat and isinstance(s.get("name", ""), str):
                     name = s["name"].lower()
-                    if "物理" in name or "physics" in name or "gyro" in name or "bernoulli" in name or "fourier" in name:
+                    if any(kw in name for kw in ["物理", "physics", "gyro", "bernoulli", "fourier"]):
                         cat = "physics"
-                    elif "ml" in name or "机器学习" in name or "神经网络" in name:
+                    elif any(kw in name for kw in ["ml", "机器学习", "神经网络", "lstm", "transformer"]):
                         cat = "ml"
-                    elif "网格" in name or "grid" in name:
+                    elif any(kw in name for kw in ["网格", "grid"]):
                         cat = "grid"
-                    elif "均线" in name or "macd" in name or "rsi" in name or "kdj" in name or "布林" in name:
+                    elif any(kw in name for kw in ["均线", "macd", "rsi", "kdj", "布林", "海龟", "双均线"]):
                         cat = "traditional"
                 if cat:
                     categories_found.add(cat)
         except Exception:
             pass
+        # 降级：从本地策略文件扫描
+        if not categories_found:
+            from core.tau_cluster_engine import get_cluster_engine
+            engine = get_cluster_engine()
+            for s in engine.get_registered_strategies():
+                name = s.get("name", s.get("strategy_name", "")).lower() if isinstance(s, dict) else str(s).lower()
+                if any(kw in name for kw in ["physics", "gyro", "bernoulli", "fourier"]):
+                    categories_found.add("physics")
+                elif any(kw in name for kw in ["ml", "lstm", "transformer", "xgboost"]):
+                    categories_found.add("ml")
+                elif any(kw in name for kw in ["grid", "网格"]):
+                    categories_found.add("grid")
+                elif any(kw in name for kw in ["ma", "macd", "rsi", "布林", "海龟", "双均线", "kdj"]):
+                    categories_found.add("traditional")
 
         expected = {"physics", "ml", "traditional", "grid"}
         ok = len(categories_found & expected) >= 3
@@ -350,11 +364,25 @@ class StrategyEntryAuditor:
 
     def _check_entries_independent(self):
         """N4: 三入口数据源独立性——各自API端点独立"""
+        # 扫描 gateway.py 和 api/routes/ 目录
+        content_parts = []
         gw_path = os.path.join(self.project_root, "api", "gateway.py")
-        if not os.path.exists(gw_path):
-            return False, "gateway.py不存在"
-        with open(gw_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        if os.path.exists(gw_path):
+            with open(gw_path, 'r', encoding='utf-8') as f:
+                content_parts.append(f.read())
+        routes_dir = os.path.join(self.project_root, "api", "routes")
+        if os.path.isdir(routes_dir):
+            for fname in os.listdir(routes_dir):
+                if not fname.endswith('.py') or fname.startswith('__'):
+                    continue
+                try:
+                    with open(os.path.join(routes_dir, fname), 'r', encoding='utf-8') as f:
+                        content_parts.append(f.read())
+                except Exception:
+                    pass
+        content = '\n'.join(content_parts) if content_parts else ""
+        if not content:
+            return False, "无路由文件"
         patterns = [
             ("Aurora", ["/api/strategy/list", "/api/optimizer/list"]),
             ("同花顺", ["/api/cluster/ths", "/cluster/ths", "/api/ths", "/ths"]),
@@ -421,7 +449,7 @@ class StrategyEntryAuditor:
     def _check_flow_test_to_prelive(self):
         """N3: 测试池→预实盘池"""
         try:
-            from core.stock_pool import get_stock_pool_manager, PoolLevel
+            from core.stock_pool import get_stock_pool_manager
             pool = get_stock_pool_manager()
             # 检查预实盘池是否存在（通过get_pool_summary获取各层级数量）
             summary = pool.get_pool_summary() if hasattr(pool, 'get_pool_summary') else {}
@@ -435,7 +463,7 @@ class StrategyEntryAuditor:
     def _check_flow_prelive_to_live(self):
         """N4: 预实盘→实盘"""
         try:
-            from core.stock_pool import get_stock_pool_manager, PoolLevel
+            from core.stock_pool import get_stock_pool_manager
             pool = get_stock_pool_manager()
             summary = pool.get_pool_summary() if hasattr(pool, 'get_pool_summary') else {}
             has_live = summary.get('live', -1) >= 0
@@ -506,11 +534,24 @@ class StrategyEntryAuditor:
 
     def _check_optimizer_api(self):
         """N3: 优化器API端点"""
+        content_parts = []
         gw_path = os.path.join(self.project_root, "api", "gateway.py")
-        if not os.path.exists(gw_path):
-            return False, "gateway.py不存在"
-        with open(gw_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        if os.path.exists(gw_path):
+            with open(gw_path, 'r', encoding='utf-8') as f:
+                content_parts.append(f.read())
+        routes_dir = os.path.join(self.project_root, "api", "routes")
+        if os.path.isdir(routes_dir):
+            for fname in os.listdir(routes_dir):
+                if not fname.endswith('.py') or fname.startswith('__'):
+                    continue
+                try:
+                    with open(os.path.join(routes_dir, fname), 'r', encoding='utf-8') as f:
+                        content_parts.append(f.read())
+                except Exception:
+                    pass
+        content = '\n'.join(content_parts) if content_parts else ""
+        if not content:
+            return False, "无路由文件"
         endpoints = [
             "/api/optimizer/list", "/api/tau/optimize",
             "/api/optimizer/run", "/api/strategy/optimize",

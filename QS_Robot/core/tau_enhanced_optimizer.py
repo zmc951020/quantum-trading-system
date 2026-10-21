@@ -27,6 +27,7 @@ EntropyTauOptimizer（熵韬收敛优化器集群）是主力策略寻优引擎�
 import math
 import random
 import time
+import importlib
 import statistics
 from collections import Counter
 from typing import Dict, List, Optional, Any, Tuple
@@ -37,8 +38,7 @@ from dataclasses import dataclass, field
 
 # 引用现有优化器的基础组件
 from core.tau_optimizer_cluster import (
-    TauOptimizerCluster, BacktestResult, ParameterSpaceFolding,
-    SimilarityCache, IncrementalBacktest, PatternAnalyzer
+    TauOptimizerCluster, BacktestResult, PatternAnalyzer
 )
 
 
@@ -148,7 +148,7 @@ class EntropyCalculator:
             return 0.0
 
         n_features = len(feature_matrix[0])
-        n_samples = len(feature_matrix)
+        len(feature_matrix)
 
         # 计算特征间相关系数矩阵的熵
         correlations = []
@@ -742,7 +742,6 @@ class EntropyTauOptimizer(TauOptimizerCluster):
         # ================================================================
         # Warm Start: 从上次优化继承最佳参数，作为搜索起点
         # ================================================================
-        warm_start_eval = 0
         if self.warm_start_params:
             print(f"  [WarmStart] 从历史最佳参数继承: {self.warm_start_params}")
             # 先评估 warm start 参数
@@ -751,7 +750,6 @@ class EntropyTauOptimizer(TauOptimizerCluster):
             enhanced = self._enhanced_score(result, daily_r, trade_r, signals)
             results.append((result, enhanced, mode))
             self.folding.record_coarse_result(self.warm_start_params, result)
-            warm_start_eval = 1
 
         # ================================================================
         # 阶段1: 自适应粗筛（五维在线驱动）
@@ -792,7 +790,7 @@ class EntropyTauOptimizer(TauOptimizerCluster):
                 recent_info = coarse_region_info[-online_batch:]
                 red_ratio = sum(1 for ri in recent_info if ri["risk_level"] == "red") / len(recent_info)
                 green_ratio = sum(1 for ri in recent_info if ri["risk_level"] == "green") / len(recent_info)
-                avg_score = statistics.mean([ri["score"] for ri in recent_info])
+                statistics.mean([ri["score"] for ri in recent_info])
                 avg_entropy = statistics.mean([
                     self._entropy_history[j] for j in range(max(0, i - online_batch), i + 1)
                 ]) if self._entropy_history else 0.5
@@ -952,7 +950,7 @@ class EntropyTauOptimizer(TauOptimizerCluster):
 
         # 如果没有有效结果，降级使用全部结果
         if not valid_results:
-            print(f"    -> 警告: 所有参数均被过滤，降级使用全部结果")
+            print("    -> 警告: 所有参数均被过滤，降级使用全部结果")
             valid_results = results
 
         all_results = [(r, e, m) for r, e, m in valid_results]
@@ -1042,6 +1040,67 @@ class EntropyTauOptimizer(TauOptimizerCluster):
             "persisted": persisted,
         }
 
+
+    def load_strategy_param_space(self, strategy_module: str = None,
+                                   strategy_class: str = None,
+                                   strategy_instance: Any = None) -> Dict[str, List[float]]:
+        """
+        动态加载策略的 get_param_space() 并更新 param_ranges
+
+        在五维优化器中使用策略自己的参数空间，替代硬编码。
+        调用后将自动替换 self.param_ranges 为策略定义的搜索空间，
+        同时更新 _param_history 和熵计算器。
+
+        智能搜索空间转换:
+          - 策略 get_param_space() 返回 {name: [v1, v2, ...]} 格式
+          - 转换为 {(min, max)} 格式供优化器使用
+          - 自动计算每个参数的建议候选值数量
+
+        Args:
+            strategy_module: 策略模块路径
+            strategy_class: 策略类名
+            strategy_instance: 策略实例
+        """
+        param_space = None
+
+        if strategy_instance is not None and hasattr(strategy_instance, 'get_param_space'):
+            try:
+                param_space = strategy_instance.get_param_space()
+            except Exception:
+                pass
+
+        if param_space is None and strategy_module and strategy_class:
+            try:
+                mod = importlib.import_module(strategy_module)
+                cls = getattr(mod, strategy_class)
+                try:
+                    instance = cls()
+                except Exception:
+                    instance = None
+                if instance and hasattr(instance, 'get_param_space'):
+                    param_space = instance.get_param_space()
+                elif hasattr(cls, 'get_param_space'):
+                    param_space = cls.get_param_space(None)
+            except Exception:
+                pass
+
+        if not param_space:
+            return {}
+
+        # 转换为 {name: (min, max)} 格式
+        new_ranges = {}
+        for name, values in param_space.items():
+            if isinstance(values, (list, tuple)) and len(values) >= 2:
+                vals = sorted(values)
+                new_ranges[name] = (float(vals[0]), float(vals[-1]))
+
+        if new_ranges:
+            self.param_ranges = new_ranges
+            self._param_history = []
+            self._entropy_history = []
+
+        return param_space
+
     def _generate_refined_around_center(self, center_params: Dict[str, float],
                                          n_points: int) -> List[Dict[str, float]]:
         """
@@ -1118,7 +1177,7 @@ def compare_optimizers(param_ranges: Dict[str, Tuple[float, float]],
       - 耗时
     """
     print(f"\n{'='*60}")
-    print(f"  A/B对比测试: 原韬定律 vs 熵韬收敛优化器")
+    print("  A/B对比测试: 原韬定律 vs 熵韬收敛优化器")
     print(f"  策略: {strategy_name}")
     print(f"  粗筛: {coarse_points}点, 精搜: {refined_points}点/区域")
     print(f"{'='*60}")
@@ -1159,7 +1218,7 @@ def compare_optimizers(param_ranges: Dict[str, Tuple[float, float]],
 
     # ---- 对比报告 ----
     print(f"\n{'='*60}")
-    print(f"  A/B对比结果（统一使用原评分体系）")
+    print("  A/B对比结果（统一使用原评分体系）")
     print(f"{'='*60}")
     print(f"  {'指标':<22} {'原韬定律':<15} {'熵韬收敛':<15} {'差异':<10}")
     print(f"  {'-'*60}")

@@ -14,14 +14,10 @@
 - 委托状态跟踪
 """
 
-import os
-import sys
-import json
-import time
 import logging
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -260,16 +256,48 @@ class BrokerConnector:
     def submit_order_with_risk_check(self, symbol: str, side: str, order_type: str,
                                       price: float, quantity: int,
                                       vibe_verified: bool = False) -> Dict:
-        """带风控检查的下单"""
+        """带风控检查的下单（fail-close：风控异常或拦截时拒绝下单）"""
         # 1. 风控预检
         risk_warnings = []
         if self._risk_engine:
             try:
                 risk_result = self._risk_engine.evaluate_order(symbol, side, price, quantity)
-                if not risk_result.get('passed', True):
-                    risk_warnings = risk_result.get('warnings', [])
             except Exception as e:
-                logger.error(f"风控检查失败: {e}")
+                # fail-close：风控引擎抛异常，拒绝下单，不得放行
+                logger.error(f"风控检查失败，拒绝下单(fail-close): {e}")
+                return {
+                    "success": False,
+                    "status": "rejected",
+                    "reason": "risk_engine_exception",
+                    "error": str(e),
+                    "symbol": symbol,
+                    "side": side,
+                    "order_type": order_type,
+                    "price": price,
+                    "quantity": quantity,
+                    "risk_warnings": risk_warnings,
+                    "vibe_verified": vibe_verified,
+                }
+            if risk_result.get('passed', True) is False:
+                # fail-close：风控明确拦截(passed=False)，拒绝下单
+                risk_warnings = risk_result.get('warnings', [])
+                logger.warning(f"风控拦截，拒绝下单(fail-close): {symbol} {side} {quantity}手, warnings={risk_warnings}")
+                return {
+                    "success": False,
+                    "status": "rejected",
+                    "reason": "risk_check_failed",
+                    "symbol": symbol,
+                    "side": side,
+                    "order_type": order_type,
+                    "price": price,
+                    "quantity": quantity,
+                    "risk_warnings": risk_warnings,
+                    "vibe_verified": vibe_verified,
+                }
+        else:
+            # 未配置风控引擎：保持放行，但保留一条 warning 以便审计
+            logger.warning("未配置风控引擎，订单将放行")
+            risk_warnings.append("未配置风控引擎")
 
         # 2. Vibe复核
         if not vibe_verified:

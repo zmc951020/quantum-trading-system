@@ -187,10 +187,11 @@ def build_l1_checks(hc) -> List[Callable]:
     yield ("L1_018", "登录失败锁定", "L1_安全认证", "critical", "both", _l1_018)
 
     def _l1_019():
-        gw_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
-        if not os.path.exists(gw_path):
-            return (True, 80, "api/gateway.py 检查跳过", "")
-        with open(gw_path, 'r', encoding='utf-8') as f:
+        # 检查 sanitize.py 中间件中的白名单净化实现
+        sanitize_path = os.path.join(PROJECT_ROOT, "api", "middleware", "sanitize.py")
+        if not os.path.exists(sanitize_path):
+            return (True, 80, "sanitize.py 检查跳过", "")
+        with open(sanitize_path, 'r', encoding='utf-8') as f:
             content = f.read()
         has_whitelist = 're.sub' in content and 'x00' in content
         return (has_whitelist, 100 if has_whitelist else 0,

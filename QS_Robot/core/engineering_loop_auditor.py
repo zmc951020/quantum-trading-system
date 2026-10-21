@@ -8,7 +8,7 @@ import time
 import sys
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Callable, Optional
+from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger("EngineeringLoopAuditor")
 
@@ -240,7 +240,6 @@ class EngineeringLoopAuditor:
             from core.tau_optimizer_cluster import get_parameter_store
             store = get_parameter_store()
             info = store.get_all_strategies_info() if hasattr(store, 'get_all_strategies_info') else []
-            from core.shepherd_optimizer import ShepherdOptimizer
             return True, f"优化器: TauCluster+Shepherd, 参数历史={len(info)}条"
         except Exception as e:
             return False, str(e)
@@ -352,12 +351,9 @@ class EngineeringLoopAuditor:
             issues.append(f"Aurora页面优化器={'✓' if has_opt else '✗'}")
         else:
             issues.append("Aurora页面缺失")
-        gw_path = os.path.join(self.project_root, "api", "gateway.py")
-        if os.path.exists(gw_path):
-            with open(gw_path, 'r', encoding='utf-8') as f:
-                gw_content = f.read()
-            has_api = 'optimize' in gw_content or 'optimizer' in gw_content
-            issues.append(f"优化器API={'✓' if has_api else '✗'}")
+        gw_content = self._read_all_routes()
+        has_api = 'optimize' in gw_content or 'optimizer' in gw_content
+        issues.append(f"优化器API={'✓' if has_api else '✗'}")
         all_ok = "❌" not in " ".join(issues) and "✗" not in " ".join(issues)
         return all_ok, ", ".join(issues)
 
@@ -380,13 +376,33 @@ class EngineeringLoopAuditor:
         ok = all("△" not in c for c in checks)
         return ok, "; ".join(checks)
 
+    def _read_all_routes(self) -> str:
+        """读取所有路由文件内容（api/routes/ + api/gateway.py）"""
+        parts = []
+        routes_dir = os.path.join(self.project_root, "api", "routes")
+        if os.path.isdir(routes_dir):
+            for fname in os.listdir(routes_dir):
+                if not fname.endswith('.py') or fname.startswith('__'):
+                    continue
+                try:
+                    with open(os.path.join(routes_dir, fname), 'r', encoding='utf-8') as f:
+                        parts.append(f.read())
+                except Exception:
+                    pass
+        gw_path = os.path.join(self.project_root, "api", "gateway.py")
+        if os.path.exists(gw_path):
+            try:
+                with open(gw_path, 'r', encoding='utf-8') as f:
+                    parts.append(f.read())
+            except Exception:
+                pass
+        return '\n'.join(parts)
+
     # ── 四、链路通达性（4项）────────────────────────────
 
     def _check_link_api(self):
         try:
-            gw_path = os.path.join(self.project_root, "api", "gateway.py")
-            with open(gw_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = self._read_all_routes()
             key_endpoints = [
                 "/strategy/list", "/backtest/history", "/optimizer/list",
                 "/health/check", "/stock-pool", "/agent/dispatch",
@@ -451,14 +467,15 @@ class EngineeringLoopAuditor:
         except ImportError:
             alert_ok = False
         has_cooldown = False
-        for mod_name in ["integration_bus", "risk_control"]:
+        for mod_name in ["integration_bus", "risk_control", "alert_manager"]:
             try:
-                import inspect
-                mod = __import__(f"core.{mod_name}", fromlist=[mod_name])
-                src = inspect.getsource(mod)
-                has_cooldown = "cooldown" in src.lower() or "冷却" in src
-                if has_cooldown:
-                    break
+                fpath = os.path.join(self.project_root, "core", f"{mod_name}.py")
+                if os.path.exists(fpath):
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        src = f.read()
+                    has_cooldown = "cooldown" in src.lower() or "冷却" in src
+                    if has_cooldown:
+                        break
             except Exception:
                 pass
         all_ok = rm_ok and alert_ok and has_cooldown

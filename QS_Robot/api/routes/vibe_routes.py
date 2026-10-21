@@ -2,19 +2,10 @@
 """vibe_routes - API网关路由"""
 from flask import request, jsonify
 from api.response_formatter import APIResponse
-from api.aurora_core_adapter import get_aurora_adapter, AURORA_BACKEND
 
 from api.middleware.auth import require_auth
-from api.middleware.csrf import require_csrf
-from api.middleware.rate_limit import rate_limit
-from api.middleware.sanitize import sanitize_input
-from api.middleware.origin import check_origin
-from api.middleware.threat import check_threat
-from api.validators import get_input_validator, get_data_masker
 
 import logging
-import os
-import time
 logger = logging.getLogger(__name__)
 
 
@@ -70,7 +61,6 @@ def register_routes(api_gateway):
 
 
     # ============================================================
-
     @api_gateway.route('/vibe/analyze_and_optimize', methods=['POST'])
     @require_auth
     def vibe_analyze_and_optimize():
@@ -247,7 +237,7 @@ def register_routes(api_gateway):
     def vibe_nlp_parse():
         """POST /api/vibe/nlp/parse
         解析自然语言指令，返回意图识别、技能映射、错配检测结果
-    
+
         Body: {"text": "分析贵州茅台"}
         """
         try:
@@ -308,9 +298,6 @@ def register_routes(api_gateway):
             })
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
-
-
-    # ============================================================
 
     @api_gateway.route('/vibe/session/history', methods=['GET'])
     @require_auth
@@ -430,9 +417,6 @@ def register_routes(api_gateway):
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
 
-
-    # ============================================================
-
     @api_gateway.route('/vibe/drill/macro', methods=['GET'])
     @require_auth
     def vibe_drill_macro():
@@ -531,9 +515,6 @@ def register_routes(api_gateway):
             return jsonify({"success": True, "data": data})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
-
-
-    # ============================================================
 
     @api_gateway.route('/vibe/trace/full/<node_id>', methods=['GET'])
     @require_auth
@@ -669,4 +650,71 @@ def register_routes(api_gateway):
 
 
     # ============================================================
+    # Vibe模块列表API（L9_026/L9_029/L9_032依赖）
+    # ============================================================
+
+    @api_gateway.route('/vibe/modules', methods=['GET'])
+    @require_auth
+    def vibe_modules_list():
+        """GET /api/vibe/modules — 返回所有Vibe模块注册信息"""
+        try:
+            from core.vibe_module_registry import VIBE_MODULES
+            modules = {}
+            for name, info in VIBE_MODULES.items():
+                modules[name] = {
+                    "module": info.get("module", ""),
+                    "class": info.get("class", ""),
+                    "desc": info.get("desc", ""),
+                    "category": info.get("category", "unknown"),
+                }
+            categories = {}
+            for name, info in VIBE_MODULES.items():
+                cat = info.get("category", "unknown")
+                categories.setdefault(cat, 0)
+                categories[cat] += 1
+            return jsonify({
+                "success": True,
+                "data": {
+                    "modules": modules,
+                    "categories": categories,
+                    "total": len(modules),
+                },
+                "message": f"Vibe模块列表: {len(modules)}个模块",
+            })
+        except Exception as e:
+            logger.error(f"Vibe模块列表获取失败: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
+
+    @api_gateway.route('/vibe/module/<name>', methods=['GET'])
+    @require_auth
+    def vibe_module_detail(name):
+        """GET /api/vibe/module/<name> — 返回单个Vibe模块详情"""
+        try:
+            from core.vibe_module_registry import VIBE_MODULES
+            if name not in VIBE_MODULES:
+                return jsonify({"success": False, "error": f"模块 {name} 不存在"}), 404
+            info = VIBE_MODULES[name]
+            module_path = info.get("module", "")
+            class_name = info.get("class", "")
+            importable = False
+            try:
+                import importlib
+                mod = importlib.import_module(module_path)
+                importable = hasattr(mod, class_name)
+            except Exception:
+                pass
+            return jsonify({
+                "success": True,
+                "data": {
+                    "name": name,
+                    "module": module_path,
+                    "class": class_name,
+                    "desc": info.get("desc", ""),
+                    "category": info.get("category", "unknown"),
+                    "importable": importable,
+                },
+            })
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
 

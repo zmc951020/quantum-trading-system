@@ -56,6 +56,8 @@ _*.py
 _*.ps1
 check_*.py
 check_*.ps1
+# pre-commit 钩子脚本（2026-10-21 起入库，排除上述临时脚本规则）
+!QS_Robot/scripts/hooks/check_*.py
 diagnose_*.py
 verify_*.py
 aurora_core_path.py

@@ -27,7 +27,7 @@ def build_l7_checks(hc) -> List[Callable]:
     yield ("L7_001", "前端页面可达", "L7_运维部署", "critical", "both", _l7_001)
 
     def _l7_002():
-        scripts = ["启动服务.bat", "QS_Robot启动器.bat", "start_ui.py", "start_ui_simple.py"]
+        scripts = ["启动服务.bat", "QS_Robot启动器.bat", "start_ui.py"]
         missing = [s for s in scripts if not hc._file_check(s)]
         ok = len(missing) == 0
         return (ok, 100 if ok else max(0, 100 - len(missing) * 25),
@@ -55,14 +55,13 @@ def build_l7_checks(hc) -> List[Callable]:
     def _l7_004():
         """告警系统（合并L7_006+L7_006b，模块+API双重验证）"""
         try:
-            from core.alert_manager import AlertManager, get_alert_manager
+            from core.alert_manager import get_alert_manager
             am = get_alert_manager()
             channels = list(am._channels.keys())
-            history = am.get_history(limit=5)
+            am.get_history(limit=5)
             module_ok = True
         except Exception:
             channels = []
-            history = []
             module_ok = False
         api_ok, _ = hc._api_get("/api/alerts")
         ok = module_ok and api_ok

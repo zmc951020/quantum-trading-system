@@ -11,12 +11,16 @@
 
 import sys
 import hashlib
+import importlib
 import json
 import time
 import random
 import math
 import datetime
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Tuple
 from collections import OrderedDict
@@ -35,9 +39,14 @@ if sys.platform == 'win32':
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        try:
+            import io
+            if hasattr(sys.stdout, 'buffer'):
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            if hasattr(sys.stderr, 'buffer'):
+                sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        except Exception:
+            pass  # 非终端环境（如StringIO）跳过编码补丁
 
 
 # ============================================================
@@ -841,11 +850,18 @@ class TauOptimizerCluster:
                 pass
 
         # 2) 降级: 优先使用策略感知的 estimate_quality，失败时退回到通用模拟
+        # B4b: 伪造回测路径阻断——simulated 结果不得流入任何优化/选优/汇报
+        # （此路径是 random.uniform 伪造收益/夏普/回撤/胜率/交易数的唯一入口，
+        #   阻断后任何调用方（含 EntropyTauOptimizer 继承链）都无法触达伪造结果）
+        if os.environ.get('QS_ROBOT_ALLOW_SIMULATED', '0') != '1':
+            raise RuntimeError(
+                f'B4b: simulated backtest blocked for {self.strategy_name} — '
+                '伪造回测路径已禁用（需真实回测；仅调试可设 QS_ROBOT_ALLOW_SIMULATED=1）')
         compute_time = random.uniform(150.0, 350.0)
         quality = None
-        # 关键标志: True=模块返回 0-10 分, False=返回 0-1 分
+        # 关键标志说明: True=模块返回 0-10 分, False=返回 0-1 分
         # (gyro/fourier 用 0-10, bernoulli/shepherd/_simulate 用 0-1)
-        is_0_to_10_scale = False
+        # is_0_to_10_scale 曾在此赋值 False 但从未被使用（死代码，2026-10-21 清理）
 
         # 检查当前策略是否有专用的 estimate_quality 方法 (通过 strategy_module)
         try:
@@ -1993,6 +2009,106 @@ class ShepherdRotationModule:
             group_scores.append(self.estimate_group_quality(group_name, params))
         return sum(group_scores) / len(group_scores) if group_scores else 0.5
 
+    # --------------------------------------------------------
+    # 自适应参数接口
+    # --------------------------------------------------------
+
+    def get_param_space(self) -> Dict[str, List[float]]:
+        """返回7个因子组的权重搜索空间 + 5个轮动控制参数
+
+        Returns:
+            {param_name: [candidate_values], ...}
+            因子组权重: 0.1-2.0, 步长0.2 → 10个候选值
+            轮动控制参数: 各自范围均匀采样
+        """
+        def _linspace(lo, hi, n):
+            if n <= 1:
+                return [lo]
+            step = (hi - lo) / (n - 1)
+            return [lo + step * i for i in range(n)]
+
+        space = {}
+        for group_name, factors in self.FACTOR_GROUPS.items():
+            for factor in factors:
+                lo, hi = self.param_ranges[factor]
+                if group_name == 'rotation_controls':
+                    n = 7 if hi - lo > 5 else 5
+                else:
+                    n = 10
+                space[factor] = [round(x, 3) for x in _linspace(lo, hi, n)]
+        return space
+
+    def get_adaptive_params(self, market_regime: str = 'normal') -> Dict[str, float]:
+        """根据市场状态动态调整因子组权重和轮动控制参数
+
+        Args:
+            market_regime: 'trend'|'oscillation'|'bear'|'normal'
+
+        Returns:
+            调整后的所有参数字典
+        """
+        base = {}
+        for group_name, factors in self.FACTOR_GROUPS.items():
+            for factor in factors:
+                lo, hi = self.param_ranges[factor]
+                base[factor] = round((lo + hi) / 2, 3)
+
+        regime_weights = {
+            'trend': {'trend_factors': 1.6, 'momentum_factors': 1.4,
+                      'volatility_factors': 0.6, 'volume_factors': 0.8,
+                      'value_factors': 0.5, 'quality_factors': 0.5},
+            'oscillation': {'trend_factors': 0.5, 'momentum_factors': 0.6,
+                            'volatility_factors': 1.5, 'volume_factors': 1.4,
+                            'value_factors': 0.7, 'quality_factors': 0.7},
+            'bear': {'trend_factors': 0.4, 'momentum_factors': 0.5,
+                     'volatility_factors': 1.2, 'volume_factors': 1.0,
+                     'value_factors': 1.5, 'quality_factors': 1.4},
+            'normal': {'trend_factors': 1.0, 'momentum_factors': 1.0,
+                       'volatility_factors': 1.0, 'volume_factors': 1.0,
+                       'value_factors': 1.0, 'quality_factors': 1.0},
+        }
+
+        weights = regime_weights.get(market_regime, regime_weights['normal'])
+        for group_name in ('trend_factors', 'momentum_factors',
+                           'volatility_factors', 'volume_factors',
+                           'value_factors', 'quality_factors'):
+            for factor in self.FACTOR_GROUPS[group_name]:
+                base[factor] = round(weights[group_name], 2)
+
+        if market_regime == 'trend':
+            base['rotation_threshold'] = 0.08
+            base['min_hold_period'] = 15.0
+            base['max_position_pct'] = 0.25
+            base['max_holdings'] = 5.0
+            base['rebalance_frequency'] = 10.0
+        elif market_regime == 'oscillation':
+            base['rotation_threshold'] = 0.05
+            base['min_hold_period'] = 5.0
+            base['max_position_pct'] = 0.12
+            base['max_holdings'] = 3.0
+            base['rebalance_frequency'] = 3.0
+        elif market_regime == 'bear':
+            base['rotation_threshold'] = 0.12
+            base['min_hold_period'] = 20.0
+            base['max_position_pct'] = 0.08
+            base['max_holdings'] = 2.0
+            base['rebalance_frequency'] = 15.0
+        else:
+            base['rotation_threshold'] = 0.08
+            base['min_hold_period'] = 10.0
+            base['max_position_pct'] = 0.15
+            base['max_holdings'] = 5.0
+            base['rebalance_frequency'] = 7.0
+
+        return base
+
+    def apply_adaptive_params(self, adaptive_params: Dict[str, float]):
+        """应用自适应参数到实例"""
+        for k, v in adaptive_params.items():
+            if k in self.param_ranges:
+                self.param_ranges[k] = (max(0.01, v * 0.5), min(5.0, v * 1.5))
+        self._active_factor_mask = {}
+
 
 # ============================================================
 # 策略感知模块 3: 因子空间折叠 (高维参数空间专用)
@@ -2636,13 +2752,13 @@ class PatternAnalyzer:
             return {
                 'category': '🔍 滤波器参数',
                 'short_text': f"{pname}: 好参数偏好 {'更低' if direction == 'lower' else '更高'}阶滤波 ({top_mean:.2f})",
-                'action_suggestion': f"信号滤波长度与市场状态相关。可尝试根据 ADX 或 Hurst 指数动态切换滤波强度"
+                'action_suggestion': "信号滤波长度与市场状态相关。可尝试根据 ADX 或 Hurst 指数动态切换滤波强度"
             }
         elif category == 'momentum':
             return {
                 'category': '📈 动量/趋势类',
                 'short_text': f"{pname}: 好参数偏好 {'小周期' if direction == 'lower' else '长周期'} ({top_mean:.2f})",
-                'action_suggestion': f"动量参数的最优值与市场状态强相关。可加入 regime 检测后做参数切换"
+                'action_suggestion': "动量参数的最优值与市场状态强相关。可加入 regime 检测后做参数切换"
             }
         elif category == 'gyro':
             return {
@@ -2683,7 +2799,7 @@ class PatternAnalyzer:
                               f"[{r['suggested_range'][0]}, {r['suggested_range'][1]}] "
                               f"(收缩 {int(r['contraction_ratio']*100)}%)")
         else:
-            lines.append(f"    ⚪ 当前未发现可收缩的参数 (好/坏参数区分布无显著差异)")
+            lines.append("    ⚪ 当前未发现可收缩的参数 (好/坏参数区分布无显著差异)")
 
         # ③ 参数锁定建议
         lks = analysis['lock_suggestions']
@@ -2693,9 +2809,9 @@ class PatternAnalyzer:
             for l in lks:
                 lines.append(f"    🟢 {l['param']}: 建议锁定为 {l['suggested_value']} "
                               f"(相关系数={l['correlation']}, 好坏差异={l['norm_diff']})")
-                lines.append(f"       → 从优化变量中移除此参数, 降低搜索维度")
+                lines.append("       → 从优化变量中移除此参数, 降低搜索维度")
         else:
-            lines.append(f"    ⚪ 所有参数都对评分有显著影响, 暂不建议锁定")
+            lines.append("    ⚪ 所有参数都对评分有显著影响, 暂不建议锁定")
 
         # 策略改进方向
         arcs = analysis['architecture_suggestions']
@@ -2708,7 +2824,7 @@ class PatternAnalyzer:
                 lines.append(f"       建议: {a['action_suggestion']}")
                 lines.append("")
         else:
-            lines.append(f"    ⚪ 暂未检测到需要架构级修改的参数模式")
+            lines.append("    ⚪ 暂未检测到需要架构级修改的参数模式")
 
         lines.append("=" * 68)
         return "\n".join(lines)
@@ -2815,6 +2931,136 @@ class StrategyOptimizerBus:
             groups = self.current_module.get_param_groups()
             info['groups'] = f"{len(groups)} groups: {', '.join(groups.keys())}"
         return info
+
+    def load_strategy_param_space(self, strategy_module: str = None,
+                                   strategy_class: str = None,
+                                   strategy_instance: Any = None) -> Dict[str, List[float]]:
+        """
+        动态加载策略的 get_param_space() 替代硬编码参数范围
+
+        优先级:
+          1. 传入 strategy_instance → 直接调用 get_param_space()
+          2. 传入 module+class → 动态导入并调用 get_param_space()
+          3. 当前模块 → 使用已加载模块的 get_param_space()
+          4. 回退 → 使用通用参数范围
+
+        Args:
+            strategy_module: 策略模块路径 (如 'strategies.golden_bowl_ice_break')
+            strategy_class: 策略类名 (如 'GoldenBowlIceBreakStrategy')
+            strategy_instance: 已实例化的策略对象
+
+        Returns:
+            {param_name: [候选值列表], ...} 格式的搜索空间
+        """
+        param_space = None
+
+        # 方式1: 直接使用策略实例
+        if strategy_instance is not None and hasattr(strategy_instance, 'get_param_space'):
+            try:
+                param_space = strategy_instance.get_param_space()
+                if param_space:
+                    self.current_module_name = f"{type(strategy_instance).__name__}(instance)"
+                    return param_space
+            except Exception:
+                pass
+
+        # 方式2: 动态导入策略类
+        if strategy_module and strategy_class:
+            try:
+                mod = importlib.import_module(strategy_module)
+                cls = getattr(mod, strategy_class)
+                # 尝试实例化（使用最小参数）
+                try:
+                    instance = cls()
+                except Exception:
+                    instance = None
+                if instance and hasattr(instance, 'get_param_space'):
+                    param_space = instance.get_param_space()
+                elif hasattr(cls, 'get_param_space'):
+                    param_space = cls.get_param_space(None)
+                if param_space:
+                    self.current_module_name = strategy_class
+                    return param_space
+            except Exception:
+                pass
+
+        # 方式3: 使用当前已加载模块
+        if self.current_module and hasattr(self.current_module, 'get_param_space'):
+            try:
+                param_space = self.current_module.get_param_space()
+                if param_space:
+                    return param_space
+            except Exception:
+                pass
+
+        # 方式4: 回退到通用参数范围
+        return {
+            'short_period': [5, 10, 20, 30, 50],
+            'long_period': [30, 50, 100, 150, 200],
+            'threshold': [0.01, 0.02, 0.05, 0.08, 0.10],
+        }
+
+    def load_strategy_adaptive_params(self, strategy_instance: Any = None,
+                                       market_data: Any = None) -> Dict[str, float]:
+        """
+        动态加载策略的 get_adaptive_params() 获取市场自适应参数
+
+        Args:
+            strategy_instance: 已实例化的策略对象
+            market_data: 市场数据 (pd.Series / np.ndarray / dict)
+
+        Returns:
+            自适应参数字典
+        """
+        if strategy_instance is None:
+            return {}
+
+        if hasattr(strategy_instance, 'get_adaptive_params'):
+            try:
+                if market_data is not None:
+                    return strategy_instance.get_adaptive_params(market_data)
+                return strategy_instance.get_adaptive_params()
+            except Exception:
+                pass
+
+        return {}
+
+    def apply_strategy_adaptive_params(self, strategy_instance: Any = None,
+                                        params: Dict[str, float] = None,
+                                        market_data: Any = None) -> bool:
+        """
+        应用自适应参数到策略实例
+
+        Args:
+            strategy_instance: 策略实例
+            params: 手动指定的参数字典
+            market_data: 市场数据（用于自动计算自适应参数）
+
+        Returns:
+            是否成功应用
+        """
+        if strategy_instance is None:
+            return False
+
+        # 优先使用手动指定的参数
+        if params and hasattr(strategy_instance, 'apply_adaptive_params'):
+            try:
+                strategy_instance.apply_adaptive_params(params)
+                return True
+            except Exception:
+                pass
+
+        # 自动计算并应用自适应参数
+        if market_data is not None and hasattr(strategy_instance, 'get_adaptive_params'):
+            try:
+                adaptive = strategy_instance.get_adaptive_params(market_data)
+                if adaptive and hasattr(strategy_instance, 'apply_adaptive_params'):
+                    strategy_instance.apply_adaptive_params(adaptive)
+                    return True
+            except Exception:
+                pass
+
+        return False
 
 
 def create_tau_cluster_with_mgr(strategy_name: str,

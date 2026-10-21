@@ -25,10 +25,8 @@ Special Forces Wyckoff Adaptive Strategy (自演进版)
 import os
 import sys
 import time
-import json
 import numpy as np
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 # 路径设置
@@ -37,10 +35,10 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from core.multi_timeframe_pipeline import MultiTimeframePipeline, AlignedData
-from core.wyckoff_factors import WyckoffFactorEngine, ALL_FACTOR_NAMES
+from core.wyckoff_factors import WyckoffFactorEngine
 from core.wyckoff_phase_detector import (
     WyckoffPhaseDetector, SignalGenerator,
-    WyckoffPhase, SignalType, PhaseResult, TradeSignal
+    SignalType, TradeSignal
 )
 
 
@@ -483,7 +481,6 @@ class SpecialForcesStrategy:
         for s in self._signals:
             if s.signal_type != SignalType.NO_SIGNAL:
                 # 从因子中获取阶段
-                phase_labels = {0: "吸筹", 1: "拉升", 2: "派发", 3: "下跌"}
                 # 简化：统计信号类型
                 label = "BUY" if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY) else "SELL"
                 phase_dist[label] = phase_dist.get(label, 0) + 1
@@ -650,6 +647,97 @@ class SpecialForcesStrategy:
             score += 0.1
 
         return max(0.0, min(1.0, score))
+
+    # --------------------------------------------------------
+    # 自适应参数接口
+    # --------------------------------------------------------
+
+    def get_param_space(self) -> Dict[str, List[float]]:
+        """将PARAM_RANGES转化为搜索空间格式，每个参数给出具体候选值列表"""
+        space = {}
+        for name, (lo, hi) in self.PARAM_RANGES.items():
+            if name in ("min_bar_interval",):
+                space[name] = [int(x) for x in np.linspace(lo, hi, 5)]
+            elif name in ("base_position_pct", "max_position_pct",
+                          "market_risk_cut", "market_risk_skip",
+                          "min_signal_confidence"):
+                space[name] = [round(x, 3) for x in np.linspace(lo, hi, 7)]
+            elif name in ("stop_loss_atr_mult", "take_profit_rr"):
+                space[name] = [round(x, 2) for x in np.linspace(lo, hi, 6)]
+            else:
+                space[name] = [round(x, 2) for x in np.linspace(lo, hi, 5)]
+        return space
+
+    def get_adaptive_params(self, market_context: Dict[str, float] = None) -> Dict[str, float]:
+        """根据市场波动率(ATR)和趋势强度动态调整阈值和止损止盈
+
+        Args:
+            market_context: {
+                'atr_percentile': float,      # ATR历史分位 [0-1], 默认0.5
+                'trend_strength': float,       # 趋势强度 [0-1], 默认0.5
+                'volatility_regime': str,      # 'low'|'normal'|'high', 默认'normal'
+            }
+
+        Returns:
+            调整后的参数字典
+        """
+        ctx = market_context or {}
+        atr_pct = float(ctx.get('atr_percentile', 0.5))
+        trend = float(ctx.get('trend_strength', 0.5))
+        regime = ctx.get('volatility_regime', 'normal')
+
+        base = {
+            'spring_threshold': 0.25, 'sos_threshold': 0.20,
+            'joc_threshold': 0.20, 'lps_threshold': 0.20,
+            'ut_threshold': 0.20, 'sow_threshold': 0.20,
+            'supply_exhausted_threshold': 0.35, 'demand_exhausted_threshold': 0.35,
+            'stop_loss_atr_mult': 2.0, 'take_profit_rr': 2.5,
+            'trailing_stop_pct': 0.03, 'base_position_pct': 0.20,
+            'max_position_pct': 0.35, 'market_risk_cut': 0.60,
+            'market_risk_skip': 0.80, 'min_signal_confidence': 0.60,
+            'min_bar_interval': 4,
+        }
+
+        if regime == 'high':
+            vol_mult = 1.0 + atr_pct * 0.6
+        elif regime == 'low':
+            vol_mult = 0.7 - atr_pct * 0.3
+        else:
+            vol_mult = 0.85 + atr_pct * 0.3
+
+        base['spring_threshold'] = round(base['spring_threshold'] * (0.8 + atr_pct * 0.4), 2)
+        base['sos_threshold'] = round(base['sos_threshold'] * (0.8 + atr_pct * 0.4), 2)
+        base['stop_loss_atr_mult'] = round(2.0 * vol_mult, 2)
+        base['trailing_stop_pct'] = round(0.03 * vol_mult, 3)
+        base['base_position_pct'] = round(0.20 / max(0.7, vol_mult), 3)
+        base['max_position_pct'] = round(0.35 / max(0.7, vol_mult), 3)
+        base['take_profit_rr'] = round(2.5 * (0.8 + trend * 0.4), 2)
+        base['min_signal_confidence'] = round(0.60 - trend * 0.1, 2)
+
+        return base
+
+    def apply_adaptive_params(self, adaptive_params: Dict[str, float]):
+        """将自适应参数应用到StrategyParams"""
+        for k, v in adaptive_params.items():
+            if hasattr(self.params, k):
+                setattr(self.params, k, v)
+        self._signal_generator = SignalGenerator(
+            stop_loss_atr_mult=self.params.stop_loss_atr_mult,
+            take_profit_rr=self.params.take_profit_rr,
+            base_position_pct=self.params.base_position_pct,
+        )
+        self._phase_detector = WyckoffPhaseDetector(thresholds={
+            "acc_spring": self.params.spring_threshold,
+            "mup_sos": self.params.sos_threshold,
+            "mup_joc": self.params.joc_threshold,
+            "mup_lps": self.params.lps_threshold,
+            "dis_ut": self.params.ut_threshold,
+            "mdn_sow": self.params.sow_threshold,
+            "acc_supply_ex": self.params.supply_exhausted_threshold,
+            "dis_demand_ex": self.params.demand_exhausted_threshold,
+        })
+        self._signals = []
+        self._factor_result = None
 
 
 # ============================================================

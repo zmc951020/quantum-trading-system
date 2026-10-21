@@ -49,7 +49,7 @@ def build_l8_checks(hc) -> List[Callable]:
                         pass
         ok = len(key_files) == 0
         return (ok, 100 if ok else max(0, 100 - len(key_files) * 15),
-                f"硬编码凭据: 0处" if ok else f"发现 {len(key_files)} 处疑似硬编码: {key_files[:3]}",
+                "硬编码凭据: 0处" if ok else f"发现 {len(key_files)} 处疑似硬编码: {key_files[:3]}",
                 "" if ok else "请使用环境变量或配置文件替代硬编码")
     yield ("L8_001", "硬编码凭据检查", "L8_深度审计", "critical", "deep", _l8_001)
 
@@ -66,7 +66,7 @@ def build_l8_checks(hc) -> List[Callable]:
                 try:
                     with open(fpath, 'r', encoding='utf-8') as f:
                         content = f.read()
-                    has_lock = bool(re.search(r'threading\.(Lock|RLock)\(\)', content))
+                    bool(re.search(r'threading\.(Lock|RLock)\(\)', content))
                     has_shared = bool(re.search(r'self\._\w+\s*=\s*\{\}', content))
                     has_protection = bool(re.search(r'with\s+self\._lock', content))
                     if has_shared and not has_protection:
@@ -89,7 +89,6 @@ def build_l8_checks(hc) -> List[Callable]:
                 with open(fpath, 'r', encoding='utf-8') as f:
                     content = f.read()
                 has_simulated = 'is_simulated' in content
-                has_fallback = '_source' in content and 'fallback' in content
                 has_sim_prefix = 'SIM' in content
                 if not has_simulated:
                     ok = False
@@ -142,14 +141,33 @@ def build_l8_checks(hc) -> List[Callable]:
             ("POST", "/api/stock_pool/run_pipeline"),
             ("GET",  "/api/security/whitelist/list"),
         ]
-        # 后端路由定义
-        gateway_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
+        # 后端路由定义 — 扫描 api/routes/ 目录下的所有路由文件
+        routes_dir = os.path.join(PROJECT_ROOT, "api", "routes")
         backend_routes = set()
+        # 扫描 routes 目录
+        if os.path.isdir(routes_dir):
+            for fname in os.listdir(routes_dir):
+                if not fname.endswith('.py') or fname.startswith('__'):
+                    continue
+                fpath = os.path.join(routes_dir, fname)
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    route_pattern = re.findall(
+                        r"@api_gateway\.route\('([^']+)'[^)]*methods=\[([^\]]+)\]",
+                        content
+                    )
+                    for route_path, methods_str in route_pattern:
+                        for m in re.findall(r"'(\w+)'", methods_str):
+                            backend_routes.add((m, f"/api{route_path}" if not route_path.startswith('/api') else route_path))
+                except Exception:
+                    pass
+        # 也扫描 gateway.py
+        gateway_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
         if os.path.exists(gateway_path):
             try:
                 with open(gateway_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                # 匹配 @api_gateway.route('/path', methods=['GET','POST'])
                 route_pattern = re.findall(
                     r"@api_gateway\.route\('([^']+)'[^)]*methods=\[([^\]]+)\]",
                     content
@@ -178,7 +196,6 @@ def build_l8_checks(hc) -> List[Callable]:
                 with open(fpath, 'r', encoding='utf-8') as f:
                     content = f.read()
                 has_dynamic = 'strategy_manager' in content and 'strategy_mgr' in content
-                has_fallback = 'FourierRLStrategy' in content  # 降级策略用真实名
                 has_mapping = 'CATEGORY_TO_PROFILE' in content
                 if not has_dynamic:
                     ok = False
@@ -204,7 +221,6 @@ def build_l8_checks(hc) -> List[Callable]:
                 with open(fpath, 'r', encoding='utf-8') as f:
                     content = f.read()
                 has_cv = 'cross_validate' in content
-                has_cv_integration = 'cross_validation' in content and 'cv_result' in content
                 has_overfit = 'is_overfit' in content and 'overfit_penalty' in content
                 if not has_cv:
                     ok = False
@@ -228,8 +244,6 @@ def build_l8_checks(hc) -> List[Callable]:
                 with open(fpath, 'r', encoding='utf-8') as f:
                     content = f.read()
                 has_dynamic = 'calculate_dynamic_slippage' in content
-                has_volatility = 'volatility' in content
-                has_commission = 'calculate_dynamic_commission' in content
                 if not has_dynamic:
                     ok = False
                     detail = "回测引擎缺少动态滑点函数"
@@ -317,8 +331,6 @@ def build_l8_checks(hc) -> List[Callable]:
                 with open(fpath, 'r', encoding='utf-8') as f:
                     content = f.read()
                 has_double_check = '_strategy_manager_lock' in content
-                has_first_check = 'if _strategy_manager_instance is None' in content
-                has_second_check = 'with _strategy_manager_lock' in content
                 if not has_double_check:
                     ok = False
                     detail = "EnhancedStrategyManager 单例缺少双重检查锁"
@@ -366,7 +378,7 @@ def build_l8_checks(hc) -> List[Callable]:
                 summary = controller.get_params_summary(sym)
                 statuses.append(f"{sym}: {summary.get('status', 'unknown')} "
                                 f"v{summary.get('version', 0)}")
-            ok = any("演化" in s or "version" in s.lower() or "v" in s for s in statuses) or True
+            any("演化" in s or "version" in s.lower() or "v" in s for s in statuses) or True
             return (True, 90,
                     f"特种兵参数存储: {'; '.join(statuses)}",
                     "运行至少一次演化即可填充参数" if "未演化" in str(statuses) else "")
@@ -385,32 +397,38 @@ def build_l8_checks(hc) -> List[Callable]:
             "/special_forces/stop",
             "/special_forces/status",
         ]
-        gw_path = os.path.join(PROJECT_ROOT, "api", "gateway.py")
+        # 扫描 gateway.py 和 api/routes/ 目录
+        route_pattern = re.compile(r"""@api_gateway\.route\(\s*['"]([^'"]+)['"]""")
+        registered_routes = []
+        for scan_path in [os.path.join(PROJECT_ROOT, "api", "gateway.py")]:
+            if os.path.exists(scan_path):
+                try:
+                    with open(scan_path, 'r', encoding='utf-8') as f:
+                        registered_routes.extend(route_pattern.findall(f.read()))
+                except Exception:
+                    pass
+        routes_dir = os.path.join(PROJECT_ROOT, "api", "routes")
+        if os.path.isdir(routes_dir):
+            for fname in os.listdir(routes_dir):
+                if not fname.endswith('.py') or fname.startswith('__'):
+                    continue
+                try:
+                    with open(os.path.join(routes_dir, fname), 'r', encoding='utf-8') as f:
+                        registered_routes.extend(route_pattern.findall(f.read()))
+                except Exception:
+                    pass
         ok = True
         missing = []
-        if os.path.exists(gw_path):
-            try:
-                with open(gw_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                # 提取所有 @api_gateway.route('...') 定义
-                route_pattern = re.compile(r"""@api_gateway\.route\(\s*['"]([^'"]+)['"]""")
-                registered_routes = route_pattern.findall(content)
-                # Flask <converter:name> 或 <name> → 匹配非斜杠字符
-                def _route_to_regex(route):
-                    pattern = re.sub(r'<[^>]+>', '[^/]+', route)
-                    return re.compile(f'^{pattern}$')
-                compiled = [(_route_to_regex(r), r) for r in registered_routes]
-                for ep in expected_endpoints:
-                    matched = any(c.match(ep) for c, _ in compiled)
-                    if not matched:
-                        missing.append(ep)
-                        ok = False
-            except Exception as e:
+        def _route_to_regex(route):
+            return re.compile(f'^{re.sub(r"<[^>]+>", "[^/]+", route)}$')
+        compiled = [(_route_to_regex(r), r) for r in registered_routes]
+        for ep in expected_endpoints:
+            if not any(c.match(ep) for c, _ in compiled):
+                missing.append(ep)
                 ok = False
-                missing = [str(e)]
-        else:
+        if not registered_routes:
             ok = False
-            missing = ["gateway.py 不存在"]
+            missing = ["无路由文件"]
         return (ok, 100 if ok else max(0, 100 - len(missing) * 20),
                 f"特种兵API端点: {'全部已注册' if ok else '缺失: ' + ', '.join(missing)}",
                 "" if ok else "在 gateway.py 中注册缺失的端点")
@@ -581,7 +599,6 @@ def build_l8_checks(hc) -> List[Callable]:
         """韬策略引擎状态持久化检查"""
         try:
             from core.tau_cluster_engine import get_cluster_engine
-            import json
             engine = get_cluster_engine()
             has_save = hasattr(engine, 'save_state')
             has_load = hasattr(engine, 'load_state')

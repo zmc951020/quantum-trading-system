@@ -1,22 +1,15 @@
 import os
 import sys
-import uuid
-import subprocess
 import atexit
 import signal
-import time
 import logging
-import urllib.request
-import urllib.error
-import json as _json
-from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, send_from_directory, redirect, url_for, make_response
+from flask import Flask, render_template, request, send_from_directory, redirect, url_for
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
 
 # 共享会话管理（消除 ui/server.py 和 api/gateway.py 之间的循环依赖）
-from ui.shared.session import USERS, SESSIONS, FAILED_LOGINS, SESSION_TIMEOUT_HOURS, MAX_FAILED_LOGINS, LOGIN_LOCKOUT_MINUTES, create_session, get_session
+from ui.shared.session import USERS, SESSIONS, get_session
 
 def is_logged_in():
     """检查是否已登录（从请求中获取session）"""
@@ -25,7 +18,7 @@ def is_logged_in():
         session_id = request.headers.get('X-Session-Id')
     if not session_id:
         session_id = request.args.get('session_id')
-    
+
     return get_session(session_id) is not None
 
 # ============================================================
@@ -48,7 +41,7 @@ from config.config import config
 from llm_manager import llm_manager
 from extensions.data_sources import AuroraDataSource
 from qs_robot_core import QSRobotCore
-from core.security import get_password_manager, get_audit_logger, OperationType
+from core.security import get_password_manager, get_audit_logger
 
 # 导入股票池智能管理系统
 from stock_pool.main import StockPoolSystem
@@ -161,6 +154,58 @@ except ImportError as e:
     print(f"[Cluster Selector] 蓝图导入失败: {e}")
 except Exception as e:
     print(f"[Cluster Selector] 蓝图注册失败: {e}")
+
+
+# ============================================================
+# 注册底座引擎V4蓝图（完整底座选股：大盘条件+底部热启动6条+评分体系）
+# ============================================================
+try:
+    from ui.blueprints.base_engine_v4_bp import bp as base_engine_v4_bp
+    app.register_blueprint(base_engine_v4_bp)
+    print("[Base Engine V4] 底座引擎V4已注册: /base_engine_v4/")
+except ImportError as e:
+    print(f"[Base Engine V4] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[Base Engine V4] 蓝图注册失败: {e}")
+
+
+# ============================================================
+# 注册优化器V2蓝图（五洋人寻参：贝叶斯+PSO+GA+SA+网格）
+# ============================================================
+try:
+    from ui.blueprints.optimizer_v2_bp import optimizer_v2_bp
+    app.register_blueprint(optimizer_v2_bp)
+    print("[Optimizer V2] 五洋人寻参优化器已注册: /optimizer_v2/")
+except ImportError as e:
+    print(f"[Optimizer V2] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[Optimizer V2] 蓝图注册失败: {e}")
+
+
+# ============================================================
+# 注册熵韬收敛集群优化器蓝图（PSO+7维熵评分+底座筛选+30策略集群）
+# ============================================================
+try:
+    from ui.blueprints.entropy_tau_bp import entropy_tau_bp
+    app.register_blueprint(entropy_tau_bp)
+    print("[Entropy Tau] 熵韬收敛集群优化器已注册: /entropy_tau/")
+except ImportError as e:
+    print(f"[Entropy Tau] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[Entropy Tau] 蓝图注册失败: {e}")
+
+
+# ============================================================
+# 注册模拟交易V2蓝图（Paper Trading V2：行情回放+订单管理+账户管理+风控+绩效）
+# ============================================================
+try:
+    from ui.blueprints.paper_trading_bp import bp as paper_trading_bp
+    app.register_blueprint(paper_trading_bp)
+    print("[Paper Trading] 模拟交易V2已注册: /paper_trading/")
+except ImportError as e:
+    print(f"[Paper Trading] 蓝图导入失败: {e}")
+except Exception as e:
+    print(f"[Paper Trading] 蓝图注册失败: {e}")
 
 
 # ============================================================
@@ -308,7 +353,6 @@ print("[UI Routes] UI子路由已注册（模块化拆分）")
 from ui.managers.aurora_manager import (
     start_aurora_backend as _start_aurora_backend,
     stop_aurora_backend as _stop_aurora_backend,
-    is_aurora_running as _is_aurora_running,
     _AURORA_PORT,
 )
 from ui.managers.vibe_manager import stop_vibe_services as _stop_vibe_services
@@ -349,9 +393,9 @@ if __name__ == '__main__':
         key_path = config.get('ssl.key_path', '')
         if cert_path and key_path and os.path.exists(cert_path) and os.path.exists(key_path):
             ssl_context = (cert_path, key_path)
-            print(f"[SSL] 已启用 HTTPS")
+            print("[SSL] 已启用 HTTPS")
         else:
-            print(f"[SSL] 证书文件不存在，回退到 HTTP")
+            print("[SSL] 证书文件不存在，回退到 HTTP")
     protocol = "https" if ssl_context else "http"
 
     print("=" * 55)

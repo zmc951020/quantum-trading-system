@@ -23,17 +23,15 @@ from __future__ import annotations
 
 import os
 import sys
-import json
 import time
 import hashlib
 import logging
 import threading
 import importlib
 import importlib.util
-from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Tuple, Callable
+from typing import Dict, List, Optional, Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +106,28 @@ class StrategyScanner:
         self._lock = threading.RLock()
 
     def _auto_detect_dirs(self) -> List[str]:
-        """自动检测策略目录"""
+        """自动检测策略目录（三大策略入口：Aurora原创 + 孤儿策略 + QS_Robot本地）"""
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Aurora 原创策略目录（独立路径）
+        aurora_base = (
+            r"D:\Gupiao\量化交易测试设备方案\攒机\最后评估01"
+            r"\DS-V3.2T量化交易专用工作站配置深度研判与采购决策报告02_files"
+            r"\攒机配置\Aurora"
+        )
+        # 确保 Aurora 目录在 sys.path 中，使 strategies.xxx 导入生效
+        if os.path.isdir(aurora_base) and aurora_base not in sys.path:
+            sys.path.insert(0, aurora_base)
+            logger.info(f"[Scanner] Aurora策略路径已加入sys.path: {aurora_base}")
+
         candidates = [
+            os.path.join(aurora_base, "strategies"),
+            os.path.join(aurora_base, "experiments", "archive"),
+            os.path.join(aurora_base),
             os.path.join(base, "Aurora", "strategies"),
             os.path.join(base, "Aurora", "experiments", "archive"),
             os.path.join(base, "Aurora"),
             os.path.join(base, "strategies"),
+            os.path.join(base, "core"),  # QS_Robot本地策略
         ]
         return [d for d in candidates if os.path.isdir(d)]
 
@@ -145,7 +158,7 @@ class StrategyScanner:
             return None
 
         file_name = os.path.basename(file_path)
-        name_lower = file_name.lower()
+        file_name.lower()
 
         # 查找策略类名（class XxxStrategy）
         import re

@@ -17,10 +17,9 @@
 import os
 import sys
 import json
-import time
 import hashlib
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -45,6 +44,7 @@ class AlignedData:
     60分钟特征也按15分钟对齐（每4根15分钟bar对应1根60分钟bar）。
     """
     symbol: str
+    data_source: str = "unknown"  # real_akshare | real_cache | simulated
     # 15分钟数据（主力信号层，对齐基准）
     m15_dates: List[str] = field(default_factory=list)
     m15_opens: List[float] = field(default_factory=list)
@@ -175,13 +175,65 @@ class MultiTimeframePipeline:
         return aligned
 
     def _fetch_or_mock(self, adapter, symbol: str, period: str, days: int) -> Dict:
-        """拉取数据，失败时降级为管道自有的模拟数据"""
+        """拉取数据，失败时降级为真实缓存数据，再失败才用模拟数据"""
         result = adapter.get_kline(symbol, period, days)
-        # 如果数据源是mock（AKShare不可用），使用管道自己的模拟数据以保证日期格式一致
-        if result is None or result.get("count", 0) == 0 or result.get("source", "").startswith("akshare-Mock"):
-            print(f"[MTF-Pipeline] {period} 使用管道模拟数据")
-            result = self._generate_mock(symbol, period, days)
+
+        # 如果AKShare成功返回真实数据，直接使用
+        if result is not None and result.get("count", 0) > 0 and not result.get("source", "").startswith("akshare-Mock"):
+            result["data_source"] = "real_akshare"
+            return result
+
+        # 尝试从本地 market_cache 加载真实数据
+        if period == "daily":
+            cached = self._load_from_market_cache(symbol)
+            if cached is not None:
+                print(f"[MTF-Pipeline] {period} 使用本地缓存数据 (market_cache)")
+                cached["data_source"] = "real_cache"
+                return cached
+
+        # 最后兜底：管道模拟数据（仅用于功能测试，不可用于实盘回测）
+        print(f"[MTF-Pipeline] WARNING: {period} 使用管道模拟数据 (无真实数据源，回测结果不可信)")
+        result = self._generate_mock(symbol, period, days)
+        result["data_source"] = "simulated"
         return result
+
+    def _load_from_market_cache(self, symbol: str) -> Optional[Dict]:
+        """从本地 market_cache 加载真实日线数据作为降级数据源"""
+        import json
+        cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "data", "market_cache")
+        if not os.path.exists(cache_dir):
+            return None
+
+        # 尝试多种文件名匹配
+        for fname in [f"{symbol}.json", f"{symbol.lower()}.json", f"{symbol.upper()}.json"]:
+            path = os.path.join(cache_dir, fname)
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, encoding="utf-8") as f:
+                    d = json.load(f)
+            except Exception:
+                continue
+
+            closes = d.get("closes", [])
+            if not closes or len(closes) < 10:
+                continue
+
+            n = len(closes)
+            return {
+                "dates": d.get("dates", [f"2024-{i+1:02d}-01" for i in range(n)]),
+                "opens": d.get("opens", [closes[0]] * n),
+                "highs": d.get("highs", [max(c, closes[i]) for i, c in enumerate(closes)]),
+                "lows": d.get("lows", [min(c, closes[i]) for i, c in enumerate(closes)]),
+                "closes": closes,
+                "volumes": d.get("volumes", [0] * n),
+                "count": n,
+                "symbol": symbol,
+                "source": "market_cache",
+            }
+
+        return None
 
     def _generate_mock(self, symbol: str, period: str, days: int) -> Dict:
         """生成模拟K线数据（用于测试和降级）
@@ -197,18 +249,18 @@ class MultiTimeframePipeline:
 
         if period == "weekly":
             n = max(30, days // 7)
-            freq = timedelta(weeks=1)
+            timedelta(weeks=1)
         elif period == "daily":
             n = max(100, days)
-            freq = timedelta(days=1)
+            timedelta(days=1)
         elif period == "60min":
             # 60分钟：覆盖最近60天，每天4根
             n = max(100, days * 4)
-            freq = timedelta(hours=1)
+            timedelta(hours=1)
         else:  # 15min
             # 15分钟：覆盖最近60天，每天16根
             n = max(200, days * 16)
-            freq = timedelta(minutes=15)
+            timedelta(minutes=15)
 
         dates = []
         opens, highs, lows, closes, volumes = [], [], [], [], []
@@ -263,6 +315,11 @@ class MultiTimeframePipeline:
         """
         result = AlignedData(symbol=symbol)
         result.fetch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 数据来源追踪：优先AKShare > 真实缓存 > 模拟
+        result.data_source = daily.get("data_source",
+                            m15.get("data_source",
+                            h60.get("data_source",
+                            weekly.get("data_source", "unknown"))))
 
         # 填充15分钟数据
         result.m15_dates = m15.get("dates", [])

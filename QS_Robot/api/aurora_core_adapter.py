@@ -32,7 +32,9 @@ if 'FLASK_SECRET_KEY' not in os.environ:
     os.environ['FLASK_SECRET_KEY'] = secrets.token_urlsafe(32)
 
 # 将Aurora目录加入Python路径
-AURORA_PATH = r"D:\Gupiao\量化交易测试设备方案\攒机\最后评估01\DS-V3.2T量化交易专用工作站配置深度研判与采购决策报告02_files\攒机配置\Aurora"
+# FIX T5-20261020: Aurora 已正式迁移至工程内 vendor\aurora（原网页存档目录保留留档）。
+# 权威路径以工程内为准，避免运行时依赖挂在浏览器下载目录下。
+AURORA_PATH = r"D:\Gupiao\升级vscode\QS_Robot\vendor\aurora"
 if AURORA_PATH not in sys.path:
     sys.path.insert(0, AURORA_PATH)
 
@@ -70,21 +72,21 @@ _NON_STRATEGY_FILES = {
     "test_all_strategies", "test_all_grid_strategies", "test_adaptive_ml",
     "test_all_strategies_comprehensive", "submit_to_deepseek",
     "request_deepseek_optimization",
+    # 工具模块（非策略文件）
+    "aurora_risk_engine", "final_market_classifier", "final_grid_executor",
+    "strategy_base", "strategy_registry", "strategy_combiner",
 }
 
 # 策略版本去重：同一组策略只保留最新版本
+# 注：2026-08-19 审计后删除冗余文件，已清理对应条目
 _VARIANT_GROUPS = {
     "final_market_adaptive": "final_market_adaptive",
-    "final_market_adaptive_rl_optimized": "final_market_adaptive",
-    "final_market_adaptive_rl_optimized_clean": "final_market_adaptive",
     "gyro_minute_trading": "gyro_minute_trading",
     "gyro_minute_trading_v2": "gyro_minute_trading",
     "gyro_minute_trading_v3": "gyro_minute_trading",
     "rl_optimized_strategy": "rl_optimized_strategy",
     "rl_adaptive_param": "rl_optimized_strategy",
     "optimized_strategy_deepseek": "optimized_strategy_deepseek",
-    "optimized_strategy_fast": "optimized_strategy_deepseek",
-    "simple_optimized_strategy": "optimized_strategy_deepseek",
 }
 
 # 策略排序优先级（金融级核心在前）
@@ -300,7 +302,7 @@ class AuroraCoreAdapter:
             except Exception as e:
                 logger.warning(f"[AuroraAdapter] 策略列表获取失败: {e}")
                 all_strategies = []
-            
+
             if all_strategies:
                 if not core_only:
                     return all_strategies
@@ -318,7 +320,7 @@ class AuroraCoreAdapter:
                 filtered.sort(key=lambda s: _STRATEGY_TYPE_PRIORITY.get(
                     s.get("strategy_type", "general"), 9))
                 return filtered
-        
+
         # 降级：代理到5002获取真实策略列表
         try:
             r = requests.get(f"{AURORA_BACKEND}/api/strategy/library", timeout=5, headers=AURORA_PROXY_HEADERS)
@@ -329,7 +331,7 @@ class AuroraCoreAdapter:
                 return strategies
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 5002策略列表代理失败: {e}")
-        
+
         return []
 
     def get_strategy_info(self, name: str) -> Optional[Dict]:
@@ -493,7 +495,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": data, "source": "Aurora(5002)"}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 5002风控代理失败: {e}")
-        
+
         try:
             if self._risk_engine:
                 assess = self._risk_engine.assess("system", "system_check", {}, {})
@@ -1300,8 +1302,6 @@ class AuroraCoreAdapter:
         tau_modules = {}
         try:
             from core.tau_optimizer_cluster import (
-                TauOptimizerCluster, FourierRLStrategyModule,
-                BernoulliCoandaModule, ShepherdRotationModule, GyroModule,
                 StrategyOptimizerBus,
             )
             # 从 STRATEGY_TYPE_MAP 提取所有策略感知模块
@@ -1530,7 +1530,6 @@ class AuroraCoreAdapter:
         """使用5003本地熵韬收敛优化器执行真实优化"""
         try:
             from core.tau_enhanced_optimizer import EntropyTauOptimizer
-            from core.tau_optimizer_cluster import StrategyOptimizerBus
 
             # 获取各策略感知模块的默认参数范围
             param_ranges = self._get_param_ranges_for_optimizer(optimizer_id)
@@ -1804,7 +1803,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": data, "source": "Aurora(5002)"}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 5002行情代理失败: {e}")
-        
+
         try:
             from core.data_fetcher import get_data_fetcher
             fetcher = get_data_fetcher()
@@ -1830,7 +1829,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": data, "source": "Aurora(5002)"}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 5002绩效代理失败: {e}")
-        
+
         return {"success": True, "data": {
             "active_strategies": len(self._running_strategies),
             "total_optimizations": 0,
@@ -1846,7 +1845,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": data, "source": "Aurora(5002)"}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 5002策略状态代理失败: {e}")
-        
+
         return {"success": True, "data": {
             "running": list(self._running_strategies.keys()),
             "count": len(self._running_strategies),
@@ -1862,7 +1861,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": data, "source": "Aurora(5002)"}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 5002技术指标代理失败: {e}")
-        
+
         symbol_clean = symbol.replace(".SZ", "").replace(".SH", "")
         return self.get_technical_analysis(symbol_clean, days=100)
 
@@ -2026,7 +2025,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": {"symbol": symbol, "source": "QS_Robot本地", "message": f"{symbol} 已加入股票池"}}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 本地添加股票失败: {e}")
-        return {"success": False, "error": f"添加股票失败: {e}"}
+            return {"success": False, "error": f"添加股票失败: {e}"}
 
     def remove_stock_pool(self, data: dict) -> Dict:
         """移除股票 — 5003本地StockPoolManager"""
@@ -2037,7 +2036,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": {"symbol": symbol, "source": "QS_Robot本地", "message": f"{symbol} 已从股票池移除"}}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 本地移除股票失败: {e}")
-        return {"success": False, "error": f"移除股票失败: {e}"}
+            return {"success": False, "error": f"移除股票失败: {e}"}
 
     def move_to_trading_pool(self, data: dict) -> Dict:
         """移入交易池 — 5003本地StockPoolManager"""
@@ -2049,7 +2048,7 @@ class AuroraCoreAdapter:
                 return {"success": True, "data": {"symbol": symbol, "source": "QS_Robot本地", "message": f"{symbol} 已移入交易池"}}
         except Exception as e:
             logger.warning(f"[AuroraAdapter] 本地移入交易池失败: {e}")
-        return {"success": False, "error": f"移入交易池失败: {e}"}
+            return {"success": False, "error": f"移入交易池失败: {e}"}
 
     def get_trading_pool(self) -> Dict:
         """交易池 — 5003本地StockPoolManager"""
@@ -2161,7 +2160,7 @@ class AuroraCoreAdapter:
                     return res
 
                 probes: Dict[str, dict] = {}
-                pending_names = list(llm.providers.keys())
+                list(llm.providers.keys())
                 try:
                     with ThreadPoolExecutor(max_workers=4) as ex:
                         futs = {ex.submit(_probe, item): item[0] for item in llm.providers.items()}

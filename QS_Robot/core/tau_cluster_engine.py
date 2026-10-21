@@ -743,6 +743,7 @@ class TauClusterEngine:
             consensus_threshold=consensus_threshold,
         )
         self.weight_scheduler = EntropyWeightScheduler(
+            base_weights=(config or {}).get('base_weights'),  # D1: C1 证据加权初始权重
             recovery_threshold=0.4,          # 降低恢复阈值，适配模拟/真实策略评分范围
             max_dormant_rounds=30,           # 延长休眠容忍轮次
         )
@@ -1483,7 +1484,7 @@ class TauClusterEngine:
             {param_name: (min, max)} 参数范围
         """
         return {
-            "min_resonance": (1.0, 5.0),
+            "min_resonance": (2.0, 5.0),  # R1: 硬下限2，消除单信号放行角点（引擎侧源头钳制）
             "consensus_threshold": (0.05, 0.60),
             "action_threshold": (0.05, 0.50),    # 动作判定阈值：0.05=极敏感, 0.50=极保守
         }
@@ -1508,7 +1509,7 @@ class TauClusterEngine:
             }
 
             if "min_resonance" in best_params:
-                self.min_resonance = int(best_params["min_resonance"])
+                self.min_resonance = max(2, int(best_params["min_resonance"]))  # R1: 引擎侧硬钳制>=2
                 self.validator.min_resonance = self.min_resonance
             if "consensus_threshold" in best_params:
                 self.consensus_threshold = float(best_params["consensus_threshold"])
@@ -1731,7 +1732,7 @@ class TauClusterEngine:
         self.apply_optimizer_result(params)
 
         # 模拟评估
-        rnd = random.Random(seed)
+        random.Random(seed)
         correct = wrong = hold = 0
         daily_returns = []
         trade_returns = []
@@ -1954,7 +1955,7 @@ class ClusterEngineOptimizer:
             {success, best_params, best_score, optimization_result, ...}
         """
         print(f"\n{'='*60}")
-        print(f"  ClusterEngineOptimizer: 五维驱动集群引擎参数优化")
+        print("  ClusterEngineOptimizer: 五维驱动集群引擎参数优化")
         print(f"  参数空间: {self._cluster_engine.to_optimizer_params()}")
         print(f"  模拟轮数: {self._rounds}, 粗筛: {coarse_points}, 精搜: {refined_points_per_region}")
         print(f"{'='*60}")
