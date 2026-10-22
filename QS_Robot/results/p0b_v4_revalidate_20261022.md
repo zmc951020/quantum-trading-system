@@ -1,0 +1,56 @@
+# P0-B V4.0 分层重验报告（统一底座 6 条热启动版）
+
+> 日期：2026-10-22 ｜ 触发：Q8 底座引擎查证发现 V4.0 报告基于旧版 3 条热启动，结论作废
+> 方法：`export_package/backtest_v4_revalidate.py`，分钟级数据（minute_data_ext 5min CSV），
+>       UnifiedBaseFilter（6 条热启动，中档 hot_strictness=0.5 → 需 5/6 条），B/C/D 分层重跑
+
+---
+
+## 一、结论（核心）
+
+1. **6 条热启动有显著独立过滤效果——V4.0 旧报告"热启动无额外效果"结论被推翻**。
+   旧报告用的是 `deep_optimizer_v16.check_hot_start`（旧 3 条：放量>1.3x/站上MA60/止跌），
+   与 unified_base_filter 的 6 条热启动（现价>4 元/低位分位/量比 3-10/涨幅 2-8%/换手/成交额）**无关**。
+2. **但中档（5/6 条）过滤过猛**：high_return_grid 交易从 828 → 20 笔（额外过滤 46.8pp，合计 99%），
+   收益 +12.20% → +1.39%。6 条热启动独立有效 ≠ 越严越好——与 P2.5"护佑强度与开仓量不可兼得"、
+   P2.13"量能收紧以回撤换收益"一致。
+3. **旧分策略严格度配置（基于旧 3 条结论）不可直接沿用**，需按 6 条热启动重新标定。
+
+## 二、重验数据（5 只股票均值）
+
+| 策略 | 层 | 平均收益 | 平均交易 | 过滤比例 |
+|---|---|---|---|---|
+| high_return_grid | A 纯策略 | **+33.23%** | 1724 | 0% |
+| high_return_grid | B +底座(低位) | +12.20% | 828 | 52% |
+| high_return_grid | C +6热启(5/6条) | +1.39% | 20 | **99%** |
+| high_return_grid | D 完整 | +1.39% | 20 | 99% |
+| gyro_precession | A 纯策略 | -6.36% | 0 | —（该策略此批数据无交易信号，不可评估） |
+
+**C-B 额外过滤 = 46.8 个百分点**（52% → 99%），证明 6 条热启动独立有效。
+收益差 -10.81pp：6 条热启动把多数盈利交易一并过滤——**默认中档对高频网格策略过严**。
+
+## 三、对课题的意义
+
+1. **底座引擎不是"无效果"，而是"从未被正确接线检验"**：
+   - 接线断裂：strategy_backtest.py 硬编码 hot_strictness=0.3（4/6 条松档）+ 分策略配置只有旧参数 hot_score_min（unified 不识别）→ 6 条热启动门槛被压死
+   - 结论误导：V4.0 报告"热启动无用"（旧 3 条）给"底座无效果"背书
+2. **修复后 6 条热启动首次被公平检验**：确实有效，但需要分策略严格度标定（高频松/中频中/低频紧），
+   且阈值带（量比 3-10/涨幅 2-8%/换手 2-15%）是否最优待 P0-C 标定。
+3. **与课题五关键词衔接**：热启动=自转层切入点（当日动能），其严格度档位与 V3d 放行线档位
+   （≥4/7）属同一"安全性↔高效性"权衡轴——P4 统一设计。
+
+## 四、P0-A 接线修复（本次一并完成）
+
+- `core/strategy_base_filter_config.py`：STRICTNESS_HOT_MAP 新增（tight=0.9/medium_tight=0.7/medium=0.5/loose=0.3/very_loose=0.1/none=-1），
+  各策略条目新增 `hot_strictness` 字段；hot_score_min 标注为旧版兼容参数（unified 不识别）。
+- `core/strategy_backtest.py`：auto_base_config 读取 `cfg['hot_strictness']`（默认 0.5），
+  UnifiedBaseFilter 不再硬编码 0.3。
+- **验证（A 级）**：py_compile 通过；档位传导实测 tight→6/6、medium→5/6、loose→4/6、none→(use_v4_filter=False 不调用)。
+
+## 五、残留风险与下一步
+
+- gyro_precession 该批数据 0 交易（-6.36% 收益/0 次）——数据或策略信号问题，P0-C 一并核查
+- **P0-C（建议立项）**：基于 6 条热启动重新标定分策略严格度（扫 low_stars×hot_strictness 网格，
+  对 22 策略×核心股票样本，出"策略→最优档位"表），替换基于旧 3 条的 STRATEGY_BASE_FILTER_CONFIG
+- P1：UI stock_detail 日线喂 check_hot_start_6 口径修复；实盘扫描路径按用户原始 6/7 条战法条件新建
+- P2：换手率 ×0.02 硬编码真实化（outstanding_share）

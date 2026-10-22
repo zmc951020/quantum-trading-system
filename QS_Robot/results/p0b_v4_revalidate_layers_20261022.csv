@@ -1,0 +1,9 @@
+﻿strategy,layer,layer_name,avg_return,avg_trades,filter_pct
+high_return_grid,0,A纯策略,33.23,1724.4,0.0
+high_return_grid,1,B+底座,12.2,828.2,52.0
+high_return_grid,2,C+6热启,1.39,20.0,98.8
+high_return_grid,3,D完整,1.39,20.0,98.8
+gyro_precession_strategy,0,A纯策略,-6.36,0.4,0.0
+gyro_precession_strategy,1,B+底座,0.0,0.0,100.0
+gyro_precession_strategy,2,C+6热启,0.0,0.0,100.0
+gyro_precession_strategy,3,D完整,0.0,0.0,100.0
