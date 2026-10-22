@@ -99,7 +99,8 @@ def build_v3(code):
     atr = c.diff().abs().rolling(m.WINDOW_ATR).mean()
     l6 = (atr < atr.rolling(m.WINDOW_ATR_MEAN).mean()).fillna(False)
     b4 = (pos < POS_LOW).fillna(False)
-    s3 = ut_series(d["high"].values, c.values)
+    # 显式传参（非默认参数绑定）：ut 参数可在模块级 UT_N/UT_REC/UT_LB 覆盖（P2.11 变体扫描用）
+    s3 = ut_series(d["high"].values, c.values, n=UT_N, rec=UT_REC, lb=UT_LB)
     high_pos = (c / py - 1 > 0) if np.isfinite(py) else pd.Series(False, index=d.index)
     low_pos = (c / py - 1 < 0) if np.isfinite(py) else pd.Series(False, index=d.index)
     out = pd.DataFrame({
